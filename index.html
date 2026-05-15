@@ -975,11 +975,11 @@ async function sendToAI(userMessage) {
             })
         });
 
-        const data = await response.json();
-
         if (!response.ok) {
-            throw new Error(data.error || "Erreur de communication avec le coach");
+            throw new Error("Erreur de communication avec le coach (non autorisé ou serveur injoignable)");
         }
+
+        const data = await response.json();
 
         removeTypingIndicator(typingId);
         
@@ -1076,18 +1076,22 @@ window.attemptLogin = async function() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password: pwd })
         });
-        const data = await res.json();
-        if(res.ok && data.token) {
-            window.authToken = data.token;
-            localStorage.setItem('authToken', data.token);
-            showApp();
+        
+        if(res.ok) {
+            const data = await res.json();
+            if (data.token) {
+                window.authToken = data.token;
+                localStorage.setItem('authToken', data.token);
+                showApp();
+            }
         } else {
-            errEl.innerText = data.error || 'Mot de passe incorrect';
+            errEl.innerText = 'Mot de passe incorrect ou erreur réseau';
             errEl.classList.remove('hidden');
             document.getElementById('loginPassword').classList.add('shake');
             setTimeout(() => document.getElementById('loginPassword').classList.remove('shake'), 500);
         }
     } catch(e) {
+
         errEl.innerText = 'Erreur de connexion au serveur';
         errEl.classList.remove('hidden');
     }
