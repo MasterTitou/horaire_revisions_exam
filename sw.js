@@ -1,4 +1,4 @@
-const CACHE_NAME = 'revision-planner-v1';
+const CACHE_NAME = 'revision-planner-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -6,7 +6,11 @@ const ASSETS_TO_CACHE = [
   '/icons/icon-512.png',
   'https://cdn.tailwindcss.com',
   'https://cdn.jsdelivr.net/npm/chart.js',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap'
+  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap',
+  'https://github.com/Anis-Mowla/Pomodoro-Timer/raw/main/public/sounds/rain.mp3',
+  'https://github.com/Anis-Mowla/Pomodoro-Timer/raw/main/public/sounds/forest.mp3',
+  'https://github.com/Anis-Mowla/Pomodoro-Timer/raw/main/public/sounds/white-noise.mp3',
+  'https://github.com/Anis-Mowla/Pomodoro-Timer/raw/main/public/sounds/lofi.mp3'
 ];
 
 // Installation : mise en cache des assets
