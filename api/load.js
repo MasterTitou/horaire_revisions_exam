@@ -28,11 +28,11 @@ export default async function handler(req, res) {
     return res.status(404).end();
   }
 
-  const kvUrl = process.env.KV_REST_API_URL;
-  const kvToken = process.env.KV_REST_API_TOKEN;
+  const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (!kvUrl || !kvToken) {
-    console.error('Vercel KV non configuré.');
+    console.error('Base de données Redis (Vercel KV / Upstash) non configurée.');
     return res.status(404).end();
   }
 
