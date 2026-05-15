@@ -587,6 +587,9 @@ async function loadDataFromCloud() {
                 window.scheduleData = cloudData.scheduleData || {};
                 window.chatHistory = cloudData.chatHistory || [];
                 window.gamification = cloudData.gamification || window.gamification;
+                if (!window.gamification.pomoSettings) window.gamification.pomoSettings = { focus: 25, break: 5, sound: null };
+                if (!window.gamification.subjectPomoStats) window.gamification.subjectPomoStats = {};
+                
                 if (cloudData.isDarkMode) document.documentElement.classList.add('dark');
                 else document.documentElement.classList.remove('dark');
                 
@@ -624,6 +627,8 @@ function loadDataFromLocal() {
             window.chatHistory = data.chatHistory || [];
             window.apiKey = data.apiKey || '';
             window.gamification = data.gamification || window.gamification;
+            if (!window.gamification.pomoSettings) window.gamification.pomoSettings = { focus: 25, break: 5, sound: null };
+            if (!window.gamification.subjectPomoStats) window.gamification.subjectPomoStats = {};
             if (data.isDarkMode) {
                 document.documentElement.classList.add('dark');
                 document.getElementById('themeIcon').innerText = '☀️';
