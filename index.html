@@ -46,11 +46,43 @@
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+        /* Login Screen */
+        .login-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%); }
+        .login-card { background: rgba(30,41,59,0.9); backdrop-filter: blur(20px); border: 1px solid rgba(99,102,241,0.3); }
+        .login-input { transition: border-color 0.3s, box-shadow 0.3s; }
+        .login-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.2); }
+        .login-btn { background: linear-gradient(135deg, #6366f1, #8b5cf6); transition: all 0.3s; }
+        .login-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 25px rgba(99,102,241,0.4); }
+        .login-btn:active { transform: translateY(0); }
+        @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        .login-icon { animation: float 3s ease-in-out infinite; }
+        .shake { animation: shake 0.4s ease; }
+        @keyframes shake { 0%,100% { transform: translateX(0); } 20%,60% { transform: translateX(-8px); } 40%,80% { transform: translateX(8px); } }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
 
-<div class="max-w-7xl mx-auto px-4 py-8">
+<!-- Login Overlay -->
+<div id="loginOverlay" class="login-overlay">
+    <div class="login-card p-10 rounded-3xl w-full max-w-sm mx-4 shadow-2xl text-center">
+        <div class="login-icon text-6xl mb-6">📚</div>
+        <h2 class="text-2xl font-bold text-white mb-2">Mon Assistant de Révision</h2>
+        <p class="text-slate-400 text-sm mb-8">Connecte-toi pour accéder à ton planning</p>
+        <div class="space-y-4">
+            <input type="password" id="loginPassword" placeholder="Mot de passe"
+                class="login-input w-full p-3 rounded-xl bg-slate-800 border border-slate-600 text-white placeholder-slate-500 outline-none text-center text-lg tracking-widest"
+                onkeydown="if(event.key==='Enter') attemptLogin()">
+            <p id="loginError" class="text-red-400 text-sm hidden">Mot de passe incorrect</p>
+            <button onclick="attemptLogin()" id="loginBtn"
+                class="login-btn w-full py-3 rounded-xl text-white font-semibold text-lg">
+                Entrer 🔓
+            </button>
+        </div>
+        <p class="text-slate-600 text-xs mt-8">Accès réservé au propriétaire</p>
+    </div>
+</div>
+
+<div id="appContainer" class="max-w-7xl mx-auto px-4 py-8" style="display:none;">
 
     <!-- Header -->
     <header class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -346,6 +378,7 @@ window.scheduleData = {};
 window.streak = { count: 0, lastDate: '' };
 window.chatHistory = [];
 window.apiKey = '';
+window.authToken = localStorage.getItem('authToken') || '';
 
 function getStartOfWeek(date) {
     const d = new Date(date);
@@ -925,10 +958,13 @@ async function sendToAI(userMessage) {
     appendTypingIndicator(typingId);
 
     try {
-        // On appelle maintenant notre API locale (Vercel Serverless Function)
+        // On appelle notre API locale (Vercel Serverless Function) avec le token
         const response = await fetch('/api/chat', {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${window.authToken}`
+            },
             body: JSON.stringify({
                 systemInstruction: { parts: [{ text: systemPrompt + "\n\n" + context }] },
                 contents: contents,
@@ -1026,7 +1062,79 @@ window.startPomodoro=function() { if(pomoInterval) return; document.getElementBy
 window.pausePomodoro=function() { clearInterval(pomoInterval);pomoInterval=null;document.getElementById('pomoStatus').innerText="⏸️ En pause"; }
 window.resetPomodoro=function() { clearInterval(pomoInterval);pomoInterval=null;isPomoBreak=false;pomoTimeLeft=25*60;updatePomoDisplay();document.getElementById('pomoStatus').innerText="Prêt ?"; }
 
-window.onload=()=>{ loadDataFromLocal(); updatePomoDisplay(); updateUI(); };
+// --- Authentication ---
+window.attemptLogin = async function() {
+    const pwd = document.getElementById('loginPassword').value;
+    const btn = document.getElementById('loginBtn');
+    const errEl = document.getElementById('loginError');
+    if(!pwd) return;
+    btn.disabled = true; btn.innerText = '...';
+    errEl.classList.add('hidden');
+    try {
+        const res = await fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pwd })
+        });
+        const data = await res.json();
+        if(res.ok && data.token) {
+            window.authToken = data.token;
+            localStorage.setItem('authToken', data.token);
+            showApp();
+        } else {
+            errEl.innerText = data.error || 'Mot de passe incorrect';
+            errEl.classList.remove('hidden');
+            document.getElementById('loginPassword').classList.add('shake');
+            setTimeout(() => document.getElementById('loginPassword').classList.remove('shake'), 500);
+        }
+    } catch(e) {
+        errEl.innerText = 'Erreur de connexion au serveur';
+        errEl.classList.remove('hidden');
+    }
+    btn.disabled = false; btn.innerText = 'Entrer 🔓';
+}
+
+function showApp() {
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('appContainer').style.display = 'block';
+}
+
+// Vérifie si le token existant est encore valide
+async function checkExistingAuth() {
+    if(!window.authToken) return false;
+    try {
+        const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.authToken}`
+            },
+            body: JSON.stringify({ contents: [], systemInstruction: { parts: [{ text: 'test' }] }, generationConfig: { maxOutputTokens: 1 } })
+        });
+        // 401 ou 403 = token invalide, tout autre code = token OK
+        return res.status !== 401 && res.status !== 403;
+    } catch(e) { return false; }
+}
+
+window.onload = async () => {
+    loadDataFromLocal();
+    updatePomoDisplay();
+    // Vérifier l'authentification
+    if(window.authToken) {
+        const valid = await checkExistingAuth();
+        if(valid) {
+            showApp();
+            updateUI();
+            return;
+        } else {
+            localStorage.removeItem('authToken');
+            window.authToken = '';
+        }
+    }
+    // Sinon, montrer le login
+    document.getElementById('loginOverlay').style.display = 'flex';
+    document.getElementById('loginPassword').focus();
+};
 </script>
 </body>
 </html>
