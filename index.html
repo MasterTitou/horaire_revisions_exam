@@ -1217,15 +1217,75 @@ window.clearChat = function() {
 // --- Pomodoro ---
 let pomoInterval=null, pomoTimeLeft=25*60, isPomoBreak=false;
 function updatePomoDisplay() { document.getElementById('pomoTime').innerText=`${String(Math.floor(pomoTimeLeft/60)).padStart(2,'0')}:${String(pomoTimeLeft%60).padStart(2,'0')}`; }
-window.startPomodoro=function() { if(pomoInterval) return; document.getElementById('pomoStatus').innerText=isPomoBreak?"☕ Pause":"🧠 Concentration"; pomoInterval=setInterval(()=>{pomoTimeLeft--;updatePomoDisplay();if(pomoTimeLeft<=0){clearInterval(pomoInterval);pomoInterval=null;
-    if(!isPomoBreak) { window.gamification.pomodorosCompleted++; addXP(15,'Pomodoro terminé'); checkBadges(); window.saveDataToLocal(); }
-    isPomoBreak=!isPomoBreak;pomoTimeLeft=isPomoBreak?5*60:25*60;
-    const msg = isPomoBreak?"Pause 5 min !":"On s'y remet !";
-    showNotification(msg,isPomoBreak?"☕":"💪",isPomoBreak?"bg-indigo-500":"bg-blue-600");
-    sendSystemNotification(msg);
-    updatePomoDisplay();document.getElementById('pomoStatus').innerText="En attente...";}},1000); }
-window.pausePomodoro=function() { clearInterval(pomoInterval);pomoInterval=null;document.getElementById('pomoStatus').innerText="⏸️ En pause"; }
-window.resetPomodoro=function() { clearInterval(pomoInterval);pomoInterval=null;isPomoBreak=false;pomoTimeLeft=25*60;updatePomoDisplay();document.getElementById('pomoStatus').innerText="Prêt ?"; }
+
+function savePomoState() {
+    localStorage.setItem('pomoState', JSON.stringify({
+        timeLeft: pomoTimeLeft,
+        isBreak: isPomoBreak,
+        endTime: pomoInterval ? (Date.now() + pomoTimeLeft * 1000) : null
+    }));
+}
+
+window.startPomodoro=function() { 
+    if(pomoInterval) return; 
+    document.getElementById('pomoStatus').innerText=isPomoBreak?"☕ Pause":"🧠 Concentration"; 
+    savePomoState();
+    pomoInterval=setInterval(()=>{
+        pomoTimeLeft--;
+        updatePomoDisplay();
+        if(pomoTimeLeft % 10 === 0) savePomoState(); // Persist every 10s
+        if(pomoTimeLeft<=0){
+            clearInterval(pomoInterval);pomoInterval=null;
+            if(!isPomoBreak) { window.gamification.pomodorosCompleted++; addXP(15,'Pomodoro terminé'); checkBadges(); window.saveDataToLocal(); }
+            isPomoBreak=!isPomoBreak;pomoTimeLeft=isPomoBreak?5*60:25*60;
+            const msg = isPomoBreak?"Pause 5 min !":"On s'y remet !";
+            showNotification(msg,isPomoBreak?"☕":"💪",isPomoBreak?"bg-indigo-500":"bg-blue-600");
+            sendSystemNotification(msg);
+            updatePomoDisplay();
+            document.getElementById('pomoStatus').innerText="En attente...";
+            savePomoState();
+        }
+    },1000); 
+}
+
+window.pausePomodoro=function() { 
+    clearInterval(pomoInterval);
+    pomoInterval=null;
+    document.getElementById('pomoStatus').innerText="⏸️ En pause"; 
+    savePomoState();
+}
+
+window.resetPomodoro=function() { 
+    clearInterval(pomoInterval);
+    pomoInterval=null;
+    isPomoBreak=false;
+    pomoTimeLeft=25*60;
+    updatePomoDisplay();
+    document.getElementById('pomoStatus').innerText="Prêt ?"; 
+    localStorage.removeItem('pomoState');
+}
+
+function loadPomoState() {
+    const saved = localStorage.getItem('pomoState');
+    if(saved) {
+        const state = JSON.parse(saved);
+        isPomoBreak = state.isBreak;
+        if(state.endTime) {
+            const remaining = Math.floor((state.endTime - Date.now()) / 1000);
+            if(remaining > 0) {
+                pomoTimeLeft = remaining;
+                window.startPomodoro();
+            } else {
+                pomoTimeLeft = isPomoBreak ? 5*60 : 25*60;
+                updatePomoDisplay();
+            }
+        } else {
+            pomoTimeLeft = state.timeLeft;
+            updatePomoDisplay();
+        }
+    }
+}
+
 
 // --- Gamification Functions ---
 function addXP(amount, reason) {
@@ -1417,6 +1477,7 @@ async function checkExistingAuth() {
 
 window.onload = async () => {
     loadDataFromLocal();
+    loadPomoState();
     updatePomoDisplay();
     // Vérifier l'authentification
     if(window.authToken) {
