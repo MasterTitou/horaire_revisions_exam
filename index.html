@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="fr" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planificateur de Révisions Intelligent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'] } } }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { transition: background-color 0.3s ease, color 0.3s ease; }
+        .chart-container { position: relative; width: 100%; max-width: 500px; margin: auto; height: 250px; }
+        .chart-container-sm { position: relative; width: 100%; height: 180px; }
+        .glass-card {
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226,232,240,0.8);
+            transition: all 0.3s ease;
+        }
+        .dark .glass-card {
+            background: rgba(30,41,59,0.85);
+            border: 1px solid rgba(51,65,85,0.8);
+        }
+        .drag-over { border: 2px dashed #3b82f6 !important; background-color: rgba(59,130,246,0.05) !important; }
+        .dark .drag-over { background-color: rgba(59,130,246,0.15) !important; }
+        @keyframes pulse-flame { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } }
+        .flame-icon { display: inline-block; animation: pulse-flame 2s infinite; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.4s ease forwards; }
+        .ai-message { animation: fadeIn 0.3s ease forwards; }
+        .tab-btn { transition: all 0.2s; }
+        .tab-btn.active { background: #3b82f6; color: white; }
+        .tab-btn:not(.active) { background: transparent; color: #64748b; }
+        .tab-btn:not(.active):hover { background: rgba(59,130,246,0.1); }
+        .heatmap-cell { transition: all 0.2s; cursor: default; }
+        .typing-cursor::after { content: '▋'; animation: blink 1s infinite; }
+        @keyframes blink { 0%,50% { opacity: 1; } 51%,100% { opacity: 0; } }
+        .ai-bubble { border-radius: 18px 18px 18px 4px; }
+        .progress-bar { transition: width 0.6s ease; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
+
+<div class="max-w-7xl mx-auto px-4 py-8">
+
+    <!-- Header -->
+    <header class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div class="text-center md:text-left">
+            <h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-2">Mon Assistant de Révision</h1>
+            <p class="text-slate-600 dark:text-slate-400">Planifie, concentre-toi, et maintiens ta série !</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="glass-card px-4 py-2 rounded-full flex items-center font-bold text-orange-500 shadow-sm">
+                <span class="flame-icon mr-2 text-xl">🔥</span>
+                <span id="streakCount">0 Jour(s)</span>
+            </div>
+            <button onclick="toggleTheme()" class="glass-card p-3 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+                <span id="themeIcon" class="text-xl">🌙</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Tab Navigation -->
+    <div class="flex gap-2 mb-6 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-fit">
+        <button class="tab-btn active px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('planner')" id="tab-planner">📅 Planning</button>
+        <button class="tab-btn px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('analytics')" id="tab-analytics">📊 Analytique</button>
+        <button class="tab-btn px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('ai')" id="tab-ai">🤖 Coach IA</button>
+    </div>
+
+    <!-- ===== PLANNER TAB ===== -->
+    <div id="panel-planner" class="tab-panel">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div class="lg:col-span-4 space-y-6">
+                <!-- Pomodoro -->
+                <div class="glass-card p-6 rounded-2xl shadow-sm text-center">
+                    <h2 class="text-xl font-semibold mb-2 dark:text-white flex items-center justify-center gap-2">⏱️ Pomodoro</h2>
+                    <p id="pomoStatus" class="text-sm text-slate-500 dark:text-slate-400 mb-4">Prêt à travailler ?</p>
+                    <div id="pomoTime" class="text-5xl font-bold text-blue-600 dark:text-blue-400 mb-6 font-mono">25:00</div>
+                    <div class="flex justify-center gap-3">
+                        <button onclick="startPomodoro()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition">Démarrer</button>
+                        <button onclick="pausePomodoro()" class="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white px-4 py-2 rounded-lg font-medium transition">Pause</button>
+                        <button onclick="resetPomodoro()" class="bg-red-100 hover:bg-red-200 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-4 py-2 rounded-lg font-medium transition">Reset</button>
+                    </div>
+                </div>
+                <!-- Subject Config -->
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-xl font-semibold mb-4 dark:text-white">📚 Matières & Examens</h2>
+                    <div class="space-y-3 mb-6">
+                        <input type="text" id="subjectInput" placeholder="Nouvelle matière (ex: Droit civil)" class="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm dark:text-slate-300 w-1/3 font-medium">Date de l'examen:</span>
+                            <input type="date" id="subjectExamDate" class="w-2/3 p-2 border border-slate-200 dark:border-slate-700 rounded-lg outline-none dark:bg-slate-800 dark:text-white text-sm focus:border-blue-500 transition-colors">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm dark:text-slate-300 w-1/3 font-medium">Poids (1-5):</span>
+                            <input type="range" id="difficultyInput" min="1" max="5" value="3" class="w-2/3 accent-blue-500">
+                        </div>
+                        <button onclick="addSubject()" class="w-full bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 py-2 rounded-lg font-semibold hover:opacity-90 transition-opacity mt-2">Ajouter à l'algorithme</button>
+                    </div>
+                    <div id="subjectList" class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-2"></div>
+                </div>
+                <!-- Chart -->
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-sm uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold mb-4 text-center">Répartition de l'effort</h2>
+                    <div class="chart-container"><canvas id="distributionChart"></canvas></div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-8 space-y-6">
+                <div class="glass-card p-6 rounded-2xl shadow-sm border-l-4 border-blue-500 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-1 dark:text-white">Ton Planning</h2>
+                        <p class="text-slate-600 dark:text-slate-400 text-sm">Dates réelles ! Navigue entre les semaines.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1 items-center">
+                            <button onclick="changeWeek(-1)" class="px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 dark:text-white transition font-bold">&lt;</button>
+                            <span id="weekLabel" class="px-2 py-1 font-semibold text-xs md:text-sm dark:text-white text-center min-w-[130px]">...</span>
+                            <button onclick="changeWeek(1)" class="px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 dark:text-white transition font-bold">&gt;</button>
+                        </div>
+                        <button onclick="regenerateSchedule()" class="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-2 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition font-bold" title="Régénérer">🔄</button>
+                    </div>
+                </div>
+                <div id="calendarContainer" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+                    <div class="glass-card p-4 rounded-xl text-center">
+                        <span class="block text-3xl font-bold text-blue-600 dark:text-blue-400" id="totalHours">0h</span>
+                        <span class="text-xs uppercase tracking-wider text-slate-500">Heures prévues (Cible: 70h)</span>
+                    </div>
+                    <div class="glass-card p-4 rounded-xl text-center">
+                        <span class="block text-3xl font-bold text-green-600 dark:text-green-400" id="completionRate">0%</span>
+                        <span class="text-xs uppercase tracking-wider text-slate-500">Objectif Complété</span>
+                    </div>
+                    <div class="glass-card p-4 rounded-xl text-center">
+                        <span class="block text-3xl font-bold text-purple-600 dark:text-purple-400" id="daysLeft">--</span>
+                        <span class="text-xs uppercase tracking-wider text-slate-500">Prochain Examen</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ANALYTICS TAB ===== -->
+    <div id="panel-analytics" class="tab-panel hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+            <!-- Left: KPI Cards + Per-subject breakdown -->
+            <div class="lg:col-span-4 space-y-6">
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-xl font-semibold mb-5 dark:text-white">📈 Aperçu Global</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-slate-600 dark:text-slate-400">Sessions complétées</span>
+                                <span class="font-bold dark:text-white" id="ana-completed">0 / 0</span>
+                            </div>
+                            <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                                <div class="progress-bar bg-blue-500 h-2 rounded-full" id="ana-progress-bar" style="width:0%"></div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 pt-2">
+                            <div class="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-center">
+                                <span class="block text-2xl font-bold text-blue-600 dark:text-blue-400" id="ana-hours">0h</span>
+                                <span class="text-xs text-slate-500">Heures totales</span>
+                            </div>
+                            <div class="bg-green-50 dark:bg-green-900/20 rounded-xl p-3 text-center">
+                                <span class="block text-2xl font-bold text-green-600 dark:text-green-400" id="ana-streak">0</span>
+                                <span class="text-xs text-slate-500">Série max</span>
+                            </div>
+                            <div class="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-3 text-center">
+                                <span class="block text-2xl font-bold text-orange-500" id="ana-sessions-day">0</span>
+                                <span class="text-xs text-slate-500">Moy. sess./jour</span>
+                            </div>
+                            <div class="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-3 text-center">
+                                <span class="block text-2xl font-bold text-purple-600 dark:text-purple-400" id="ana-subjects-active">0</span>
+                                <span class="text-xs text-slate-500">Matières actives</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Per-subject breakdown -->
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-lg font-semibold mb-4 dark:text-white">Par matière</h2>
+                    <div id="subjectBreakdown" class="space-y-3 max-h-72 overflow-y-auto custom-scrollbar pr-1"></div>
+                </div>
+            </div>
+
+            <!-- Right: Charts -->
+            <div class="lg:col-span-8 space-y-6">
+                <!-- Heatmap -->
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-lg font-semibold mb-1 dark:text-white">🗓️ Heatmap d'activité</h2>
+                    <p class="text-xs text-slate-500 mb-4">Sessions complétées par jour (4 dernières semaines)</p>
+                    <div id="heatmapContainer" class="overflow-x-auto"></div>
+                </div>
+
+                <!-- Weekly bar chart + doughnut side by side -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="glass-card p-6 rounded-2xl shadow-sm">
+                        <h2 class="text-sm font-semibold mb-3 dark:text-white uppercase tracking-wider text-slate-500">Progression hebdomadaire</h2>
+                        <div class="chart-container-sm"><canvas id="weeklyBarChart"></canvas></div>
+                    </div>
+                    <div class="glass-card p-6 rounded-2xl shadow-sm">
+                        <h2 class="text-sm font-semibold mb-3 dark:text-white uppercase tracking-wider text-slate-500">Temps par matière</h2>
+                        <div class="chart-container-sm"><canvas id="subjectTimeChart"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- Exams countdown -->
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-lg font-semibold mb-4 dark:text-white">⏳ Compte à rebours des examens</h2>
+                    <div id="examCountdown" class="space-y-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== AI COACH TAB ===== -->
+    <div id="panel-ai" class="tab-panel hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+            <!-- Left: Quick actions -->
+            <div class="lg:col-span-4 space-y-6">
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-xl font-semibold mb-2 dark:text-white">🤖 Coach IA</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-5">Analyse ton planning et donne des conseils personnalisés basés sur tes matières, tes deadlines et ta progression.</p>
+                    
+                    <div class="space-y-2 mb-5">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Suggestions rapides</p>
+                        <button onclick="askAI('Analyse mon planning de révision et donne-moi 3 conseils concrets pour optimiser mon temps.')" 
+                            class="w-full text-left px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-sm font-medium transition border border-blue-100 dark:border-blue-800">
+                            💡 Optimiser mon planning
+                        </button>
+                        <button onclick="askAI('Quelles matières devrais-je prioriser en urgence cette semaine ? Explique ton raisonnement.')"
+                            class="w-full text-left px-4 py-3 rounded-xl bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/40 text-orange-700 dark:text-orange-300 text-sm font-medium transition border border-orange-100 dark:border-orange-800">
+                            🎯 Quoi prioriser cette semaine ?
+                        </button>
+                        <button onclick="askAI('Donne-moi des techniques de mémorisation efficaces adaptées à mon profil de révision.')"
+                            class="w-full text-left px-4 py-3 rounded-xl bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 text-green-700 dark:text-green-300 text-sm font-medium transition border border-green-100 dark:border-green-800">
+                            🧠 Techniques de mémorisation
+                        </button>
+                        <button onclick="askAI('Comment éviter la procrastination et rester motivé jusqu\'à mes examens ? Conseils pratiques.')"
+                            class="w-full text-left px-4 py-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-sm font-medium transition border border-purple-100 dark:border-purple-800">
+                            💪 Rester motivé
+                        </button>
+                        <button onclick="askAI('Évalue ma progression globale et dis-moi si je suis sur la bonne voie pour mes examens.')"
+                            class="w-full text-left px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium transition border border-slate-200 dark:border-slate-600">
+                            📊 Évaluer ma progression
+                        </button>
+                    </div>
+
+                    <div class="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Statut Backend</p>
+                        <div class="flex items-center gap-2">
+                            <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                            <p class="text-xs text-slate-400">Prêt pour Vercel (Sécurisé)</p>
+                        </div>
+                        <p class="text-[10px] text-slate-400 mt-2">La clé API est gérée côté serveur pour plus de sécurité.</p>
+                    </div>
+                </div>
+
+                <!-- Context Panel -->
+                <div class="glass-card p-5 rounded-2xl shadow-sm">
+                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-3">Contexte envoyé à l'IA</h3>
+                    <div id="aiContextDisplay" class="text-xs text-slate-600 dark:text-slate-400 space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+                        <p class="italic">Ajoute des matières pour que l'IA ait du contexte.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Chat -->
+            <div class="lg:col-span-8">
+                <div class="glass-card rounded-2xl shadow-sm flex flex-col" style="height: 680px;">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">🤖</div>
+                            <div>
+                                <p class="font-semibold dark:text-white">Coach de Révision IA</p>
+                                <p class="text-xs text-green-500">● En ligne</p>
+                            </div>
+                        </div>
+                        <button onclick="clearChat()" class="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">Effacer</button>
+                    </div>
+
+                    <div id="chatMessages" class="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+                        <div class="ai-message">
+                            <div class="flex gap-3 items-start">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm shrink-0">🤖</div>
+                                <div class="ai-bubble bg-slate-100 dark:bg-slate-800 p-4 text-sm dark:text-slate-200 max-w-lg">
+                                    Bonjour ! Je suis ton coach de révision IA. Je peux analyser ton planning, tes matières et ta progression pour te donner des conseils personnalisés. Utilise les suggestions rapides ou écris-moi directement ! 🎓
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-4 border-t border-slate-200 dark:border-slate-700">
+                        <div class="flex gap-3">
+                            <input type="text" id="aiChatInput" placeholder="Pose une question à ton coach..." 
+                                class="flex-1 p-3 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:border-blue-500 transition text-sm"
+                                onkeydown="if(event.key==='Enter') sendChatMessage()">
+                            <button onclick="sendChatMessage()" id="sendBtn"
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold transition text-sm">
+                                Envoyer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Note Modal -->
+<div id="editModal" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm shadow-xl border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-4 dark:text-white">Modifier l'objectif</h3>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-2">Ex: "Relire chapitre 4" ou "Faire 3 annales"</p>
+        <input type="text" id="noteModalInput" class="w-full p-2 mb-6 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-900 dark:text-white outline-none focus:border-blue-500">
+        <div class="flex justify-end gap-2">
+            <button onclick="closeEditModal()" class="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition">Annuler</button>
+            <button onclick="saveSessionNote()" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition">Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- Notification -->
+<div id="notifModal" class="hidden fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 transition-opacity">
+    <span class="text-xl" id="notifIcon">✅</span>
+    <span class="font-semibold" id="notifText">Message</span>
+</div>
+
+<script>
+// --- State ---
+window.subjects = [];
+window.scheduleData = {};
+window.streak = { count: 0, lastDate: '' };
+window.chatHistory = [];
+window.apiKey = '';
+
+function getStartOfWeek(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    d.setDate(diff); d.setHours(0,0,0,0); return d;
+}
+window.currentWeekStart = getStartOfWeek(new Date());
+
+const DAYS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
+const MONTHS = ["Janv.","Févr.","Mars","Avril","Mai","Juin","Juil.","Août","Sept.","Oct.","Nov.","Déc."];
+const COLORS = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6","#6366f1","#eab308","#84cc16","#22c55e","#06b6d4","#0ea5e9","#a855f7","#d946ef","#f43f5e","#64748b","#78716c","#0f766e","#1d4ed8","#be123c","#4d7c0f"];
+
+let chartInstance = null, weeklyBarChart = null, subjectTimeChart = null;
+let draggedSession = null, currentEditingSession = null;
+
+function getLocalDateString(dateObj) {
+    return `${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')}`;
+}
+
+// --- Tab Switching ---
+window.switchMainTab = function(tab) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('panel-' + tab).classList.remove('hidden');
+    document.getElementById('tab-' + tab).classList.add('active');
+    if (tab === 'analytics') renderAnalytics();
+    if (tab === 'ai') updateAIContext();
+}
+
+// --- Persistence ---
+window.saveDataToLocal = function() {
+    localStorage.setItem('revisionCalendarData', JSON.stringify({
+        subjects: window.subjects, scheduleData: window.scheduleData,
+        streak: window.streak, chatHistory: window.chatHistory,
+        apiKey: window.apiKey,
+        isDarkMode: document.documentElement.classList.contains('dark')
+    }));
+}
+
+function loadDataFromLocal() {
+    const saved = localStorage.getItem('revisionCalendarData');
+    if (saved) {
+        try {
+            const data = JSON.parse(saved);
+            window.subjects = data.subjects || [];
+            window.streak = data.streak || { count: 0, lastDate: '' };
+            window.scheduleData = data.scheduleData || {};
+            window.chatHistory = data.chatHistory || [];
+            window.apiKey = data.apiKey || '';
+            if (data.isDarkMode) {
+                document.documentElement.classList.add('dark');
+                document.getElementById('themeIcon').innerText = '☀️';
+            }
+            // Restore chat messages
+            if (window.chatHistory.length > 0) {
+                const chatContainer = document.getElementById('chatMessages');
+                window.chatHistory.forEach(msg => {
+                    if (msg.role === 'user') appendUserMessage(msg.content, false);
+                    else appendAIMessage(msg.content, false);
+                });
+            }
+        } catch(e) { console.error(e); }
+    }
+}
+
+// --- Theme ---
+window.toggleTheme = function() {
+    document.documentElement.classList.toggle('dark');
+    document.getElementById('themeIcon').innerText = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+    renderChart(); renderAnalytics(); window.saveDataToLocal();
+}
+
+function showNotification(text, icon="✅", colorClass="bg-green-500") {
+    const modal = document.getElementById('notifModal');
+    document.getElementById('notifText').innerText = text;
+    document.getElementById('notifIcon').innerText = icon;
+    modal.className = `fixed top-4 right-4 z-50 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 transition-opacity ${colorClass}`;
+    modal.classList.remove('hidden');
+    setTimeout(() => modal.classList.add('hidden'), 3000);
+}
+
+// --- Subjects ---
+window.addSubject = function() {
+    const name = document.getElementById('subjectInput').value.trim();
+    const diff = parseInt(document.getElementById('difficultyInput').value);
+    const examDate = document.getElementById('subjectExamDate').value;
+    if (!name) { showNotification("Nom requis","⚠️","bg-orange-500"); return; }
+    if (!examDate) { showNotification("Date d'examen requise","⚠️","bg-orange-500"); return; }
+    window.subjects.push({ id: 'sub_'+Date.now(), name, difficulty: diff, examDate, color: COLORS[window.subjects.length % COLORS.length] });
+    document.getElementById('subjectInput').value = "";
+    document.getElementById('subjectExamDate').value = "";
+    let weekEmpty = true;
+    for(let i=0;i<7;i++) { let d=new Date(window.currentWeekStart); d.setDate(d.getDate()+i); if(window.scheduleData[getLocalDateString(d)]) weekEmpty=false; }
+    if(weekEmpty) generateNewSchedule();
+    updateUI(); window.saveDataToLocal();
+}
+
+window.deleteSubject = function(id) {
+    window.subjects = window.subjects.filter(s => s.id !== id);
+    Object.keys(window.scheduleData).forEach(k => { window.scheduleData[k] = window.scheduleData[k].filter(s => s.subjectId !== id); });
+    updateUI(); window.saveDataToLocal();
+}
+
+function renderSubjectList() {
+    const list = document.getElementById('subjectList');
+    list.innerHTML = '';
+    [...window.subjects].sort((a,b) => new Date(a.examDate)-new Date(b.examDate)).forEach(sub => {
+        const d = new Date(sub.examDate);
+        const ds = isNaN(d.getTime()) ? "Pas de date" : `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+        list.innerHTML += `<div class="flex justify-between items-center p-2 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+            <div class="flex items-center gap-2 truncate">
+                <div class="w-3 h-3 rounded-full shrink-0" style="background-color:${sub.color}"></div>
+                <span class="text-sm font-medium dark:text-slate-200 truncate">${sub.name}</span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <span class="text-xs text-slate-500 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded font-mono">📅 ${ds}</span>
+                <button onclick="deleteSubject('${sub.id}')" class="text-slate-400 hover:text-red-500 transition p-1">🗑️</button>
+            </div>
+        </div>`;
+    });
+}
+
+// --- Schedule Generation ---
+window.changeWeek = function(offset) {
+    window.currentWeekStart.setDate(window.currentWeekStart.getDate() + (offset*7));
+    let hasData = false;
+    for(let i=0;i<7;i++) { let d=new Date(window.currentWeekStart); d.setDate(d.getDate()+i); if(window.scheduleData[getLocalDateString(d)]) hasData=true; }
+    if(!hasData && window.subjects.length>0) generateNewSchedule();
+    updateUI(); window.saveDataToLocal();
+}
+
+window.regenerateSchedule = function() { generateNewSchedule(); updateUI(); window.saveDataToLocal(); showNotification("Semaine régénérée !","🧠","bg-blue-500"); }
+
+function generateNewSchedule() {
+    if(window.subjects.length===0) return;
+    const SLOTS = ["Matin (3h20)","Après-midi (3h20)","Soir (3h20)"];
+    const HOURS_PER_SESSION = 10/3;
+
+    // --- 1. Calculer le déficit réel de chaque matière sur tout l'historique ---
+    // Sessions déjà effectuées (complétées) par matière
+    const hoursCompleted = {};
+    window.subjects.forEach(s => hoursCompleted[s.id] = 0);
+    Object.values(window.scheduleData).forEach(daySessions => {
+        daySessions.forEach(sess => {
+            if(sess.isCompleted && hoursCompleted[sess.subjectId] !== undefined)
+                hoursCompleted[sess.subjectId] += HOURS_PER_SESSION;
+        });
+    });
+
+    // --- 2. Mémoire réelle de la dernière fois que chaque matière a été planifiée ---
+    // On parcourt TOUT l'historique pour trouver la vraie dernière occurrence
+    const lastPlanned = {}; // { subjectId: timestamp }
+    const sortedDates = Object.keys(window.scheduleData).sort();
+    sortedDates.forEach(dateStr => {
+        const t = new Date(dateStr).getTime();
+        (window.scheduleData[dateStr]||[]).forEach(sess => {
+            if(!lastPlanned[sess.subjectId] || t > lastPlanned[sess.subjectId])
+                lastPlanned[sess.subjectId] = t;
+        });
+    });
+
+    // --- 3. Générer jour par jour ---
+    for(let i=0; i<7; i++) {
+        let d = new Date(window.currentWeekStart);
+        d.setDate(d.getDate() + i);
+        const currentDateMs = d.getTime();
+        const dateStr = getLocalDateString(d);
+
+        // Filtrer les matières dont l'examen n'est pas passé
+        const activeSubjects = window.subjects.filter(sub => {
+            if(!sub.examDate) return true;
+            const examMs = new Date(sub.examDate).getTime();
+            return Math.ceil((examMs - currentDateMs) / 86400000) >= 0;
+        });
+
+        if(activeSubjects.length === 0) { window.scheduleData[dateStr] = []; continue; }
+
+        // --- Score composite normalisé pour chaque matière ---
+        const scored = activeSubjects.map(sub => {
+            const examMs = sub.examDate ? new Date(sub.examDate).getTime() : currentDateMs + 60*86400000;
+            const daysToExam = Math.max(0, Math.ceil((examMs - currentDateMs) / 86400000));
+
+            // Composante 1 — URGENCE (0 à 1, inversement proportionnel aux jours restants)
+            // Courbe exponentielle : J-1 → ~1.0, J-7 → ~0.5, J-30 → ~0.1
+            const urgency = daysToExam === 0 ? 1 : 1 - Math.exp(-7 / daysToExam);
+
+            // Composante 2 — DÉFICIT (heures faites vs heures idéales)
+            // Heures idéales = difficulté * 10 (matière de poids 5 → 50h de révision cible)
+            const targetHours = sub.difficulty * 10;
+            const done = hoursCompleted[sub.id] || 0;
+            const deficit = Math.max(0, (targetHours - done) / targetHours); // 0 à 1
+
+            // Composante 3 — ESPACEMENT (depuis la dernière planification)
+            // Idéal : revoir après ~(difficulté) jours. Plus l'intervalle est dépassé, plus le score monte.
+            const idealInterval = sub.difficulty; // jours
+            const lastT = lastPlanned[sub.id] || 0;
+            const daysSinceLast = (currentDateMs - lastT) / 86400000;
+            // Sigmoid centrée sur l'intervalle idéal
+            const spacing = lastT === 0 ? 1 : Math.min(1, daysSinceLast / (idealInterval * 2));
+
+            // Composante 4 — DIFFICULTÉ (poids brut normalisé)
+            const diffWeight = sub.difficulty / 5;
+
+            // Score final : urgence domine, déficit et espacement complètent
+            // Pondérations : urgence 40%, déficit 30%, espacement 20%, difficulté 10%
+            const score = (urgency * 0.40) + (deficit * 0.30) + (spacing * 0.20) + (diffWeight * 0.10);
+
+            return { subject: sub, score, urgency, deficit, spacing };
+        });
+
+        // --- Tri déterministe : score desc, puis difficulté desc en cas d'égalité ---
+        scored.sort((a, b) => {
+            if(Math.abs(a.score - b.score) > 0.001) return b.score - a.score;
+            return b.subject.difficulty - a.subject.difficulty;
+        });
+
+        // --- Sélectionner les 3 meilleures et mettre à jour la mémoire ---
+        const selected = scored.slice(0, 3);
+        window.scheduleData[dateStr] = selected.map((sel, idx) => {
+            // Mise à jour de la mémoire de planification pour les jours suivants de la même semaine
+            lastPlanned[sel.subject.id] = currentDateMs;
+            return {
+                id: 'sess_' + Math.random().toString(36).substr(2,9),
+                subjectId: sel.subject.id,
+                note: SLOTS[idx],
+                isCompleted: false
+            };
+        });
+    }
+}
+
+// --- Drag & Drop ---
+window.handleDragStart = function(e,dateStr,idx) { draggedSession={dateStr,sessionIdx:idx}; e.dataTransfer.effectAllowed='move'; setTimeout(()=>e.target.classList.add('opacity-50'),0); }
+window.handleDragEnd = function(e) { e.target.classList.remove('opacity-50'); draggedSession=null; document.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over')); }
+window.handleDragOver = function(e) { e.preventDefault(); e.dataTransfer.dropEffect='move'; e.target.closest('.day-card')?.classList.add('drag-over'); }
+window.handleDragLeave = function(e) { e.target.closest('.day-card')?.classList.remove('drag-over'); }
+window.handleDrop = function(e,targetDateStr) {
+    e.preventDefault(); e.target.closest('.day-card')?.classList.remove('drag-over');
+    if(draggedSession && draggedSession.dateStr!==targetDateStr) {
+        if(!window.scheduleData[targetDateStr]) window.scheduleData[targetDateStr]=[];
+        const session = window.scheduleData[draggedSession.dateStr].splice(draggedSession.sessionIdx,1)[0];
+        window.scheduleData[targetDateStr].push(session);
+        updateUI(); window.saveDataToLocal();
+    }
+}
+
+// --- Modal ---
+window.openEditModal = function(dateStr,idx,e) { e.stopPropagation(); currentEditingSession={dateStr,sessionIdx:idx}; document.getElementById('noteModalInput').value=window.scheduleData[dateStr][idx].note||""; document.getElementById('editModal').classList.remove('hidden'); document.getElementById('noteModalInput').focus(); }
+window.closeEditModal = function() { document.getElementById('editModal').classList.add('hidden'); currentEditingSession=null; }
+window.saveSessionNote = function() { if(currentEditingSession) { window.scheduleData[currentEditingSession.dateStr][currentEditingSession.sessionIdx].note=document.getElementById('noteModalInput').value; updateUI(); window.saveDataToLocal(); } closeEditModal(); }
+
+// --- Streak & Session ---
+window.toggleSession = function(dateStr,idx) {
+    const session = window.scheduleData[dateStr][idx];
+    session.isCompleted = !session.isCompleted;
+    if(session.isCompleted) updateStreak();
+    updateUI(); window.saveDataToLocal();
+}
+
+function updateStreak() {
+    const today = new Date(), todayStr=getLocalDateString(today);
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
+    const yesterdayStr = getLocalDateString(yesterday);
+    if(window.streak.lastDate===todayStr) return;
+    if(window.streak.lastDate===yesterdayStr) { window.streak.count+=1; showNotification(`Série : ${window.streak.count} jours !`,"🔥","bg-orange-500"); }
+    else { window.streak.count=1; showNotification("Nouvelle série !","🔥","bg-orange-500"); }
+    window.streak.lastDate=todayStr;
+}
+
+// --- Main UI Update ---
+window.updateUI = function() { renderSubjectList(); renderChart(); renderCalendar(); updateStats(); document.getElementById('streakCount').innerText=`${window.streak.count} Jour${window.streak.count>1?'s':''}`; }
+
+function renderCalendar() {
+    const container = document.getElementById('calendarContainer');
+    container.innerHTML="";
+    let endOfWeek=new Date(window.currentWeekStart); endOfWeek.setDate(endOfWeek.getDate()+6);
+    document.getElementById('weekLabel').innerText=`${window.currentWeekStart.getDate()} ${MONTHS[window.currentWeekStart.getMonth()]} - ${endOfWeek.getDate()} ${MONTHS[endOfWeek.getMonth()]}`;
+    if(window.subjects.length===0) {
+        container.innerHTML=`<div class="col-span-full py-12 text-center text-slate-400 dark:text-slate-500 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">Ajoute des matières pour générer ton calendrier.</div>`;
+        return;
+    }
+    const todayStr = getLocalDateString(new Date());
+    for(let i=0;i<7;i++) {
+        let d=new Date(window.currentWeekStart); d.setDate(d.getDate()+i);
+        let dateStr=getLocalDateString(d), isToday=dateStr===todayStr;
+        let borderClass = isToday ? "border-blue-500 border-2" : "border-slate-200 dark:border-slate-600 border-t-4";
+        const dayCard = document.createElement('div');
+        dayCard.className=`day-card glass-card p-5 rounded-2xl shadow-sm transition-colors ${borderClass}`;
+        dayCard.setAttribute('ondragover','handleDragOver(event)'); dayCard.setAttribute('ondragleave','handleDragLeave(event)'); dayCard.setAttribute('ondrop',`handleDrop(event,'${dateStr}')`);
+        const sessions = window.scheduleData[dateStr]||[];
+        let html=`<h3 class="font-bold text-lg mb-4 flex justify-between items-center dark:text-white ${isToday?'text-blue-600 dark:text-blue-400':''}">${DAYS[i]} ${d.getDate()} <span class="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-slate-500 dark:text-slate-300 font-normal">${sessions.length} sess.</span></h3><div class="space-y-3 min-h-[50px]">`;
+        sessions.forEach((session,si) => {
+            const subject=window.subjects.find(s=>s.id===session.subjectId)||{name:"Supprimé",color:"#ccc"};
+            const checked=session.isCompleted;
+            html+=`<div draggable="true" ondragstart="handleDragStart(event,'${dateStr}',${si})" ondragend="handleDragEnd(event)"
+                class="flex items-center p-3 rounded-xl border transition-all cursor-pointer group ${checked?'bg-blue-50/60 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800':'border-slate-100 dark:border-slate-700 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800'}" onclick="toggleSession('${dateStr}',${si})">
+                <div class="w-2 h-10 rounded-full mr-3 shrink-0" style="background-color:${subject.color}"></div>
+                <div class="flex-grow min-w-0">
+                    <span class="block text-sm font-semibold truncate dark:text-slate-100 ${checked?'line-through opacity-60':''}">${subject.name}</span>
+                    <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <span class="truncate">${session.note}</span>
+                        <button onclick="openEditModal('${dateStr}',${si},event)" class="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-blue-500">✏️</button>
+                    </div>
+                </div>
+                <div class="w-6 h-6 border-2 rounded-full flex items-center justify-center shrink-0 ml-2 transition-colors ${checked?'bg-blue-100 dark:bg-blue-800 border-blue-300 dark:border-blue-600':'border-slate-200 dark:border-slate-600'}">
+                    <span class="${checked?'':'hidden'} text-blue-600 dark:text-blue-400 text-xs font-bold">✓</span>
+                </div>
+            </div>`;
+        });
+        html+=`</div>`;
+        dayCard.innerHTML=html;
+        container.appendChild(dayCard);
+    }
+}
+
+// --- Stats ---
+function updateStats() {
+    let total=0, completed=0;
+    for(let i=0;i<7;i++) {
+        let d=new Date(window.currentWeekStart); d.setDate(d.getDate()+i);
+        let s=window.scheduleData[getLocalDateString(d)]||[];
+        total+=s.length; completed+=s.filter(x=>x.isCompleted).length;
+    }
+    const hoursPerSession = 10/3;
+    document.getElementById('totalHours').innerText=Math.round(total*hoursPerSession)+"h";
+    document.getElementById('completionRate').innerText=(total>0?Math.round((completed/total)*100):0)+"%";
+    if(window.subjects.length>0) {
+        const today=new Date(); today.setHours(0,0,0,0);
+        let min=Infinity;
+        window.subjects.forEach(s => { if(s.examDate) { let d=new Date(s.examDate); d.setHours(0,0,0,0); let diff=Math.ceil((d-today)/86400000); if(diff>=0&&diff<min) min=diff; } });
+        document.getElementById('daysLeft').innerText=min===Infinity?"Terminés":min===0?"Aujourd'hui":min+" j";
+    } else { document.getElementById('daysLeft').innerText="--"; }
+}
+
+// --- Charts ---
+function renderChart() {
+    const ctx=document.getElementById('distributionChart').getContext('2d');
+    const isDark=document.documentElement.classList.contains('dark');
+    if(chartInstance) chartInstance.destroy();
+    if(window.subjects.length===0) return;
+    chartInstance=new Chart(ctx,{type:'doughnut',data:{labels:window.subjects.map(s=>s.name),datasets:[{data:window.subjects.map(s=>s.difficulty),backgroundColor:window.subjects.map(s=>s.color),borderWidth:isDark?2:1,borderColor:isDark?'#1e293b':'#ffffff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'70%',plugins:{legend:{position:'right',labels:{color:isDark?'#cbd5e1':'#475569',font:{family:'Inter',size:11}}}}}});
+}
+
+// --- ANALYTICS ---
+function getGlobalStats() {
+    let allSessions=[], allDates=Object.keys(window.scheduleData).sort();
+    allDates.forEach(d => { (window.scheduleData[d]||[]).forEach(s => allSessions.push({...s, date:d})); });
+    const completed = allSessions.filter(s=>s.isCompleted);
+    const hoursPerSession = 10/3;
+    const subjectStats = {};
+    window.subjects.forEach(s => { subjectStats[s.id]={total:0,done:0,name:s.name,color:s.color}; });
+    allSessions.forEach(s => { if(subjectStats[s.subjectId]) { subjectStats[s.subjectId].total++; if(s.isCompleted) subjectStats[s.subjectId].done++; } });
+    // Days with at least one completed session
+    let activeDays = new Set();
+    allSessions.filter(s=>s.isCompleted).forEach(s=>activeDays.add(s.date));
+    // Average sessions per active day
+    const avgPerDay = activeDays.size>0 ? (completed.length/activeDays.size).toFixed(1) : 0;
+    return { total:allSessions.length, completed:completed.length, hours:Math.round(completed.length*hoursPerSession), avgPerDay, subjectStats, activeDays:activeDays.size };
+}
+
+function renderAnalytics() {
+    if(window.subjects.length===0) return;
+    const stats = getGlobalStats();
+    const isDark = document.documentElement.classList.contains('dark');
+
+    // KPIs
+    document.getElementById('ana-completed').innerText=`${stats.completed} / ${stats.total}`;
+    document.getElementById('ana-progress-bar').style.width=(stats.total>0?Math.round(stats.completed/stats.total*100):0)+'%';
+    document.getElementById('ana-hours').innerText=stats.hours+'h';
+    document.getElementById('ana-streak').innerText=window.streak.count;
+    document.getElementById('ana-sessions-day').innerText=stats.avgPerDay;
+    document.getElementById('ana-subjects-active').innerText=window.subjects.length;
+
+    // Per-subject breakdown
+    const breakdown = document.getElementById('subjectBreakdown');
+    breakdown.innerHTML='';
+    Object.values(stats.subjectStats).sort((a,b)=>b.done-a.done).forEach(s => {
+        const pct = s.total>0?Math.round(s.done/s.total*100):0;
+        breakdown.innerHTML+=`<div>
+            <div class="flex justify-between text-xs mb-1">
+                <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full inline-block" style="background:${s.color}"></span><span class="dark:text-slate-200 font-medium">${s.name}</span></span>
+                <span class="text-slate-500">${s.done}/${s.total} (${pct}%)</span>
+            </div>
+            <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
+                <div class="h-1.5 rounded-full transition-all" style="width:${pct}%;background:${s.color}"></div>
+            </div>
+        </div>`;
+    });
+
+    // Heatmap (4 weeks)
+    renderHeatmap(isDark);
+
+    // Weekly bar chart (last 4 weeks)
+    renderWeeklyChart(isDark);
+
+    // Subject time chart
+    renderSubjectTimeChart(stats, isDark);
+
+    // Exam countdown
+    renderExamCountdown();
+}
+
+function renderHeatmap(isDark) {
+    const container = document.getElementById('heatmapContainer');
+    // Build 4 weeks of data ending today
+    const today = new Date(); today.setHours(0,0,0,0);
+    const weeks = 4;
+    let startDate = new Date(today);
+    startDate.setDate(startDate.getDate() - (weeks*7 - 1));
+
+    // Count completed per day
+    const dayCount = {};
+    Object.keys(window.scheduleData).forEach(dateStr => {
+        const done = (window.scheduleData[dateStr]||[]).filter(s=>s.isCompleted).length;
+        if(done>0) dayCount[dateStr]=done;
+    });
+    const maxCount = Math.max(1, ...Object.values(dayCount));
+
+    const dayLabels = ['L','M','M','J','V','S','D'];
+    let html = `<div class="flex gap-1">`;
+    // Day labels column
+    html += `<div class="flex flex-col gap-1 mr-1">`;
+    for(let d=0;d<7;d++) html+=`<div class="text-xs text-slate-400 w-6 flex items-center justify-center" style="height:22px">${dayLabels[d]}</div>`;
+    html+=`</div>`;
+
+    // Week columns
+    for(let w=0;w<weeks;w++) {
+        html+=`<div class="flex flex-col gap-1">`;
+        for(let d=0;d<7;d++) {
+            let cellDate = new Date(startDate);
+            cellDate.setDate(startDate.getDate() + w*7 + d);
+            const ds = getLocalDateString(cellDate);
+            const count = dayCount[ds]||0;
+            const alpha = count>0 ? 0.3 + (count/maxCount)*0.7 : 0;
+            const isToday = ds===getLocalDateString(today);
+            const isFuture = cellDate>today;
+            let bg, title;
+            if(isFuture) { bg=isDark?'rgba(51,65,85,0.3)':'rgba(226,232,240,0.5)'; }
+            else if(count>0) { bg=`rgba(59,130,246,${alpha})`; }
+            else { bg=isDark?'rgba(51,65,85,0.5)':'rgba(226,232,240,0.8)'; }
+            title=`${ds}: ${count} session${count>1?'s':''} complétée${count>1?'s':''}`;
+            html+=`<div class="heatmap-cell w-6 rounded-sm" style="height:22px;background:${bg};${isToday?'outline:2px solid #3b82f6;outline-offset:1px':''}" title="${title}"></div>`;
+        }
+        html+=`</div>`;
+        // Week label
+    }
+    html+=`</div>`;
+    // Legend
+    html+=`<div class="flex items-center gap-2 mt-3"><span class="text-xs text-slate-400">Moins</span>`;
+    [0.1,0.3,0.5,0.7,0.9].forEach(a => html+=`<div class="w-4 h-4 rounded-sm" style="background:rgba(59,130,246,${a})"></div>`);
+    html+=`<span class="text-xs text-slate-400">Plus</span></div>`;
+    container.innerHTML=html;
+}
+
+function renderWeeklyChart(isDark) {
+    const ctx = document.getElementById('weeklyBarChart').getContext('2d');
+    if(weeklyBarChart) weeklyBarChart.destroy();
+    // 4 weeks data
+    const today = new Date(); today.setHours(0,0,0,0);
+    const weeks = [];
+    const weeklyCompleted = [], weeklyTotal = [];
+    for(let w=3;w>=0;w--) {
+        let ws = new Date(getStartOfWeek(today));
+        ws.setDate(ws.getDate() - w*7);
+        let we = new Date(ws); we.setDate(we.getDate()+6);
+        weeks.push(`S-${w===0?'cette':w}`);
+        let tot=0,done=0;
+        for(let d=0;d<7;d++) {
+            let dd=new Date(ws); dd.setDate(dd.getDate()+d);
+            let s=window.scheduleData[getLocalDateString(dd)]||[];
+            tot+=s.length; done+=s.filter(x=>x.isCompleted).length;
+        }
+        weeklyTotal.push(tot); weeklyCompleted.push(done);
+    }
+    weeklyBarChart=new Chart(ctx,{type:'bar',data:{labels:['S-3','S-2','S-1','Cette sem.'],datasets:[
+        {label:'Complétées',data:weeklyCompleted,backgroundColor:'rgba(59,130,246,0.8)',borderRadius:6},
+        {label:'Total',data:weeklyTotal,backgroundColor:'rgba(148,163,184,0.3)',borderRadius:6}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:isDark?'#cbd5e1':'#475569',font:{size:11}}}},scales:{x:{ticks:{color:isDark?'#94a3b8':'#64748b'},grid:{display:false}},y:{ticks:{color:isDark?'#94a3b8':'#64748b'},grid:{color:isDark?'rgba(71,85,105,0.3)':'rgba(226,232,240,0.8)'}}}}});
+}
+
+function renderSubjectTimeChart(stats, isDark) {
+    const ctx = document.getElementById('subjectTimeChart').getContext('2d');
+    if(subjectTimeChart) subjectTimeChart.destroy();
+    const subList = Object.values(stats.subjectStats).filter(s=>s.done>0);
+    if(subList.length===0) return;
+    subjectTimeChart=new Chart(ctx,{type:'doughnut',data:{labels:subList.map(s=>s.name),datasets:[{data:subList.map(s=>Math.round(s.done*10/3)),backgroundColor:subList.map(s=>s.color),borderWidth:isDark?2:1,borderColor:isDark?'#1e293b':'#ffffff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{color:isDark?'#cbd5e1':'#475569',font:{size:10},boxWidth:10}}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ~${ctx.raw}h`}}}});
+}
+
+function renderExamCountdown() {
+    const container = document.getElementById('examCountdown');
+    const today = new Date(); today.setHours(0,0,0,0);
+    const sorted = [...window.subjects].filter(s=>s.examDate).sort((a,b)=>new Date(a.examDate)-new Date(b.examDate));
+    if(sorted.length===0) { container.innerHTML='<p class="text-slate-400 text-sm">Aucun examen configuré.</p>'; return; }
+    container.innerHTML=sorted.map(s => {
+        const examDate=new Date(s.examDate); examDate.setHours(0,0,0,0);
+        const days=Math.ceil((examDate-today)/86400000);
+        const pct = Math.max(0, Math.min(100, 100-(days/60*100)));
+        let urgencyColor = days>14?'bg-green-500':days>7?'bg-yellow-500':days>=0?'bg-red-500':'bg-slate-400';
+        let urgencyText = days<0?"Passé":days===0?"Aujourd'hui !":days===1?"Demain !":`${days} jours`;
+        return `<div class="flex items-center gap-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+            <div class="w-2 h-10 rounded-full shrink-0" style="background:${s.color}"></div>
+            <div class="flex-grow min-w-0">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="font-semibold text-sm dark:text-slate-200 truncate">${s.name}</span>
+                    <span class="text-sm font-bold ${days<=7&&days>=0?'text-red-500':days<=14?'text-yellow-500':'text-green-600'} shrink-0 ml-2">${urgencyText}</span>
+                </div>
+                <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
+                    <div class="h-1.5 rounded-full ${urgencyColor} transition-all" style="width:${pct}%"></div>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// --- AI COACH ---
+function buildContext() {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayStr = getLocalDateString(today);
+    let ctx = `=== CONTEXTE DE L'ÉTUDIANT ===\nDate: ${todayStr}\nSérie actuelle: ${window.streak.count} jour(s)\n\n`;
+    
+    if(window.subjects.length===0) { ctx+="Aucune matière configurée.\n"; return ctx; }
+    
+    ctx+="MATIÈRES:\n";
+    window.subjects.forEach(s => {
+        const examDate=new Date(s.examDate); examDate.setHours(0,0,0,0);
+        const days=Math.ceil((examDate-today)/86400000);
+        ctx+=`- ${s.name} | Difficulté: ${s.difficulty}/5 | Examen dans: ${days>=0?days+" jours":"passé"}\n`;
+    });
+    
+    const gs = getGlobalStats();
+    ctx+=`\nPROGRESSION:\n- Sessions complétées: ${gs.completed}/${gs.total}\n- Heures de révision: ~${gs.hours}h\n- Taux de complétion: ${gs.total>0?Math.round(gs.completed/gs.total*100):0}%\n`;
+    
+    // This week
+    let weekCompleted=0, weekTotal=0;
+    for(let i=0;i<7;i++) { let d=new Date(window.currentWeekStart); d.setDate(d.getDate()+i); let s=window.scheduleData[getLocalDateString(d)]||[]; weekTotal+=s.length; weekCompleted+=s.filter(x=>x.isCompleted).length; }
+    ctx+=`- Cette semaine: ${weekCompleted}/${weekTotal} sessions\n`;
+    return ctx;
+}
+
+function updateAIContext() {
+    const ctx = buildContext();
+    document.getElementById('aiContextDisplay').innerHTML=ctx.split('\n').map(l=>`<p>${l||'&nbsp;'}</p>`).join('');
+}
+
+window.askAI = async function(question) {
+    await sendToAI(question);
+}
+
+window.sendChatMessage = async function() {
+    const input = document.getElementById('aiChatInput');
+    const text = input.value.trim();
+    if(!text) return;
+    input.value='';
+    await sendToAI(text);
+}
+
+async function sendToAI(userMessage) {
+    appendUserMessage(userMessage, true);
+    const sendBtn = document.getElementById('sendBtn');
+    sendBtn.disabled=true; sendBtn.innerText='...';
+    document.getElementById('aiChatInput').disabled=true;
+
+    const context = buildContext();
+    const systemPrompt = `Tu es un coach de révision expert et bienveillant pour un étudiant français. Tu as accès aux données de son planning de révision. Réponds en français, de manière concise et actionnable. Utilise des emojis pour rendre tes réponses plus engageantes. Formate bien avec des listes si nécessaire.`;
+
+    const contents = [];
+    window.chatHistory.forEach(msg => {
+        contents.push({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.content }]
+        });
+    });
+    contents.push({ role: 'user', parts: [{ text: userMessage }] });
+
+    const typingId = 'typing-'+Date.now();
+    appendTypingIndicator(typingId);
+
+    try {
+        // On appelle maintenant notre API locale (Vercel Serverless Function)
+        const response = await fetch('/api/chat', {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                systemInstruction: { parts: [{ text: systemPrompt + "\n\n" + context }] },
+                contents: contents,
+                generationConfig: {
+                    maxOutputTokens: 1000,
+                    temperature: 0.7
+                }
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Erreur de communication avec le coach");
+        }
+
+        removeTypingIndicator(typingId);
+        
+        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Désolé, je n'ai pas pu générer de réponse.";
+        appendAIMessage(reply, true);
+        
+        window.chatHistory.push({ role: 'user', content: userMessage });
+        window.chatHistory.push({ role: 'assistant', content: reply });
+        if(window.chatHistory.length > 20) window.chatHistory = window.chatHistory.slice(-20);
+        window.saveDataToLocal();
+    } catch(err) {
+        console.error(err);
+        removeTypingIndicator(typingId);
+        appendAIMessage(`Erreur : ${err.message}. Vérifie ta clé API et ta connexion. 🔌`, true);
+    }
+    sendBtn.disabled=false; sendBtn.innerText='Envoyer';
+    document.getElementById('aiChatInput').disabled=false;
+    document.getElementById('aiChatInput').focus();
+}
+
+function appendUserMessage(text, save) {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className='ai-message flex justify-end';
+    div.innerHTML=`<div class="bg-blue-600 text-white px-4 py-3 rounded-2xl rounded-br-sm text-sm max-w-sm">${escapeHtml(text)}</div>`;
+    container.appendChild(div);
+    container.scrollTop=container.scrollHeight;
+}
+
+function appendAIMessage(text, save) {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className='ai-message';
+    div.innerHTML=`<div class="flex gap-3 items-start">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm shrink-0">🤖</div>
+        <div class="ai-bubble bg-slate-100 dark:bg-slate-800 p-4 text-sm dark:text-slate-200 max-w-lg">${formatAIText(text)}</div>
+    </div>`;
+    container.appendChild(div);
+    container.scrollTop=container.scrollHeight;
+}
+
+function appendTypingIndicator(id) {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.id=id; div.className='ai-message';
+    div.innerHTML=`<div class="flex gap-3 items-start">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm shrink-0">🤖</div>
+        <div class="ai-bubble bg-slate-100 dark:bg-slate-800 p-4 text-sm text-slate-500 dark:text-slate-400">
+            <span class="typing-cursor">Coach réfléchit</span>
+        </div>
+    </div>`;
+    container.appendChild(div);
+    container.scrollTop=container.scrollHeight;
+}
+
+function removeTypingIndicator(id) { document.getElementById(id)?.remove(); }
+
+function escapeHtml(str) { return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function formatAIText(text) {
+    // Basic markdown-like formatting
+    return text
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g,'<em>$1</em>')
+        .replace(/^- (.+)$/gm,'<li class="ml-4 list-disc">$1</li>')
+        .replace(/\n/g,'<br>');
+}
+
+window.clearChat = function() {
+    window.chatHistory=[];
+    document.getElementById('chatMessages').innerHTML=`<div class="ai-message"><div class="flex gap-3 items-start"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm shrink-0">🤖</div><div class="ai-bubble bg-slate-100 dark:bg-slate-800 p-4 text-sm dark:text-slate-200 max-w-lg">Bonjour ! Je suis ton coach de révision IA. Comment puis-je t'aider ? 🎓</div></div></div>`;
+    window.saveDataToLocal();
+}
+
+// --- Pomodoro ---
+let pomoInterval=null, pomoTimeLeft=25*60, isPomoBreak=false;
+function updatePomoDisplay() { document.getElementById('pomoTime').innerText=`${String(Math.floor(pomoTimeLeft/60)).padStart(2,'0')}:${String(pomoTimeLeft%60).padStart(2,'0')}`; }
+window.startPomodoro=function() { if(pomoInterval) return; document.getElementById('pomoStatus').innerText=isPomoBreak?"☕ Pause":"🧠 Concentration"; pomoInterval=setInterval(()=>{pomoTimeLeft--;updatePomoDisplay();if(pomoTimeLeft<=0){clearInterval(pomoInterval);pomoInterval=null;isPomoBreak=!isPomoBreak;pomoTimeLeft=isPomoBreak?5*60:25*60;showNotification(isPomoBreak?"Pause 5 min !":"On s'y remet !",isPomoBreak?"☕":"💪",isPomoBreak?"bg-indigo-500":"bg-blue-600");updatePomoDisplay();document.getElementById('pomoStatus').innerText="En attente...";}},1000); }
+window.pausePomodoro=function() { clearInterval(pomoInterval);pomoInterval=null;document.getElementById('pomoStatus').innerText="⏸️ En pause"; }
+window.resetPomodoro=function() { clearInterval(pomoInterval);pomoInterval=null;isPomoBreak=false;pomoTimeLeft=25*60;updatePomoDisplay();document.getElementById('pomoStatus').innerText="Prêt ?"; }
+
+window.onload=()=>{ loadDataFromLocal(); updatePomoDisplay(); updateUI(); };
+</script>
+</body>
+</html>
+
