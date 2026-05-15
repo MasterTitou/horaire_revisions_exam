@@ -1174,16 +1174,14 @@ function showApp() {
 async function checkExistingAuth() {
     if(!window.authToken) return false;
     try {
-        const res = await fetch('/api/chat', {
+        const res = await fetch('/api/verify', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${window.authToken}`
-            },
-            body: JSON.stringify({ contents: [], systemInstruction: { parts: [{ text: 'test' }] }, generationConfig: { maxOutputTokens: 1 } })
+            }
         });
-        // 401 ou 403 = token invalide, tout autre code = token OK
-        return res.status !== 401 && res.status !== 403;
+        return res.ok;
     } catch(e) { return false; }
 }
 
