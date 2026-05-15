@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <title>Planificateur de Révisions Intelligent</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -58,6 +63,16 @@
         .login-icon { animation: float 3s ease-in-out infinite; }
         .shake { animation: shake 0.4s ease; }
         @keyframes shake { 0%,100% { transform: translateX(0); } 20%,60% { transform: translateX(-8px); } 40%,80% { transform: translateX(8px); } }
+        /* Gamification */
+        .xp-bar-bg { background: rgba(99,102,241,0.2); }
+        .xp-bar-fill { background: linear-gradient(90deg, #6366f1, #8b5cf6); transition: width 0.8s ease; }
+        .badge-card { transition: all 0.3s; }
+        .badge-card.locked { filter: grayscale(1) opacity(0.4); }
+        .badge-card.unlocked { animation: badgePop 0.5s ease; }
+        @keyframes badgePop { 0% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes confetti { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(-100px) rotate(720deg); opacity: 0; } }
+        .confetti-particle { position: fixed; pointer-events: none; animation: confetti 1.5s ease-out forwards; z-index: 200; }
+        .levelup-toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 150; animation: fadeIn 0.5s ease; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
@@ -92,6 +107,12 @@
         </div>
         <div class="flex items-center gap-4">
             <span id="syncIndicator" class="text-xs text-slate-400 dark:text-slate-500 italic hidden">☁️ Synchronisé</span>
+            <!-- XP Bar -->
+            <div class="glass-card px-3 py-2 rounded-full flex items-center gap-2 shadow-sm">
+                <span id="levelBadge" class="text-sm font-bold">🌱</span>
+                <div class="xp-bar-bg rounded-full h-2 w-20"><div id="xpBarFill" class="xp-bar-fill h-2 rounded-full" style="width:0%"></div></div>
+                <span id="xpLabel" class="text-xs font-semibold text-indigo-500 dark:text-indigo-400">Niv.1</span>
+            </div>
             <div class="glass-card px-4 py-2 rounded-full flex items-center font-bold text-orange-500 shadow-sm">
                 <span class="flame-icon mr-2 text-xl">🔥</span>
                 <span id="streakCount">0 Jour(s)</span>
@@ -103,10 +124,11 @@
     </header>
 
     <!-- Main Tab Navigation -->
-    <div class="flex gap-2 mb-6 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-fit">
+    <div class="flex gap-2 mb-6 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-fit flex-wrap">
         <button class="tab-btn active px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('planner')" id="tab-planner">📅 Planning</button>
         <button class="tab-btn px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('analytics')" id="tab-analytics">📊 Analytique</button>
         <button class="tab-btn px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('ai')" id="tab-ai">🤖 Coach IA</button>
+        <button class="tab-btn px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('profile')" id="tab-profile">🏆 Profil</button>
     </div>
 
     <!-- ===== PLANNER TAB ===== -->
@@ -351,6 +373,38 @@
             </div>
         </div>
     </div>
+
+    <!-- ===== PROFILE TAB ===== -->
+    <div id="panel-profile" class="tab-panel hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div class="lg:col-span-4 space-y-6">
+                <div class="glass-card p-8 rounded-2xl shadow-sm text-center">
+                    <div id="profileLevelIcon" class="text-6xl mb-4">🌱</div>
+                    <h2 id="profileLevelTitle" class="text-2xl font-bold dark:text-white mb-1">Débutant</h2>
+                    <p id="profileLevelNum" class="text-sm text-slate-500 dark:text-slate-400 mb-6">Niveau 1</p>
+                    <div class="xp-bar-bg rounded-full h-4 mb-2"><div id="profileXpBar" class="xp-bar-fill h-4 rounded-full" style="width:0%"></div></div>
+                    <p id="profileXpText" class="text-xs text-slate-500 dark:text-slate-400">0 / 100 XP</p>
+                </div>
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h3 class="text-lg font-semibold mb-4 dark:text-white">📊 Statistiques</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between text-sm"><span class="text-slate-500">XP total</span><span id="profileTotalXp" class="font-bold dark:text-white">0</span></div>
+                        <div class="flex justify-between text-sm"><span class="text-slate-500">Sessions complétées</span><span id="profileSessions" class="font-bold dark:text-white">0</span></div>
+                        <div class="flex justify-between text-sm"><span class="text-slate-500">Pomodoros complétés</span><span id="profilePomodoros" class="font-bold dark:text-white">0</span></div>
+                        <div class="flex justify-between text-sm"><span class="text-slate-500">Meilleure série</span><span id="profileBestStreak" class="font-bold dark:text-white">0 jours</span></div>
+                        <div class="flex justify-between text-sm"><span class="text-slate-500">Badges débloqués</span><span id="profileBadgeCount" class="font-bold dark:text-white">0 / 10</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="lg:col-span-8">
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-xl font-semibold mb-6 dark:text-white">🏅 Badges</h2>
+                    <div id="badgesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <!-- Edit Note Modal -->
@@ -380,6 +434,30 @@ window.streak = { count: 0, lastDate: '' };
 window.chatHistory = [];
 window.apiKey = '';
 window.authToken = localStorage.getItem('authToken') || '';
+window.gamification = { xp: 0, level: 1, badges: [], pomodorosCompleted: 0, sessionsCompleted: 0, bestStreak: 0 };
+
+// --- Gamification Config ---
+const LEVELS = [
+    { level: 1, xp: 0, icon: '🌱', title: 'Débutant' },
+    { level: 2, xp: 100, icon: '📖', title: 'Apprenti' },
+    { level: 3, xp: 300, icon: '🎯', title: 'Concentré' },
+    { level: 4, xp: 600, icon: '🧠', title: 'Stratège' },
+    { level: 5, xp: 1000, icon: '⭐', title: 'Expert' },
+    { level: 6, xp: 1500, icon: '🏆', title: 'Maître' },
+    { level: 7, xp: 2500, icon: '👑', title: 'Légende' }
+];
+const BADGES = [
+    { id: 'first_step', name: 'Premier Pas', icon: '👣', desc: 'Compléter 1 session', check: g => g.sessionsCompleted >= 1 },
+    { id: 'marathon', name: 'Marathonien', icon: '🏃', desc: 'Compléter 10 sessions', check: g => g.sessionsCompleted >= 10 },
+    { id: 'centurion', name: 'Centurion', icon: '💯', desc: 'Compléter 100 sessions', check: g => g.sessionsCompleted >= 100 },
+    { id: 'campfire', name: 'Feu de Camp', icon: '🏕️', desc: 'Série de 3 jours', check: g => g.bestStreak >= 3 },
+    { id: 'inferno', name: 'Inferno', icon: '🌋', desc: 'Série de 7 jours', check: g => g.bestStreak >= 7 },
+    { id: 'pomo_master', name: 'Pomodoro Master', icon: '🍅', desc: '10 Pomodoros', check: g => g.pomodorosCompleted >= 10 },
+    { id: 'early_bird', name: 'Lève-tôt', icon: '🌅', desc: 'Session matin complétée', check: g => g.earlyBird },
+    { id: 'night_owl', name: 'Noctambule', icon: '🌙', desc: 'Session soir complétée', check: g => g.nightOwl },
+    { id: 'multi', name: 'Touche-à-tout', icon: '🎨', desc: '5+ matières', check: (g, state) => state.subjects.length >= 5 },
+    { id: 'perfect', name: 'Perfectionniste', icon: '💎', desc: '100% une semaine', check: g => g.perfectWeek }
+];
 
 function getStartOfWeek(date) {
     const d = new Date(date);
@@ -417,7 +495,8 @@ window.saveDataToLocal = function() {
         subjects: window.subjects, scheduleData: window.scheduleData,
         streak: window.streak, chatHistory: window.chatHistory,
         apiKey: window.apiKey,
-        isDarkMode: document.documentElement.classList.contains('dark')
+        isDarkMode: document.documentElement.classList.contains('dark'),
+        gamification: window.gamification
     };
     localStorage.setItem('revisionCalendarData', JSON.stringify(data));
     
@@ -454,11 +533,11 @@ async function loadDataFromCloud() {
         if (res.ok) {
             const cloudData = await res.json();
             if (cloudData) {
-                // Merge or Replace? Let's replace for simplicity and consistency
                 window.subjects = cloudData.subjects || [];
                 window.streak = cloudData.streak || { count: 0, lastDate: '' };
                 window.scheduleData = cloudData.scheduleData || {};
                 window.chatHistory = cloudData.chatHistory || [];
+                window.gamification = cloudData.gamification || window.gamification;
                 if (cloudData.isDarkMode) document.documentElement.classList.add('dark');
                 else document.documentElement.classList.remove('dark');
                 
@@ -495,6 +574,7 @@ function loadDataFromLocal() {
             window.scheduleData = data.scheduleData || {};
             window.chatHistory = data.chatHistory || [];
             window.apiKey = data.apiKey || '';
+            window.gamification = data.gamification || window.gamification;
             if (data.isDarkMode) {
                 document.documentElement.classList.add('dark');
                 document.getElementById('themeIcon').innerText = '☀️';
@@ -701,7 +781,18 @@ window.saveSessionNote = function() { if(currentEditingSession) { window.schedul
 window.toggleSession = function(dateStr,idx) {
     const session = window.scheduleData[dateStr][idx];
     session.isCompleted = !session.isCompleted;
-    if(session.isCompleted) updateStreak();
+    if(session.isCompleted) {
+        updateStreak();
+        window.gamification.sessionsCompleted++;
+        addXP(25, 'Session complétée');
+        // Check time-based badges
+        const h = new Date().getHours();
+        if(h < 12) window.gamification.earlyBird = true;
+        if(h >= 20) window.gamification.nightOwl = true;
+        // Check perfect week
+        checkPerfectWeek();
+        checkBadges();
+    }
     updateUI(); window.saveDataToLocal();
 }
 
@@ -710,13 +801,15 @@ function updateStreak() {
     const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
     const yesterdayStr = getLocalDateString(yesterday);
     if(window.streak.lastDate===todayStr) return;
-    if(window.streak.lastDate===yesterdayStr) { window.streak.count+=1; showNotification(`Série : ${window.streak.count} jours !`,"🔥","bg-orange-500"); }
-    else { window.streak.count=1; showNotification("Nouvelle série !","🔥","bg-orange-500"); }
+    if(window.streak.lastDate===yesterdayStr) { window.streak.count+=1; addXP(10 * window.streak.count, `Série ${window.streak.count}j`); showNotification(`Série : ${window.streak.count} jours !`,"🔥","bg-orange-500"); }
+    else { window.streak.count=1; addXP(10, 'Nouvelle série'); showNotification("Nouvelle série !","🔥","bg-orange-500"); }
     window.streak.lastDate=todayStr;
+    if(window.streak.count > window.gamification.bestStreak) window.gamification.bestStreak = window.streak.count;
+    checkBadges();
 }
 
 // --- Main UI Update ---
-window.updateUI = function() { renderSubjectList(); renderChart(); renderCalendar(); updateStats(); document.getElementById('streakCount').innerText=`${window.streak.count} Jour${window.streak.count>1?'s':''}`; }
+window.updateUI = function() { renderSubjectList(); renderChart(); renderCalendar(); updateStats(); updateGamificationUI(); document.getElementById('streakCount').innerText=`${window.streak.count} Jour${window.streak.count>1?'s':''}`; }
 
 function renderCalendar() {
     const container = document.getElementById('calendarContainer');
@@ -1124,9 +1217,145 @@ window.clearChat = function() {
 // --- Pomodoro ---
 let pomoInterval=null, pomoTimeLeft=25*60, isPomoBreak=false;
 function updatePomoDisplay() { document.getElementById('pomoTime').innerText=`${String(Math.floor(pomoTimeLeft/60)).padStart(2,'0')}:${String(pomoTimeLeft%60).padStart(2,'0')}`; }
-window.startPomodoro=function() { if(pomoInterval) return; document.getElementById('pomoStatus').innerText=isPomoBreak?"☕ Pause":"🧠 Concentration"; pomoInterval=setInterval(()=>{pomoTimeLeft--;updatePomoDisplay();if(pomoTimeLeft<=0){clearInterval(pomoInterval);pomoInterval=null;isPomoBreak=!isPomoBreak;pomoTimeLeft=isPomoBreak?5*60:25*60;showNotification(isPomoBreak?"Pause 5 min !":"On s'y remet !",isPomoBreak?"☕":"💪",isPomoBreak?"bg-indigo-500":"bg-blue-600");updatePomoDisplay();document.getElementById('pomoStatus').innerText="En attente...";}},1000); }
+window.startPomodoro=function() { if(pomoInterval) return; document.getElementById('pomoStatus').innerText=isPomoBreak?"☕ Pause":"🧠 Concentration"; pomoInterval=setInterval(()=>{pomoTimeLeft--;updatePomoDisplay();if(pomoTimeLeft<=0){clearInterval(pomoInterval);pomoInterval=null;
+    if(!isPomoBreak) { window.gamification.pomodorosCompleted++; addXP(15,'Pomodoro terminé'); checkBadges(); window.saveDataToLocal(); }
+    isPomoBreak=!isPomoBreak;pomoTimeLeft=isPomoBreak?5*60:25*60;
+    const msg = isPomoBreak?"Pause 5 min !":"On s'y remet !";
+    showNotification(msg,isPomoBreak?"☕":"💪",isPomoBreak?"bg-indigo-500":"bg-blue-600");
+    sendSystemNotification(msg);
+    updatePomoDisplay();document.getElementById('pomoStatus').innerText="En attente...";}},1000); }
 window.pausePomodoro=function() { clearInterval(pomoInterval);pomoInterval=null;document.getElementById('pomoStatus').innerText="⏸️ En pause"; }
 window.resetPomodoro=function() { clearInterval(pomoInterval);pomoInterval=null;isPomoBreak=false;pomoTimeLeft=25*60;updatePomoDisplay();document.getElementById('pomoStatus').innerText="Prêt ?"; }
+
+// --- Gamification Functions ---
+function addXP(amount, reason) {
+    const oldLevel = window.gamification.level;
+    window.gamification.xp += amount;
+    // Check level up
+    for(let i = LEVELS.length - 1; i >= 0; i--) {
+        if(window.gamification.xp >= LEVELS[i].xp) { window.gamification.level = LEVELS[i].level; break; }
+    }
+    if(window.gamification.level > oldLevel) {
+        const lvl = LEVELS.find(l => l.level === window.gamification.level);
+        showLevelUpToast(lvl);
+    }
+    showNotification(`+${amount} XP — ${reason}`, '✨', 'bg-indigo-600');
+    updateGamificationUI();
+}
+
+function checkBadges() {
+    BADGES.forEach(badge => {
+        if(!window.gamification.badges.includes(badge.id) && badge.check(window.gamification, window)) {
+            window.gamification.badges.push(badge.id);
+            showNotification(`Badge débloqué : ${badge.name} ${badge.icon}`, '🏅', 'bg-yellow-500');
+            sendSystemNotification(`🏅 Badge débloqué : ${badge.name}`);
+        }
+    });
+}
+
+function checkPerfectWeek() {
+    let total = 0, completed = 0;
+    for(let i=0;i<7;i++) { let d=new Date(window.currentWeekStart); d.setDate(d.getDate()+i); let s=window.scheduleData[getLocalDateString(d)]||[]; total+=s.length; completed+=s.filter(x=>x.isCompleted).length; }
+    if(total > 0 && completed === total) { window.gamification.perfectWeek = true; addXP(50, 'Semaine parfaite !'); }
+}
+
+function showLevelUpToast(lvl) {
+    // Confetti
+    for(let i=0;i<20;i++) {
+        const p = document.createElement('div');
+        p.className = 'confetti-particle';
+        p.innerText = ['🎉','⭐','✨','🎊','💫'][Math.floor(Math.random()*5)];
+        p.style.left = (Math.random()*100)+'%';
+        p.style.top = (40+Math.random()*20)+'%';
+        p.style.fontSize = (12+Math.random()*16)+'px';
+        p.style.animationDelay = (Math.random()*0.5)+'s';
+        document.body.appendChild(p);
+        setTimeout(()=>p.remove(), 2000);
+    }
+    // Toast
+    const toast = document.createElement('div');
+    toast.className = 'levelup-toast glass-card p-8 rounded-3xl shadow-2xl text-center border-2 border-indigo-500';
+    toast.innerHTML = `<div class="text-5xl mb-3">${lvl.icon}</div><h2 class="text-2xl font-bold dark:text-white mb-1">Niveau ${lvl.level} !</h2><p class="text-lg text-indigo-500 font-semibold">${lvl.title}</p>`;
+    document.body.appendChild(toast);
+    setTimeout(()=>toast.remove(), 3000);
+    sendSystemNotification(`🎉 Niveau ${lvl.level} atteint : ${lvl.title} !`);
+}
+
+function updateGamificationUI() {
+    const g = window.gamification;
+    const currentLvl = LEVELS.find(l=>l.level===g.level) || LEVELS[0];
+    const nextLvl = LEVELS.find(l=>l.level===g.level+1);
+    const xpInLevel = g.xp - currentLvl.xp;
+    const xpNeeded = nextLvl ? (nextLvl.xp - currentLvl.xp) : 1;
+    const pct = nextLvl ? Math.min(100, (xpInLevel/xpNeeded)*100) : 100;
+
+    // Header bar
+    const fill = document.getElementById('xpBarFill'); if(fill) fill.style.width = pct+'%';
+    const badge = document.getElementById('levelBadge'); if(badge) badge.innerText = currentLvl.icon;
+    const label = document.getElementById('xpLabel'); if(label) label.innerText = 'Niv.'+g.level;
+
+    // Profile panel
+    const pIcon = document.getElementById('profileLevelIcon'); if(pIcon) pIcon.innerText = currentLvl.icon;
+    const pTitle = document.getElementById('profileLevelTitle'); if(pTitle) pTitle.innerText = currentLvl.title;
+    const pNum = document.getElementById('profileLevelNum'); if(pNum) pNum.innerText = 'Niveau '+g.level;
+    const pBar = document.getElementById('profileXpBar'); if(pBar) pBar.style.width = pct+'%';
+    const pXp = document.getElementById('profileXpText'); if(pXp) pXp.innerText = nextLvl ? `${xpInLevel} / ${xpNeeded} XP` : 'MAX';
+    const pTotal = document.getElementById('profileTotalXp'); if(pTotal) pTotal.innerText = g.xp;
+    const pSess = document.getElementById('profileSessions'); if(pSess) pSess.innerText = g.sessionsCompleted;
+    const pPomo = document.getElementById('profilePomodoros'); if(pPomo) pPomo.innerText = g.pomodorosCompleted;
+    const pStreak = document.getElementById('profileBestStreak'); if(pStreak) pStreak.innerText = g.bestStreak+' jours';
+    const pBadge = document.getElementById('profileBadgeCount'); if(pBadge) pBadge.innerText = g.badges.length+' / '+BADGES.length;
+
+    // Badges grid
+    const grid = document.getElementById('badgesGrid');
+    if(grid) {
+        grid.innerHTML = '';
+        BADGES.forEach(b => {
+            const unlocked = g.badges.includes(b.id);
+            grid.innerHTML += `<div class="badge-card ${unlocked?'unlocked':'locked'} glass-card p-4 rounded-xl text-center">
+                <div class="text-3xl mb-2">${b.icon}</div>
+                <p class="text-xs font-bold dark:text-white mb-1">${b.name}</p>
+                <p class="text-[10px] text-slate-500">${b.desc}</p>
+            </div>`;
+        });
+    }
+}
+
+// --- Notifications ---
+function requestNotifPermission() {
+    if('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+}
+
+function sendSystemNotification(message) {
+    if('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Révisions 📚', { body: message, icon: '/icons/icon-192.png' });
+    }
+}
+
+function scheduleSessionReminders() {
+    const today = getLocalDateString(new Date());
+    const sessions = window.scheduleData[today] || [];
+    const slotTimes = { 'Matin (3h20)': 8, 'Après-midi (3h20)': 14, 'Soir (3h20)': 19 };
+    sessions.forEach(s => {
+        if(s.isCompleted) return;
+        const sub = window.subjects.find(x=>x.id===s.subjectId);
+        const hour = slotTimes[s.note];
+        if(!hour || !sub) return;
+        const now = new Date();
+        const reminderTime = new Date(); reminderTime.setHours(hour, 0, 0, 0);
+        reminderTime.setMinutes(reminderTime.getMinutes() - 15);
+        const delay = reminderTime - now;
+        if(delay > 0) setTimeout(()=> sendSystemNotification(`⏰ ${sub.name} dans 15 minutes !`), delay);
+    });
+}
+
+// --- Service Worker Registration ---
+if('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(e => console.log('SW registration failed'));
+}
+
 
 // --- Authentication ---
 window.attemptLogin = async function() {
@@ -1168,6 +1397,7 @@ window.attemptLogin = async function() {
 function showApp() {
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('appContainer').style.display = 'block';
+    requestNotifPermission();
 }
 
 // Vérifie si le token existant est encore valide
@@ -1195,6 +1425,7 @@ window.onload = async () => {
             showApp();
             await loadDataFromCloud();
             updateUI();
+            scheduleSessionReminders();
             return;
         } else {
             localStorage.removeItem('authToken');
