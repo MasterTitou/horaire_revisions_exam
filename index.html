@@ -136,14 +136,44 @@
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div class="lg:col-span-4 space-y-6">
                 <!-- Pomodoro -->
-                <div class="glass-card p-6 rounded-2xl shadow-sm text-center">
+                <div class="glass-card p-6 rounded-2xl shadow-sm text-center relative overflow-hidden">
+                    <button onclick="togglePomoSettings()" class="absolute top-4 right-4 text-slate-400 hover:text-blue-500 transition">⚙️</button>
                     <h2 class="text-xl font-semibold mb-2 dark:text-white flex items-center justify-center gap-2">⏱️ Pomodoro</h2>
-                    <p id="pomoStatus" class="text-sm text-slate-500 dark:text-slate-400 mb-4">Prêt à travailler ?</p>
+                    
+                    <!-- Subject Selector -->
+                    <select id="pomoSubjectSelect" class="w-full mb-4 p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:border-blue-500 transition-colors">
+                        <option value="">🎯 Choisir une matière...</option>
+                    </select>
+
+                    <p id="pomoStatus" class="text-sm text-slate-500 dark:text-slate-400 mb-2">Prêt à travailler ?</p>
                     <div id="pomoTime" class="text-5xl font-bold text-blue-600 dark:text-blue-400 mb-6 font-mono">25:00</div>
-                    <div class="flex justify-center gap-3">
+                    
+                    <!-- Settings Panel (Hidden by default) -->
+                    <div id="pomoSettingsPanel" class="hidden mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 text-left space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold dark:text-slate-300">Focus (min):</span>
+                            <input type="number" id="pomoFocusInput" value="25" min="1" max="90" class="w-16 p-1 rounded border border-slate-300 dark:bg-slate-900 text-center text-sm">
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold dark:text-slate-300">Pause (min):</span>
+                            <input type="number" id="pomoBreakInput" value="5" min="1" max="30" class="w-16 p-1 rounded border border-slate-300 dark:bg-slate-900 text-center text-sm">
+                        </div>
+                        <button onclick="applyPomoSettings()" class="w-full py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition">Appliquer</button>
+                    </div>
+
+                    <div class="flex justify-center gap-3 mb-6">
                         <button onclick="startPomodoro()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition">Démarrer</button>
                         <button onclick="pausePomodoro()" class="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white px-4 py-2 rounded-lg font-medium transition">Pause</button>
                         <button onclick="resetPomodoro()" class="bg-red-100 hover:bg-red-200 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-4 py-2 rounded-lg font-medium transition">Reset</button>
+                    </div>
+
+                    <!-- Ambient Sounds -->
+                    <div class="flex justify-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-700">
+                        <button onclick="setPomoSound(null)" class="sound-btn p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Aucun" id="sound-none">🔇</button>
+                        <button onclick="setPomoSound('rain')" class="sound-btn p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Pluie" id="sound-rain">🌧️</button>
+                        <button onclick="setPomoSound('forest')" class="sound-btn p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Forêt" id="sound-forest">🌲</button>
+                        <button onclick="setPomoSound('white')" class="sound-btn p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Bruit blanc" id="sound-white">💨</button>
+                        <button onclick="setPomoSound('lofi')" class="sound-btn p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Lo-fi" id="sound-lofi">🎹</button>
                     </div>
                 </div>
                 <!-- Subject Config -->
@@ -269,6 +299,12 @@
                         <h2 class="text-sm font-semibold mb-3 dark:text-white uppercase tracking-wider text-slate-500">Temps par matière</h2>
                         <div class="chart-container-sm"><canvas id="subjectTimeChart"></canvas></div>
                     </div>
+                </div>
+
+                <!-- Pomodoro Analytics -->
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-lg font-semibold mb-3 dark:text-white flex items-center gap-2">🍅 Pomodoros par matière</h2>
+                    <div class="chart-container-sm" style="height: 250px;"><canvas id="pomoSubjectChart"></canvas></div>
                 </div>
 
                 <!-- Exams countdown -->
@@ -426,6 +462,8 @@
     <span class="font-semibold" id="notifText">Message</span>
 </div>
 
+<audio id="pomoAudio" loop></audio>
+
 <script>
 // --- State ---
 window.subjects = [];
@@ -434,7 +472,11 @@ window.streak = { count: 0, lastDate: '' };
 window.chatHistory = [];
 window.apiKey = '';
 window.authToken = localStorage.getItem('authToken') || '';
-window.gamification = { xp: 0, level: 1, badges: [], pomodorosCompleted: 0, sessionsCompleted: 0, bestStreak: 0 };
+window.gamification = { 
+    xp: 0, level: 1, badges: [], pomodorosCompleted: 0, sessionsCompleted: 0, bestStreak: 0,
+    pomoSettings: { focus: 25, break: 5, sound: null },
+    subjectPomoStats: {} // subjectId -> count
+};
 
 // --- Gamification Config ---
 const LEVELS = [
@@ -471,7 +513,14 @@ const DAYS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
 const MONTHS = ["Janv.","Févr.","Mars","Avril","Mai","Juin","Juil.","Août","Sept.","Oct.","Nov.","Déc."];
 const COLORS = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#14b8a6","#6366f1","#eab308","#84cc16","#22c55e","#06b6d4","#0ea5e9","#a855f7","#d946ef","#f43f5e","#64748b","#78716c","#0f766e","#1d4ed8","#be123c","#4d7c0f"];
 
-let chartInstance = null, weeklyBarChart = null, subjectTimeChart = null;
+let chartInstance = null, weeklyBarChart = null, subjectTimeChart = null, pomoSubjectChart = null;
+let currentPomoSound = null;
+const SOUNDS = {
+    rain: 'https://actions.google.com/sounds/v1/water/rain_on_roof.ogg',
+    forest: 'https://actions.google.com/sounds/v1/ambient/forest_morning.ogg',
+    white: 'https://actions.google.com/sounds/v1/ambient/white_noise.ogg',
+    lofi: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
+};
 let draggedSession = null, currentEditingSession = null;
 
 function getLocalDateString(dateObj) {
@@ -937,6 +986,9 @@ function renderAnalytics() {
     // Subject time chart
     renderSubjectTimeChart(stats, isDark);
 
+    // Pomodoro by subject
+    renderPomoSubjectChart(isDark);
+
     // Exam countdown
     renderExamCountdown();
 }
@@ -1025,6 +1077,36 @@ function renderSubjectTimeChart(stats, isDark) {
     const subList = Object.values(stats.subjectStats).filter(s=>s.done>0);
     if(subList.length===0) return;
     subjectTimeChart=new Chart(ctx,{type:'doughnut',data:{labels:subList.map(s=>s.name),datasets:[{data:subList.map(s=>Math.round(s.done*10/3)),backgroundColor:subList.map(s=>s.color),borderWidth:isDark?2:1,borderColor:isDark?'#1e293b':'#ffffff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{color:isDark?'#cbd5e1':'#475569',font:{size:10},boxWidth:10}}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ~${ctx.raw}h`}}}});
+}
+
+function renderPomoSubjectChart(isDark) {
+    const ctx = document.getElementById('pomoSubjectChart').getContext('2d');
+    if(pomoSubjectChart) pomoSubjectChart.destroy();
+    const stats = window.gamification.subjectPomoStats;
+    const labels = [], data = [], colors = [];
+    window.subjects.forEach(s => {
+        if(stats[s.id] > 0) {
+            labels.push(s.name);
+            data.push(stats[s.id]);
+            colors.push(s.color);
+        }
+    });
+    if(labels.length === 0) return;
+    pomoSubjectChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{ data: data, backgroundColor: colors, borderRadius: 4 }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: isDark?'#94a3b8':'#64748b' }, grid: { display: false } },
+                y: { ticks: { color: isDark?'#94a3b8':'#64748b', stepSize: 1 }, grid: { color: isDark?'rgba(71,85,105,0.2)':'rgba(226,232,240,0.5)' } }
+            }
+        }
+    });
 }
 
 function renderExamCountdown() {
@@ -1230,15 +1312,39 @@ window.startPomodoro=function() {
     if(pomoInterval) return; 
     document.getElementById('pomoStatus').innerText=isPomoBreak?"☕ Pause":"🧠 Concentration"; 
     savePomoState();
+    
+    // Play sound
+    if(!isPomoBreak && currentPomoSound) {
+        const audio = document.getElementById('pomoAudio');
+        audio.src = SOUNDS[currentPomoSound];
+        audio.play().catch(e => console.log('Audio error:', e));
+    }
+
     pomoInterval=setInterval(()=>{
         pomoTimeLeft--;
         updatePomoDisplay();
-        if(pomoTimeLeft % 10 === 0) savePomoState(); // Persist every 10s
+        if(pomoTimeLeft % 10 === 0) savePomoState();
         if(pomoTimeLeft<=0){
             clearInterval(pomoInterval);pomoInterval=null;
-            if(!isPomoBreak) { window.gamification.pomodorosCompleted++; addXP(15,'Pomodoro terminé'); checkBadges(); window.saveDataToLocal(); }
-            isPomoBreak=!isPomoBreak;pomoTimeLeft=isPomoBreak?5*60:25*60;
-            const msg = isPomoBreak?"Pause 5 min !":"On s'y remet !";
+            document.getElementById('pomoAudio').pause();
+            
+            if(!isPomoBreak) { 
+                window.gamification.pomodorosCompleted++; 
+                addXP(15,'Pomodoro terminé'); 
+                // Track subject stat
+                const subId = document.getElementById('pomoSubjectSelect').value;
+                if(subId) {
+                    window.gamification.subjectPomoStats[subId] = (window.gamification.subjectPomoStats[subId] || 0) + 1;
+                }
+                checkBadges(); 
+                window.saveDataToLocal(); 
+            }
+            
+            isPomoBreak=!isPomoBreak;
+            const settings = window.gamification.pomoSettings;
+            pomoTimeLeft = isPomoBreak ? (settings.break * 60) : (settings.focus * 60);
+            
+            const msg = isPomoBreak?"Pause !":"On s'y remet !";
             showNotification(msg,isPomoBreak?"☕":"💪",isPomoBreak?"bg-indigo-500":"bg-blue-600");
             sendSystemNotification(msg);
             updatePomoDisplay();
@@ -1251,6 +1357,7 @@ window.startPomodoro=function() {
 window.pausePomodoro=function() { 
     clearInterval(pomoInterval);
     pomoInterval=null;
+    document.getElementById('pomoAudio').pause();
     document.getElementById('pomoStatus').innerText="⏸️ En pause"; 
     savePomoState();
 }
@@ -1258,8 +1365,9 @@ window.pausePomodoro=function() {
 window.resetPomodoro=function() { 
     clearInterval(pomoInterval);
     pomoInterval=null;
+    document.getElementById('pomoAudio').pause();
     isPomoBreak=false;
-    pomoTimeLeft=25*60;
+    pomoTimeLeft = window.gamification.pomoSettings.focus * 60;
     updatePomoDisplay();
     document.getElementById('pomoStatus').innerText="Prêt ?"; 
     localStorage.removeItem('pomoState');
@@ -1267,6 +1375,7 @@ window.resetPomodoro=function() {
 
 function loadPomoState() {
     const saved = localStorage.getItem('pomoState');
+    const settings = window.gamification.pomoSettings;
     if(saved) {
         const state = JSON.parse(saved);
         isPomoBreak = state.isBreak;
@@ -1276,12 +1385,57 @@ function loadPomoState() {
                 pomoTimeLeft = remaining;
                 window.startPomodoro();
             } else {
-                pomoTimeLeft = isPomoBreak ? 5*60 : 25*60;
+                pomoTimeLeft = isPomoBreak ? (settings.break * 60) : (settings.focus * 60);
                 updatePomoDisplay();
             }
         } else {
             pomoTimeLeft = state.timeLeft;
             updatePomoDisplay();
+        }
+    } else {
+        pomoTimeLeft = settings.focus * 60;
+        updatePomoDisplay();
+    }
+}
+
+window.togglePomoSettings = function() {
+    const p = document.getElementById('pomoSettingsPanel');
+    p.classList.toggle('hidden');
+}
+
+window.applyPomoSettings = function() {
+    const f = parseInt(document.getElementById('pomoFocusInput').value);
+    const b = parseInt(document.getElementById('pomoBreakInput').value);
+    if(f > 0 && b > 0) {
+        window.gamification.pomoSettings.focus = f;
+        window.gamification.pomoSettings.break = b;
+        if(!pomoInterval) {
+            pomoTimeLeft = f * 60;
+            isPomoBreak = false;
+            updatePomoDisplay();
+        }
+        window.saveDataToLocal();
+        togglePomoSettings();
+        showNotification('Réglages appliqués !', '⚙️', 'bg-blue-500');
+    }
+}
+
+window.setPomoSound = function(key) {
+    currentPomoSound = key;
+    document.querySelectorAll('.sound-btn').forEach(btn => btn.classList.remove('bg-blue-100', 'dark:bg-blue-900/40', 'scale-110'));
+    if(key) {
+        document.getElementById('sound-'+key).classList.add('bg-blue-100', 'dark:bg-blue-900/40', 'scale-110');
+    } else {
+        document.getElementById('sound-none').classList.add('bg-blue-100', 'dark:bg-blue-900/40', 'scale-110');
+    }
+    // If running, switch sound
+    if(pomoInterval && !isPomoBreak) {
+        const audio = document.getElementById('pomoAudio');
+        if(key) {
+            audio.src = SOUNDS[key];
+            audio.play();
+        } else {
+            audio.pause();
         }
     }
 }
@@ -1365,6 +1519,16 @@ function updateGamificationUI() {
     const pPomo = document.getElementById('profilePomodoros'); if(pPomo) pPomo.innerText = g.pomodorosCompleted;
     const pStreak = document.getElementById('profileBestStreak'); if(pStreak) pStreak.innerText = g.bestStreak+' jours';
     const pBadge = document.getElementById('profileBadgeCount'); if(pBadge) pBadge.innerText = g.badges.length+' / '+BADGES.length;
+
+    // Update Pomo Subject Dropdown
+    const pomoSelect = document.getElementById('pomoSubjectSelect');
+    if(pomoSelect) {
+        const currentVal = pomoSelect.value;
+        pomoSelect.innerHTML = '<option value="">🎯 Choisir une matière...</option>';
+        window.subjects.forEach(s => {
+            pomoSelect.innerHTML += `<option value="${s.id}" ${s.id===currentVal?'selected':''}>${s.name}</option>`;
+        });
+    }
 
     // Badges grid
     const grid = document.getElementById('badgesGrid');
