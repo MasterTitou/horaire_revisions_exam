@@ -91,6 +91,7 @@
             <p class="text-slate-600 dark:text-slate-400">Planifie, concentre-toi, et maintiens ta série !</p>
         </div>
         <div class="flex items-center gap-4">
+            <span id="syncIndicator" class="text-xs text-slate-400 dark:text-slate-500 italic hidden">☁️ Synchronisé</span>
             <div class="glass-card px-4 py-2 rounded-full flex items-center font-bold text-orange-500 shadow-sm">
                 <span class="flame-icon mr-2 text-xl">🔥</span>
                 <span id="streakCount">0 Jour(s)</span>
@@ -410,13 +411,78 @@ window.switchMainTab = function(tab) {
 }
 
 // --- Persistence ---
+let cloudSyncTimeout = null;
 window.saveDataToLocal = function() {
-    localStorage.setItem('revisionCalendarData', JSON.stringify({
+    const data = {
         subjects: window.subjects, scheduleData: window.scheduleData,
         streak: window.streak, chatHistory: window.chatHistory,
         apiKey: window.apiKey,
         isDarkMode: document.documentElement.classList.contains('dark')
-    }));
+    };
+    localStorage.setItem('revisionCalendarData', JSON.stringify(data));
+    
+    // Cloud Sync with Debounce (3s)
+    if (window.authToken) {
+        showSyncStatus('saving');
+        clearTimeout(cloudSyncTimeout);
+        cloudSyncTimeout = setTimeout(() => syncToCloud(data), 3000);
+    }
+}
+
+async function syncToCloud(data) {
+    try {
+        const res = await fetch('/api/save', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.authToken}`
+            },
+            body: JSON.stringify(data)
+        });
+        if (res.ok) showSyncStatus('synced');
+        else showSyncStatus('error');
+    } catch (e) { showSyncStatus('error'); }
+}
+
+async function loadDataFromCloud() {
+    if (!window.authToken) return;
+    showSyncStatus('loading');
+    try {
+        const res = await fetch('/api/load', {
+            headers: { 'Authorization': `Bearer ${window.authToken}` }
+        });
+        if (res.ok) {
+            const cloudData = await res.json();
+            if (cloudData) {
+                // Merge or Replace? Let's replace for simplicity and consistency
+                window.subjects = cloudData.subjects || [];
+                window.streak = cloudData.streak || { count: 0, lastDate: '' };
+                window.scheduleData = cloudData.scheduleData || {};
+                window.chatHistory = cloudData.chatHistory || [];
+                if (cloudData.isDarkMode) document.documentElement.classList.add('dark');
+                else document.documentElement.classList.remove('dark');
+                
+                // Save locally too
+                localStorage.setItem('revisionCalendarData', JSON.stringify(cloudData));
+                updateUI();
+                showSyncStatus('synced');
+            } else {
+                showSyncStatus('synced'); // No data yet is fine
+            }
+        } else { showSyncStatus('error'); }
+    } catch (e) { showSyncStatus('error'); }
+}
+
+function showSyncStatus(status) {
+    const el = document.getElementById('syncIndicator');
+    if (!el) return;
+    el.classList.remove('hidden');
+    switch(status) {
+        case 'saving': el.innerText = '☁️ Synchronisation...'; el.className = 'text-xs text-blue-500 italic'; break;
+        case 'loading': el.innerText = '☁️ Chargement Cloud...'; el.className = 'text-xs text-blue-500 italic'; break;
+        case 'synced': el.innerText = '☁️ Synchronisé'; el.className = 'text-xs text-slate-400 dark:text-slate-500 italic'; break;
+        case 'error': el.innerText = '☁️ Erreur Synchro'; el.className = 'text-xs text-red-500 italic font-bold'; break;
+    }
 }
 
 function loadDataFromLocal() {
@@ -1083,6 +1149,7 @@ window.attemptLogin = async function() {
                 window.authToken = data.token;
                 localStorage.setItem('authToken', data.token);
                 showApp();
+                await loadDataFromCloud();
             }
         } else {
             errEl.innerText = 'Mot de passe incorrect ou erreur réseau';
@@ -1128,6 +1195,7 @@ window.onload = async () => {
         const valid = await checkExistingAuth();
         if(valid) {
             showApp();
+            await loadDataFromCloud();
             updateUI();
             return;
         } else {
