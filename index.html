@@ -754,7 +754,17 @@ function generateNewSchedule() {
         for (let slotIdx = 0; slotIdx < 3; slotIdx++) {
             const activeSubjects = window.subjects.filter(sub => {
                 if(!sub.examDate) return true;
-                return dateStr <= sub.examDate; // Comparaison fiable YYYY-MM-DD
+                if(dateStr > sub.examDate) return false;
+                
+                // Règle Niveau 1 : Ne proposer que 3 jours avant l'examen maximum
+                if(parseInt(sub.difficulty) === 1) {
+                    const [ey, em, ed] = sub.examDate.split('-');
+                    const examD = new Date(ey, em-1, ed);
+                    const currD = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                    const daysTo = Math.round((examD - currD) / 86400000);
+                    if(daysTo > 3) return false;
+                }
+                return true;
             });
 
             if(activeSubjects.length === 0) break;
