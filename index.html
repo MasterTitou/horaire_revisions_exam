@@ -764,6 +764,9 @@ function generateNewSchedule() {
                 // Règle Générale : Ne pas étudier plus de 3 semaines (21 jours) avant l'examen
                 if(daysTo > 21) return false;
                 
+                // Règle Niveau 3 : Ne proposer que 2 semaines (14 jours) avant l'examen
+                if(parseInt(sub.difficulty) === 3 && daysTo > 14) return false;
+
                 // Règle Niveau 1 : Ne proposer que 3 jours avant l'examen maximum
                 if(parseInt(sub.difficulty) === 1 && daysTo > 3) return false;
 
