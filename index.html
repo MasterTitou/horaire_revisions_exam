@@ -754,15 +754,19 @@ function generateNewSchedule() {
         for (let slotIdx = 0; slotIdx < 3; slotIdx++) {
             const activeSubjects = window.subjects.filter(sub => {
                 if(!sub.examDate) return true;
-                const examMs = new Date(sub.examDate).getTime();
-                return Math.ceil((examMs - currentDateMs) / 86400000) >= 0;
+                return dateStr <= sub.examDate; // Comparaison fiable YYYY-MM-DD
             });
 
             if(activeSubjects.length === 0) break;
 
             const scored = activeSubjects.map(sub => {
-                const examMs = sub.examDate ? new Date(sub.examDate).getTime() : currentDateMs + 60*86400000;
-                const daysToExam = Math.max(1, Math.ceil((examMs - currentDateMs) / 86400000));
+                let daysToExam = 60; // Défaut
+                if (sub.examDate) {
+                    const [ey, em, ed] = sub.examDate.split('-');
+                    const examD = new Date(ey, em-1, ed);
+                    const currD = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                    daysToExam = Math.max(1, Math.round((examD - currD) / 86400000));
+                }
 
                 // 1. PRESSION QUOTIDIENNE
                 const targetHours = sub.difficulty * 10;
@@ -829,10 +833,11 @@ window.handleDrop = function(e,targetDateStr) {
     }
 }
 
-// --- Modal ---
+// --- Modal & Actions ---
 window.openEditModal = function(dateStr,idx,e) { e.stopPropagation(); currentEditingSession={dateStr,sessionIdx:idx}; document.getElementById('noteModalInput').value=window.scheduleData[dateStr][idx].note||""; document.getElementById('editModal').classList.remove('hidden'); document.getElementById('noteModalInput').focus(); }
 window.closeEditModal = function() { document.getElementById('editModal').classList.add('hidden'); currentEditingSession=null; }
 window.saveSessionNote = function() { if(currentEditingSession) { window.scheduleData[currentEditingSession.dateStr][currentEditingSession.sessionIdx].note=document.getElementById('noteModalInput').value; updateUI(); window.saveDataToLocal(); } closeEditModal(); }
+window.deleteSession = function(dateStr,idx,e) { e.stopPropagation(); window.scheduleData[dateStr].splice(idx, 1); updateUI(); window.saveDataToLocal(); }
 
 // --- Streak & Session ---
 window.toggleSession = function(dateStr,idx) {
@@ -897,7 +902,8 @@ function renderCalendar() {
                     <span class="block text-sm font-semibold truncate dark:text-slate-100 ${checked?'line-through opacity-60':''}">${subject.name}</span>
                     <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                         <span class="truncate">${session.note}</span>
-                        <button onclick="openEditModal('${dateStr}',${si},event)" class="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-blue-500">✏️</button>
+                        <button onclick="openEditModal('${dateStr}',${si},event)" class="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-blue-500" title="Modifier">✏️</button>
+                        <button onclick="deleteSession('${dateStr}',${si},event)" class="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-red-500" title="Supprimer">🗑️</button>
                     </div>
                 </div>
                 <div class="w-6 h-6 border-2 rounded-full flex items-center justify-center shrink-0 ml-2 transition-colors ${checked?'bg-blue-100 dark:bg-blue-800 border-blue-300 dark:border-blue-600':'border-slate-200 dark:border-slate-600'}">
