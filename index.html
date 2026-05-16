@@ -756,14 +756,17 @@ function generateNewSchedule() {
                 if(!sub.examDate) return true;
                 if(dateStr > sub.examDate) return false;
                 
+                const [ey, em, ed] = sub.examDate.split('-');
+                const examD = new Date(ey, em-1, ed);
+                const currD = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                const daysTo = Math.round((examD - currD) / 86400000);
+
+                // Règle Générale : Ne pas étudier plus de 3 semaines (21 jours) avant l'examen
+                if(daysTo > 21) return false;
+                
                 // Règle Niveau 1 : Ne proposer que 3 jours avant l'examen maximum
-                if(parseInt(sub.difficulty) === 1) {
-                    const [ey, em, ed] = sub.examDate.split('-');
-                    const examD = new Date(ey, em-1, ed);
-                    const currD = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-                    const daysTo = Math.round((examD - currD) / 86400000);
-                    if(daysTo > 3) return false;
-                }
+                if(parseInt(sub.difficulty) === 1 && daysTo > 3) return false;
+
                 return true;
             });
 
