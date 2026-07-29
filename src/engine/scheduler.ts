@@ -1,4 +1,4 @@
-import { Project, Milestone, ScheduleData, Session, CognitiveLoad } from '../types';
+import { Project, Milestone, ScheduleData, CognitiveLoad } from '../types';
 
 export const SLOTS = ["Matin (3h20)", "Après-midi (3h20)", "Soir (3h20)"];
 export const HPH = 10 / 3;
@@ -20,7 +20,17 @@ export function generateSchedule(projects: Project[], currentWeekStart: Date, ex
 
   const scheduleData: ScheduleData = { ...existingSchedule };
 
-  // Flatten all active milestones
+  // Calculate actual completed hours per milestone across existing schedule
+  const milestoneCompletedHours: Record<string, number> = {};
+  Object.values(existingSchedule).forEach(sessions => {
+    sessions.forEach(sess => {
+      if (sess.isCompleted && sess.milestoneId) {
+        milestoneCompletedHours[sess.milestoneId] = (milestoneCompletedHours[sess.milestoneId] || 0) + HPH;
+      }
+    });
+  });
+
+  // Flatten active milestones
   interface FlatMilestone {
     project: Project;
     milestone: Milestone;
@@ -38,6 +48,7 @@ export function generateSchedule(projects: Project[], currentWeekStart: Date, ex
   projects.forEach(proj => {
     proj.milestones.forEach(ms => {
       if (!ms.isCompleted) {
+        const actualDone = Math.max(ms.completedHours || 0, milestoneCompletedHours[ms.id] || 0);
         allMilestones.push({
           project: proj,
           milestone: ms,
@@ -48,7 +59,7 @@ export function generateSchedule(projects: Project[], currentWeekStart: Date, ex
           isHardDeadline: ms.isHardDeadline || proj.isHardDeadline,
           cognitiveLoad: ms.cognitiveLoad || 'medium',
           estimatedHours: ms.estimatedHours || 10,
-          completedHours: ms.completedHours || 0
+          completedHours: actualDone
         });
       }
     });
@@ -65,13 +76,19 @@ export function generateSchedule(projects: Project[], currentWeekStart: Date, ex
     const dateStr = getLocalDateString(d);
     scheduleData[dateStr] = [];
 
-    for (let slotIdx = 0; slotIdx < 3; slotIdx++) {
-      // Slot 0: Matin (prefers high cog), Slot 1: Après-midi (prefers medium cog), Slot 2: Soir (prefers low cog, bars high cog)
+    const dayOfWeek = d.getDay(); // 0 is Sunday, 6 is Saturday
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    // Plafond strict de capacité quotidienne : Max 2 slots (6h20) en semaine, Max 3 slots (10h) le week-end
+    const maxSlotsForDay = isWeekend ? 3 : 2;
+
+    for (let slotIdx = 0; slotIdx < maxSlotsForDay; slotIdx++) {
+      // Slot 0: Matin (prefers high cog), Slot 1: Après-midi (prefers medium cog), Slot 2: Soir (prefers low cog)
       const targetCog: CognitiveLoad = slotIdx === 0 ? 'high' : (slotIdx === 1 ? 'medium' : 'low');
 
       const candidates = allMilestones.filter(m => {
         if (m.dueDate && dateStr > m.dueDate) return false;
-        // Evening slot rule: strictly avoid high cognitive load tasks (Architecture/Design) at night
+        // Evening slot rule: strictly avoid high cognitive load tasks at night
         if (slotIdx === 2 && m.cognitiveLoad === 'high') return false;
         return true;
       });
@@ -89,21 +106,25 @@ export function generateSchedule(projects: Project[], currentWeekStart: Date, ex
           }
         }
 
+        // MARGE DE SÉCURITÉ INTÉGRÉE (BUFFER ZONE - 15%)
+        // Avancement du délai théorique de 15% pour conserver une zone tampon avant l'échéance réelle
+        const bufferedDaysToDeadline = Math.max(1, Math.floor(daysToDeadline * 0.85));
+
         const remainingHours = Math.max(0, m.estimatedHours - m.completedHours - projectedHours[m.id]);
         if (remainingHours <= 0) return { milestone: m, score: -999 };
 
-        // Pressure calculation: Hard deadline (exponential) vs Soft/Filée (linear)
+        // Calcul de pression avec Buffer Zone
         let pressure = 1.0;
         if (m.isHardDeadline) {
-          if (daysToDeadline <= 1) pressure = 4.5;
-          else if (daysToDeadline <= 3) pressure = 3.0;
-          else if (daysToDeadline <= 7) pressure = 2.0;
+          if (bufferedDaysToDeadline <= 1) pressure = 4.5;
+          else if (bufferedDaysToDeadline <= 3) pressure = 3.0;
+          else if (bufferedDaysToDeadline <= 7) pressure = 2.0;
           else pressure = 1.2;
         } else {
-          pressure = Math.min(1.5, (remainingHours / HPH) / daysToDeadline);
+          pressure = Math.min(1.5, (remainingHours / HPH) / bufferedDaysToDeadline);
         }
 
-        // Cognitive slot alignment bonus
+        // Alignement d'effort cognitif avec le créneau
         let cogMatchBonus = 0;
         if (m.cognitiveLoad === targetCog) cogMatchBonus = 2.0;
         else if (slotIdx === 0 && m.cognitiveLoad === 'medium') cogMatchBonus = 0.5;
