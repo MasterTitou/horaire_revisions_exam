@@ -439,33 +439,74 @@
             <!-- Left -->
             <div class="lg:col-span-5 space-y-5">
 
-                <!-- Matières & Examens Card -->
+                <!-- Projets & Jalons (WBS) Card -->
                 <div class="card p-5 md:p-6 space-y-4">
-                    <h2 class="font-extrabold text-xl flex items-center gap-2.5" style="color: var(--text)">
-                        <span class="w-9 h-9 rounded-2xl flex items-center justify-center shrink-0" style="background: #DDF2ED; color: var(--terra)">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
-                        </span>
-                        Matières &amp; Examens
-                    </h2>
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-extrabold text-xl flex items-center gap-2.5" style="color: var(--text)">
+                            <span class="w-9 h-9 rounded-2xl flex items-center justify-center shrink-0" style="background: #DDF2ED; color: var(--terra)">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                            </span>
+                            Projets &amp; Jalons (WBS)
+                        </h2>
+                        <button onclick="toggleNewProjectForm()" class="btn-soft text-xs py-1.5 px-3">＋ Projet</button>
+                    </div>
 
-                    <!-- Subjects List Render Target -->
-                    <div id="subjectList" class="space-y-3 max-h-72 overflow-y-auto scr pr-1"></div>
+                    <!-- Projects & Milestones WBS List Render Target -->
+                    <div id="projectList" class="space-y-3 max-h-80 overflow-y-auto scr pr-1"></div>
 
-                    <!-- Add Subject Form -->
-                    <div class="space-y-3 pt-2" style="border-top: 1px solid var(--border)">
-                        <input type="text" id="subjectInput" placeholder="Ex : Droit Civil, Maths…" class="inp">
-                        <div class="grid grid-cols-2 gap-3">
+                    <!-- Add Project Form (Collapsible) -->
+                    <div id="addProjectForm" class="space-y-3 pt-3 hidden" style="border-top: 1px solid var(--border)">
+                        <span class="text-xs font-black uppercase tracking-wider block" style="color:var(--terra)">Nouveau Projet</span>
+                        <div class="grid grid-cols-3 gap-2">
+                            <input type="text" id="projNameInput" placeholder="Nom (ex: App SaaS v1)" class="inp col-span-2 text-xs">
+                            <input type="text" id="projCodeInput" placeholder="Code (ex: SAAS)" class="inp text-xs uppercase">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
                             <div>
-                                <label class="text-xs font-extrabold mb-1 block" style="color:var(--muted)">Date d'examen</label>
-                                <input type="date" id="subjectExamDate" class="inp text-xs">
+                                <label class="text-[11px] font-extrabold block mb-1" style="color:var(--muted)">Échéance globale</label>
+                                <input type="date" id="projDeadlineInput" class="inp text-xs">
                             </div>
                             <div>
-                                <label class="text-xs font-extrabold mb-1 block" style="color:var(--muted)">Importance <span id="diffVal" style="color:var(--terra)">3</span>/5</label>
-                                <input type="range" id="difficultyInput" min="1" max="5" value="3" class="w-full mt-2.5" style="accent-color:var(--terra)">
+                                <label class="text-[11px] font-extrabold block mb-1" style="color:var(--muted)">Type d'échéance</label>
+                                <select id="projDeadlineTypeInput" class="inp text-xs font-bold">
+                                    <option value="hard">🔴 Ferme (Livraison)</option>
+                                    <option value="soft">🔵 Filée (Volume)</option>
+                                </select>
                             </div>
                         </div>
-                        <button onclick="addSubject()" class="btn-main w-full text-base py-3 font-extrabold">
-                            <span>＋</span> Ajouter la matière
+                        <button onclick="addProject()" class="btn-main w-full text-xs py-2.5 font-extrabold">
+                            Créer le projet
+                        </button>
+                    </div>
+
+                    <!-- Add Milestone Form Modal/Form (Collapsible) -->
+                    <div id="addMilestoneForm" class="space-y-3 pt-3 hidden" style="border-top: 1px solid var(--border)">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-black uppercase tracking-wider block" style="color:var(--terra)">Ajouter un Jalon (WBS)</span>
+                            <span id="activeProjectLabel" class="text-xs font-bold text-muted"></span>
+                        </div>
+                        <input type="hidden" id="activeProjectId">
+                        <input type="text" id="msTitleInput" placeholder="Titre jalon (ex: API Auth OAuth2)" class="inp text-xs">
+                        <div class="grid grid-cols-3 gap-2">
+                            <div>
+                                <label class="text-[10px] font-extrabold block mb-1" style="color:var(--muted)">Date jalon</label>
+                                <input type="date" id="msDateInput" class="inp text-xs">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-extrabold block mb-1" style="color:var(--muted)">Charge (h)</label>
+                                <input type="number" id="msHoursInput" value="10" min="1" max="100" class="inp text-xs font-bold">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-extrabold block mb-1" style="color:var(--muted)">Effort cognitif</label>
+                                <select id="msCognitiveInput" class="inp text-xs font-bold">
+                                    <option value="high">🧠 Arch / High</option>
+                                    <option value="medium">⚙️ Dev / Mid</option>
+                                    <option value="low">📝 Doc / Low</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button onclick="addMilestone()" class="btn-main w-full text-xs py-2.5 font-extrabold">
+                            ＋ Enregistrer le jalon
                         </button>
                     </div>
                 </div>
@@ -921,14 +962,18 @@ window.switchMainTab = function(tab) {
     if(tab==='ai') updateAIContext();
 }
 
-// ────────────────── PERSISTENCE ──────────────────
+// ────────────────── PERSISTENCE & MIGRATION ──────────────────
 let cloudSyncTimeout=null;
 window.saveDataToLocal = function() {
     const data = {
-        subjects:window.subjects, scheduleData:window.scheduleData,
-        streak:window.streak, chatHistory:window.chatHistory, apiKey:window.apiKey,
-        isDarkMode:document.documentElement.classList.contains('dark'),
-        gamification:window.gamification
+        projects: window.projects,
+        subjects: window.subjects,
+        scheduleData: window.scheduleData,
+        streak: window.streak,
+        chatHistory: window.chatHistory,
+        apiKey: window.apiKey,
+        isDarkMode: document.documentElement.classList.contains('dark'),
+        gamification: window.gamification
     };
     localStorage.setItem('revisionCalendarData', JSON.stringify(data));
     if(window.authToken) {
@@ -954,10 +999,11 @@ async function loadDataFromCloud() {
         if(res.ok) {
             const d = await res.json();
             if(d) {
-                window.subjects=d.subjects||[]; window.streak=d.streak||{count:0,lastDate:''}; window.scheduleData=d.scheduleData||{};
+                window.projects=d.projects||[]; window.subjects=d.subjects||[]; window.streak=d.streak||{count:0,lastDate:''}; window.scheduleData=d.scheduleData||{};
                 window.chatHistory=d.chatHistory||[]; window.gamification=d.gamification||window.gamification;
                 if(!window.gamification.pomoSettings) window.gamification.pomoSettings={focus:25,break:5,sound:null};
                 if(!window.gamification.subjectPomoStats) window.gamification.subjectPomoStats={};
+                migrateSubjectsToProjects();
                 document.documentElement.classList.toggle('dark', !!d.isDarkMode);
                 localStorage.setItem('revisionCalendarData',JSON.stringify(d));
                 updateUI(); showSyncStatus('synced');
@@ -979,13 +1025,17 @@ function showSyncStatus(status) {
 
 function loadDataFromLocal() {
     const saved=localStorage.getItem('revisionCalendarData');
-    if(!saved) return;
+    if(!saved) {
+        migrateSubjectsToProjects();
+        return;
+    }
     try {
         const d=JSON.parse(saved);
-        window.subjects=d.subjects||[]; window.streak=d.streak||{count:0,lastDate:''}; window.scheduleData=d.scheduleData||{};
+        window.projects=d.projects||[]; window.subjects=d.subjects||[]; window.streak=d.streak||{count:0,lastDate:''}; window.scheduleData=d.scheduleData||{};
         window.chatHistory=d.chatHistory||[]; window.apiKey=d.apiKey||''; window.gamification=d.gamification||window.gamification;
         if(!window.gamification.pomoSettings) window.gamification.pomoSettings={focus:25,break:5,sound:null};
         if(!window.gamification.subjectPomoStats) window.gamification.subjectPomoStats={};
+        migrateSubjectsToProjects();
         if(d.isDarkMode) {
             document.documentElement.classList.add('dark');
             ['themeIcon','themeIconMobile'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerText='☀️';});
@@ -998,7 +1048,33 @@ function loadDataFromLocal() {
     } catch(e){console.error(e);}
 }
 
-// ────────────────── THEME ──────────────────
+function migrateSubjectsToProjects() {
+    if ((!window.projects || window.projects.length === 0) && window.subjects && window.subjects.length > 0) {
+        window.projects = window.subjects.map((sub, idx) => ({
+            id: sub.id || ('prj_' + Date.now() + '_' + idx),
+            name: sub.name,
+            code: 'PRJ-' + (idx + 1),
+            color: sub.color || COLORS[idx % COLORS.length],
+            isHardDeadline: true,
+            deadline: sub.examDate || '',
+            milestones: [
+                {
+                    id: 'ms_' + (sub.id || idx),
+                    title: 'Jalon principal — ' + sub.name,
+                    estimatedHours: (sub.difficulty || 3) * 10,
+                    completedHours: 0,
+                    dueDate: sub.examDate || '',
+                    cognitiveLoad: (sub.difficulty || 3) >= 4 ? 'high' : ((sub.difficulty || 3) >= 2 ? 'medium' : 'low'),
+                    isHardDeadline: true,
+                    isCompleted: false
+                }
+            ]
+        }));
+    }
+    if (!window.projects) window.projects = [];
+}
+
+// ────────────────── THEME & NOTIF ──────────────────
 window.toggleTheme = function() {
     document.documentElement.classList.toggle('dark');
     const isDark=document.documentElement.classList.contains('dark');
@@ -1017,187 +1093,274 @@ function showNotification(text, icon='✅', colorClass='') {
     setTimeout(()=>modal.classList.add('hidden'),3000);
 }
 
-// ────────────────── SUBJECTS ──────────────────
-window.addSubject = function() {
-    const name=document.getElementById('subjectInput').value.trim();
-    const diff=parseInt(document.getElementById('difficultyInput').value);
-    const examDate=document.getElementById('subjectExamDate').value;
-    if(!name){showNotification("Nom requis","⚠️","bg-orange-500");return;}
-    if(!examDate){showNotification("Date d'examen requise","⚠️","bg-orange-500");return;}
-    window.subjects.push({id:'sub_'+Date.now(),name,difficulty:diff,examDate,color:COLORS[window.subjects.length%COLORS.length]});
-    document.getElementById('subjectInput').value="";
-    document.getElementById('subjectExamDate').value="";
-    document.getElementById('difficultyInput').value=3;
-    document.getElementById('diffVal').innerText='3';
-    let weekEmpty=true;
-    for(let i=0;i<7;i++){let d=new Date(window.currentWeekStart);d.setDate(d.getDate()+i);if(window.scheduleData[getLocalDateString(d)])weekEmpty=false;}
-    if(weekEmpty) generateNewSchedule();
-    updateUI(); window.saveDataToLocal();
+// ────────────────── PROJECTS & WBS MILESTONES ──────────────────
+window.toggleNewProjectForm = function() {
+    const form = document.getElementById('addProjectForm');
+    const msForm = document.getElementById('addMilestoneForm');
+    if (msForm) msForm.classList.add('hidden');
+    if (form) form.classList.toggle('hidden');
 }
 
-window.updateSubjectDifficulty = function(subId, newDiff) {
-    const sub = window.subjects.find(s => s.id === subId);
-    if(sub) {
-        sub.difficulty = parseInt(newDiff);
-        const diffLabel = document.getElementById('diff-val-' + subId);
-        if(diffLabel) diffLabel.innerText = sub.difficulty + '/5';
-        window.saveDataToLocal();
-    }
+window.openAddMilestoneForm = function(projId) {
+    const proj = window.projects.find(p => p.id === projId);
+    if (!proj) return;
+    document.getElementById('activeProjectId').value = projId;
+    document.getElementById('activeProjectLabel').innerText = proj.code;
+    document.getElementById('addProjectForm')?.classList.add('hidden');
+    document.getElementById('addMilestoneForm')?.classList.remove('hidden');
 }
 
-window.commitSubjectDifficultyChange = function() {
-    let weekEmpty = true;
-    for(let i=0; i<7; i++) {
-        let d = new Date(window.currentWeekStart);
-        d.setDate(d.getDate() + i);
-        if(window.scheduleData[getLocalDateString(d)]) weekEmpty = false;
-    }
-    if(!weekEmpty) generateNewSchedule();
+window.addProject = function() {
+    const name = document.getElementById('projNameInput').value.trim();
+    const code = document.getElementById('projCodeInput').value.trim() || 'PRJ';
+    const deadline = document.getElementById('projDeadlineInput').value;
+    const deadlineType = document.getElementById('projDeadlineTypeInput').value;
+    if (!name) { showNotification("Nom du projet requis", "⚠️", "bg-orange-500"); return; }
+    
+    const newProj = {
+        id: 'prj_' + Date.now(),
+        name,
+        code: code.toUpperCase(),
+        color: COLORS[window.projects.length % COLORS.length],
+        deadline: deadline || '',
+        isHardDeadline: deadlineType === 'hard',
+        milestones: []
+    };
+    window.projects.push(newProj);
+    document.getElementById('projNameInput').value = '';
+    document.getElementById('projCodeInput').value = '';
+    document.getElementById('projDeadlineInput').value = '';
+    document.getElementById('addProjectForm').classList.add('hidden');
+    
+    generateNewSchedule();
     updateUI();
     window.saveDataToLocal();
+    showNotification("Projet créé avec succès !", "🚀", "bg-green-500");
 }
 
-window.updateSubjectDate = function(subId, newDate) {
-    const sub = window.subjects.find(s => s.id === subId);
-    if(sub) {
-        sub.examDate = newDate;
-        let weekEmpty = true;
-        for(let i=0; i<7; i++) {
-            let d = new Date(window.currentWeekStart);
-            d.setDate(d.getDate() + i);
-            if(window.scheduleData[getLocalDateString(d)]) weekEmpty = false;
-        }
-        if(!weekEmpty) generateNewSchedule();
+window.addMilestone = function() {
+    const projId = document.getElementById('activeProjectId').value;
+    const title = document.getElementById('msTitleInput').value.trim();
+    const dueDate = document.getElementById('msDateInput').value;
+    const hours = parseInt(document.getElementById('msHoursInput').value) || 10;
+    const cognitiveLoad = document.getElementById('msCognitiveInput').value;
+
+    const proj = window.projects.find(p => p.id === projId);
+    if (!proj) return;
+    if (!title) { showNotification("Titre du jalon requis", "⚠️", "bg-orange-500"); return; }
+
+    proj.milestones.push({
+        id: 'ms_' + Date.now(),
+        title,
+        estimatedHours: hours,
+        completedHours: 0,
+        dueDate: dueDate || proj.deadline || '',
+        cognitiveLoad: cognitiveLoad,
+        isHardDeadline: proj.isHardDeadline,
+        isCompleted: false
+    });
+
+    document.getElementById('msTitleInput').value = '';
+    document.getElementById('addMilestoneForm').classList.add('hidden');
+
+    generateNewSchedule();
+    updateUI();
+    window.saveDataToLocal();
+    showNotification("Jalon WBS ajouté !", "🎯", "bg-green-500");
+}
+
+window.deleteProject = function(projId) {
+    window.projects = window.projects.filter(p => p.id !== projId);
+    generateNewSchedule();
+    updateUI();
+    window.saveDataToLocal();
+    showNotification("Projet supprimé", "🗑", "bg-red-500");
+}
+
+window.deleteMilestone = function(projId, msId) {
+    const proj = window.projects.find(p => p.id === projId);
+    if (proj) {
+        proj.milestones = proj.milestones.filter(m => m.id !== msId);
+        generateNewSchedule();
         updateUI();
         window.saveDataToLocal();
     }
 }
 
-function renderSubjectList() {
-    const list = document.getElementById('subjectList');
-    if(!list) return;
+function renderSubjectList() { renderProjectList(); } // Alias for backward compatibility
+
+function renderProjectList() {
+    const list = document.getElementById('projectList');
+    if (!list) return;
     list.innerHTML = '';
-    if(window.subjects.length === 0) {
-        list.innerHTML = `<p class="text-center text-sm py-4" style="color:var(--muted)">Aucune matière ajoutée</p>`;
+    
+    if (!window.projects || window.projects.length === 0) {
+        list.innerHTML = `<div class="text-center py-6">
+            <p class="text-xs font-bold mb-2" style="color:var(--muted)">Aucun projet ou jalon configuré</p>
+            <button onclick="toggleNewProjectForm()" class="btn-soft text-xs py-1.5 px-3">＋ Créer mon premier projet</button>
+        </div>`;
         return;
     }
-    const MONTHS_FR = ["Janv","Févr","Mars","Avril","Mai","Juin","Juil","Août","Sept","Oct","Nov","Déc"];
 
-    [...window.subjects].sort((a,b) => new Date(a.examDate) - new Date(b.examDate)).forEach(sub => {
-        let ds = 'Pas de date';
-        if(sub.examDate) {
-            const parts = sub.examDate.split('-');
-            if(parts.length === 3) {
-                const d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
-                if(!isNaN(d.getTime())) ds = `${d.getDate()} ${MONTHS_FR[d.getMonth()]}`;
-            }
+    const cogBadges = {
+        high: '<span class="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style="background:rgba(107,70,193,0.15);color:var(--plum)">🧠 Arch/High</span>',
+        medium: '<span class="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style="background:var(--terra-l);color:var(--terra)">⚙️ Dev/Mid</span>',
+        low: '<span class="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style="background:var(--sage-l);color:var(--sage)">📝 Doc/Low</span>'
+    };
+
+    window.projects.forEach(proj => {
+        const hardBadge = proj.isHardDeadline 
+            ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style="background:rgba(239,68,68,0.12);color:#ef4444">🔴 Ferme</span>'
+            : '<span class="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style="background:rgba(59,130,246,0.12);color:#3b82f6">🔵 Filée</span>';
+
+        let milestonesHtml = '';
+        if (proj.milestones.length === 0) {
+            milestonesHtml = `<p class="text-[10px] italic py-1 text-center" style="color:var(--muted)">Aucun jalon (WBS) dans ce projet</p>`;
+        } else {
+            proj.milestones.forEach(ms => {
+                milestonesHtml += `
+                <div class="flex items-center justify-between p-2 rounded-xl text-xs gap-2" style="background:var(--bg-card); border:1px solid var(--border)">
+                    <div class="min-w-0 flex-grow">
+                        <div class="flex items-center gap-1.5">
+                            <span class="font-extrabold truncate" style="color:var(--text)">${ms.title}</span>
+                            ${cogBadges[ms.cognitiveLoad] || ''}
+                        </div>
+                        <div class="flex items-center gap-2 text-[10px] mt-0.5" style="color:var(--muted)">
+                            <span>⏱ ${ms.estimatedHours}h estimées</span>
+                            <span>📅 ${ms.dueDate || 'Pas de date'}</span>
+                        </div>
+                    </div>
+                    <button onclick="deleteMilestone('${proj.id}', '${ms.id}')" class="text-xs hover:text-red-500 p-1 font-bold" title="Supprimer jalon">✕</button>
+                </div>`;
+            });
         }
 
         list.innerHTML += `
-        <div class="p-3.5 flex flex-col gap-2 transition-all rounded-2xl" style="background: var(--bg); border: 1.5px solid var(--border);">
+        <div class="p-3.5 rounded-2xl space-y-2 transition-all" style="background: var(--bg); border: 1.5px solid var(--border);">
             <div class="flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2.5 min-w-0">
-                    <div class="subject-dot shrink-0" style="background: ${sub.color}"></div>
-                    <span class="font-extrabold text-sm truncate" style="color: var(--text)">${sub.name}</span>
+                <div class="flex items-center gap-2 min-w-0">
+                    <div class="subject-dot shrink-0" style="background: ${proj.color}"></div>
+                    <span class="font-extrabold text-sm truncate" style="color: var(--text)">${proj.name}</span>
+                    <span class="text-[10px] font-black px-1.5 py-0.5 rounded" style="background:var(--terra-l);color:var(--terra)">${proj.code}</span>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <span class="text-xs font-extrabold" style="color: var(--muted)">Importance</span>
-                    <span id="diff-val-${sub.id}" class="text-xs font-black" style="color: var(--terra)">${sub.difficulty}/5</span>
-                    <button onclick="deleteSubject('${sub.id}')" class="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:text-red-500 ml-1" style="color: var(--muted)" title="Supprimer">
-                        ⚙️
-                    </button>
+                    ${hardBadge}
+                    <button onclick="openAddMilestoneForm('${proj.id}')" class="btn-soft text-[10px] py-1 px-2 font-bold" title="Ajouter Jalon WBS">＋ Jalon</button>
+                    <button onclick="deleteProject('${proj.id}')" class="w-6 h-6 rounded flex items-center justify-center hover:text-red-500 text-xs" style="color: var(--muted)" title="Supprimer Projet">⚙️</button>
                 </div>
             </div>
-            <div class="flex items-center gap-2.5">
-                <div class="relative flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text)">
-                    <input type="date" value="${sub.examDate || ''}" onchange="updateSubjectDate('${sub.id}', this.value)" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
-                    <span>${ds}</span>
-                    <span class="text-[9px]" style="color: var(--muted)">▼</span>
-                    <span class="ml-0.5 text-sm">📅</span>
-                </div>
-                <input type="range" min="1" max="5" value="${sub.difficulty}" oninput="updateSubjectDifficulty('${sub.id}', this.value)" onchange="commitSubjectDifficultyChange()" class="w-full cursor-pointer">
+            <!-- Milestones WBS Accordion -->
+            <div class="space-y-1.5 pt-1">
+                ${milestonesHtml}
             </div>
         </div>`;
     });
 }
 
-// ────────────────── SCHEDULE ──────────────────
+// ────────────────── SCHEDULE ALGORITHM (COGNITIVE LOAD & DEADLINE CONSTRAINTS) ──────────────────
 window.changeWeek = function(offset) {
     window.currentWeekStart.setDate(window.currentWeekStart.getDate()+(offset*7));
     let hasData=false;
     for(let i=0;i<7;i++){let d=new Date(window.currentWeekStart);d.setDate(d.getDate()+i);if(window.scheduleData[getLocalDateString(d)])hasData=true;}
-    if(!hasData&&window.subjects.length>0) generateNewSchedule();
+    if(!hasData&&window.projects.length>0) generateNewSchedule();
     updateUI(); window.saveDataToLocal();
 }
-window.regenerateSchedule = function(){generateNewSchedule();updateUI();window.saveDataToLocal();showNotification("Semaine régénérée !","🧠","bg-blue-500");}
+window.regenerateSchedule = function(){generateNewSchedule();updateUI();window.saveDataToLocal();showNotification("Planning sous contraintes régénéré !","🧠","bg-blue-500");}
 
 function generateNewSchedule() {
-    if(window.subjects.length===0) return;
-    const SLOTS=["Matin (3h20)","Après-midi (3h20)","Soir (3h20)"];
-    const HPH=10/3;
-    const realCompleted={};
-    window.subjects.forEach(s=>realCompleted[s.id]=0);
-    Object.values(window.scheduleData).forEach(ds=>ds.forEach(sess=>{if(sess.isCompleted&&realCompleted[sess.subjectId]!==undefined)realCompleted[sess.subjectId]+=HPH;}));
-    const projectedSessions={};
-    window.subjects.forEach(s=>projectedSessions[s.id]=0);
-    const lastPlannedDay={};
-    const MAX_DAYS_BEFORE={1:3,2:7,3:14,4:21,5:21};
-    for(let i=0;i<7;i++){
-        let d=new Date(window.currentWeekStart);d.setDate(d.getDate()+i);
-        const dateStr=getLocalDateString(d);
-        window.scheduleData[dateStr]=[];
-        let dailyPicks={};
-        for(let slotIdx=0;slotIdx<3;slotIdx++){
-            const activeSubjects=window.subjects.filter(sub=>{
-                if(!sub.examDate) return true;
-                if(dateStr>sub.examDate) return false;
-                const [ey,em,ed]=sub.examDate.split('-');
-                const examD=new Date(ey,em-1,ed);
-                const currD=new Date(d.getFullYear(),d.getMonth(),d.getDate());
-                const daysTo=Math.round((examD-currD)/86400000);
-                return daysTo<=(MAX_DAYS_BEFORE[parseInt(sub.difficulty)]||21);
+    if (!window.projects || window.projects.length === 0) return;
+    const SLOTS = ["Matin (3h20)", "Après-midi (3h20)", "Soir (3h20)"];
+    const HPH = 10 / 3;
+
+    // Flatten all active milestones across all projects
+    const allMilestones = [];
+    window.projects.forEach(proj => {
+        proj.milestones.forEach(ms => {
+            if (!ms.isCompleted) {
+                allMilestones.push({
+                    project: proj,
+                    milestone: ms,
+                    id: ms.id,
+                    title: ms.title,
+                    color: proj.color,
+                    dueDate: ms.dueDate || proj.deadline || '',
+                    isHardDeadline: ms.isHardDeadline || proj.isHardDeadline,
+                    cognitiveLoad: ms.cognitiveLoad || 'medium',
+                    estimatedHours: ms.estimatedHours || 10,
+                    completedHours: ms.completedHours || 0
+                });
+            }
+        });
+    });
+
+    if (allMilestones.length === 0) return;
+
+    const projectedHours = {};
+    allMilestones.forEach(m => projectedHours[m.id] = 0);
+
+    for (let i = 0; i < 7; i++) {
+        let d = new Date(window.currentWeekStart);
+        d.setDate(d.getDate() + i);
+        const dateStr = getLocalDateString(d);
+        window.scheduleData[dateStr] = [];
+
+        for (let slotIdx = 0; slotIdx < 3; slotIdx++) {
+            // Slot 0: Matin (prefers high cog), Slot 1: Après-midi (prefers medium cog), Slot 2: Soir (prefers low cog, bars high cog)
+            const targetCog = slotIdx === 0 ? 'high' : (slotIdx === 1 ? 'medium' : 'low');
+
+            const candidates = allMilestones.filter(m => {
+                if (m.dueDate && dateStr > m.dueDate) return false;
+                // Evening slot rule: strictly avoid high cognitive load tasks at night
+                if (slotIdx === 2 && m.cognitiveLoad === 'high') return false;
+                return true;
             });
-            if(activeSubjects.length===0) break;
-            const scored=activeSubjects.map(sub=>{
-                let daysToExam=60;
-                if(sub.examDate){
-                    const [ey,em,ed]=sub.examDate.split('-');
-                    const examD=new Date(ey,em-1,ed);
-                    const currD=new Date(d.getFullYear(),d.getMonth(),d.getDate());
-                    daysToExam=Math.max(1,Math.round((examD-currD)/86400000));
+
+            if (candidates.length === 0) continue;
+
+            const scored = candidates.map(m => {
+                let daysToDeadline = 60;
+                if (m.dueDate) {
+                    const [ey, em, ed] = m.dueDate.split('-');
+                    const targetD = new Date(ey, em - 1, ed);
+                    const currD = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                    daysToDeadline = Math.max(1, Math.round((targetD - currD) / 86400000));
                 }
-                const targetHours=sub.difficulty*10;
-                const alreadyDone=realCompleted[sub.id]||0;
-                const alreadyProjected=(projectedSessions[sub.id]||0)*HPH;
-                const remainingHours=Math.max(0,targetHours-alreadyDone-alreadyProjected);
-                const sessionsStillNeeded=remainingHours/HPH;
-                const sessionsPerDay=sessionsStillNeeded/daysToExam;
-                let pressure=Math.min(1.5,sessionsPerDay/1.5);
-                if(daysToExam<=1)pressure+=2;else if(daysToExam<=3)pressure+=1;else if(daysToExam<=7)pressure+=0.3;
-                const idealInterval=Math.max(1,6-parseInt(sub.difficulty));
-                const lastDay=lastPlannedDay[sub.id];
-                let spacing=1;
-                if(lastDay){
-                    const [ly,lm,ld]=lastDay.split('-');
-                    const lastD=new Date(ly,lm-1,ld);
-                    const currD=new Date(d.getFullYear(),d.getMonth(),d.getDate());
-                    const daysSince=Math.round((currD-lastD)/86400000);
-                    spacing=daysSince===0?0.1:Math.min(1,daysSince/idealInterval);
+
+                const remainingHours = Math.max(0, m.estimatedHours - m.completedHours - projectedHours[m.id]);
+                if (remainingHours <= 0) return { milestone: m, score: -999 };
+
+                // Pressure calculation: Hard deadline vs Soft/Filé
+                let pressure = 1.0;
+                if (m.isHardDeadline) {
+                    if (daysToDeadline <= 1) pressure = 4.5;
+                    else if (daysToDeadline <= 3) pressure = 3.0;
+                    else if (daysToDeadline <= 7) pressure = 2.0;
+                    else pressure = 1.2;
+                } else {
+                    pressure = Math.min(1.5, (remainingHours / HPH) / daysToDeadline);
                 }
-                const pickedToday=dailyPicks[sub.id]||0;
-                let satPenalty=0;
-                if(pickedToday>=1)satPenalty=daysToExam<=3?0.3:1.5;
-                if(pickedToday>=2)satPenalty=5;
-                const score=(pressure*0.55)+(spacing*0.35)+((parseInt(sub.difficulty)/5)*0.10)-satPenalty;
-                return{subject:sub,score,daysToExam};
+
+                // Cognitive slot alignment bonus
+                let cogMatchBonus = 0;
+                if (m.cognitiveLoad === targetCog) cogMatchBonus = 2.0;
+                else if (slotIdx === 0 && m.cognitiveLoad === 'medium') cogMatchBonus = 0.5;
+
+                const score = (pressure * 2.0) + cogMatchBonus + (remainingHours / 5);
+                return { milestone: m, score };
             });
-            scored.sort((a,b)=>Math.abs(a.score-b.score)>0.01?b.score-a.score:b.subject.difficulty-a.subject.difficulty);
-            const best=scored[0];
-            if(best&&best.score>-3){
-                dailyPicks[best.subject.id]=(dailyPicks[best.subject.id]||0)+1;
-                lastPlannedDay[best.subject.id]=dateStr;
-                projectedSessions[best.subject.id]=(projectedSessions[best.subject.id]||0)+1;
-                window.scheduleData[dateStr].push({id:'sess_'+Math.random().toString(36).substr(2,9),subjectId:best.subject.id,note:SLOTS[slotIdx],isCompleted:false});
+
+            scored.sort((a, b) => b.score - a.score);
+            const best = scored[0];
+            if (best && best.score > 0) {
+                projectedHours[best.milestone.id] += HPH;
+                window.scheduleData[dateStr].push({
+                    id: 'sess_' + Math.random().toString(36).substr(2, 9),
+                    projectId: best.milestone.project.id,
+                    milestoneId: best.milestone.id,
+                    subjectId: best.milestone.project.id, // Rétrocompatibilité
+                    note: `${SLOTS[slotIdx]} · [${best.milestone.project.code}] ${best.milestone.title}`,
+                    isCompleted: false
+                });
             }
         }
     }
@@ -1269,10 +1432,10 @@ function renderCalendar(){
     container.innerHTML='';
     let endOfWeek=new Date(window.currentWeekStart);endOfWeek.setDate(endOfWeek.getDate()+6);
     document.getElementById('weekLabel').innerText=`${window.currentWeekStart.getDate()} ${MONTHS[window.currentWeekStart.getMonth()]} – ${endOfWeek.getDate()} ${MONTHS[endOfWeek.getMonth()]}`;
-    if(window.subjects.length===0){
+    if(!window.projects || window.projects.length===0){
         container.innerHTML=`<div class="col-span-full py-14 text-center rounded-3xl border-2 border-dashed" style="border-color:var(--border);color:var(--muted)">
             <div class="text-5xl mb-3">📅</div>
-            <p class="font-bold">Ajoute des matières pour générer ton calendrier</p>
+            <p class="font-bold">Ajoute un projet et des jalons pour générer ton planning sous contraintes</p>
         </div>`;
         return;
     }
@@ -1295,22 +1458,14 @@ function renderCalendar(){
             <span class="text-[10px] px-2.5 py-0.5 rounded-full font-black" style="${badgeBg};border:1px solid var(--border)">${completedCount}/${sessions.length}</span>
         </div><div class="space-y-2 min-h-[30px]">`;
         sessions.forEach((session,si)=>{
-            const subject=window.subjects.find(s=>s.id===session.subjectId)||{name:'Supprimé',color:'#ccc'};
+            const project=(window.projects&&window.projects.find(p=>p.id===session.projectId||p.id===session.subjectId))||{name:'Projet',color:'#0E8478'};
             const checked=session.isCompleted;
             let noteLabel=session.note||'';
-            if(noteLabel.includes('Matin'))noteLabel='☀️ Matin';
-            else if(noteLabel.includes('Après-midi'))noteLabel='⛅ Après-midi';
-            else if(noteLabel.includes('Soir'))noteLabel='🌙 Soir';
             html+=`<div draggable="true" ondragstart="handleDragStart(event,'${dateStr}',${si})" ondragend="handleDragEnd(event)"
                 class="sess flex items-center p-2.5 group${checked?' done':''}" onclick="toggleSession('${dateStr}',${si})">
-                <div class="w-1.5 h-8 rounded-full mr-2.5 shrink-0" style="background:${subject.color}"></div>
+                <div class="w-1.5 h-8 rounded-full mr-2.5 shrink-0" style="background:${project.color}"></div>
                 <div class="flex-grow min-w-0">
-                    <span class="block text-xs md:text-sm font-bold truncate${checked?' line-through opacity-60':''}">${subject.name}</span>
-                    <div class="flex items-center gap-1.5 text-[10px] font-semibold" style="color:var(--muted)">
-                        <span>${noteLabel}</span>
-                        <button onclick="openEditModal('${dateStr}',${si},event)" class="opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 text-xs" title="Modifier">✏️</button>
-                        <button onclick="deleteSession('${dateStr}',${si},event)" class="opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 text-xs" title="Supprimer">🗑</button>
-                    </div>
+                    <span class="block text-xs md:text-sm font-bold truncate${checked?' line-through opacity-60':''}">${noteLabel}</span>
                 </div>
                 <div class="check-dot shrink-0 ml-2${checked?' on':''}">
                     <span class="${checked?'':'hidden'}" style="color:white;font-size:10px;font-weight:900">✓</span>
@@ -1344,14 +1499,14 @@ function updateStats() {
     const barEl = document.getElementById('statCompletionBar');
     if(barEl) barEl.style.width = pct + '%';
 
-    if(window.subjects.length > 0) {
+    if(window.projects && window.projects.length > 0) {
         const today = new Date(); today.setHours(0,0,0,0); let min = Infinity;
         let nextExamStr = '';
         const MONTHS_SHORT = ["Janv","Févr","Mars","Avril","Mai","Juin","Juil","Août","Sept","Oct","Nov","Déc"];
         
-        window.subjects.forEach(s => {
-            if(s.examDate) {
-                let d = new Date(s.examDate); d.setHours(0,0,0,0);
+        window.projects.forEach(p => {
+            if(p.deadline) {
+                let d = new Date(p.deadline); d.setHours(0,0,0,0);
                 let diff = Math.ceil((d - today) / 86400000);
                 if(diff >= 0 && diff < min) {
                     min = diff;
@@ -1360,7 +1515,7 @@ function updateStats() {
             }
         });
         const daysEl = document.getElementById('daysLeft');
-        if(daysEl) daysEl.innerText = min === Infinity ? 'Terminés' : (nextExamStr || (min === 0 ? 'Auj.' : min + ' j'));
+        if(daysEl) daysEl.innerText = min === Infinity ? 'Livré' : (nextExamStr || (min === 0 ? 'Auj.' : min + ' j'));
     } else {
         const daysEl = document.getElementById('daysLeft');
         if(daysEl) daysEl.innerText = '--';
@@ -1373,8 +1528,8 @@ function renderChart(){
     if(!ctx) return;
     const isDark=document.documentElement.classList.contains('dark');
     if(chartInstance)chartInstance.destroy();
-    if(window.subjects.length===0) return;
-    chartInstance=new Chart(ctx,{type:'doughnut',data:{labels:window.subjects.map(s=>s.name),datasets:[{data:window.subjects.map(s=>s.difficulty),backgroundColor:window.subjects.map(s=>s.color),borderWidth:isDark?2:1,borderColor:isDark?'#122421':'#F4F8F6'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'72%',plugins:{legend:{position:'right',labels:{color:isDark?'#7B9C97':'#5C7C77',font:{family:'Nunito',size:11}}}}}});
+    if(!window.projects || window.projects.length===0) return;
+    chartInstance=new Chart(ctx,{type:'doughnut',data:{labels:window.projects.map(p=>p.name),datasets:[{data:window.projects.map(p=>p.milestones.length||1),backgroundColor:window.projects.map(p=>p.color),borderWidth:isDark?2:1,borderColor:isDark?'#122421':'#F4F8F6'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'72%',plugins:{legend:{position:'right',labels:{color:isDark?'#7B9C97':'#5C7C77',font:{family:'Nunito',size:11}}}}}});
 }
 
 // ────────────────── ANALYTICS ──────────────────
@@ -1384,8 +1539,11 @@ function getGlobalStats(){
     const completed=allSessions.filter(s=>s.isCompleted);
     const HPH=10/3;
     const subjectStats={};
-    window.subjects.forEach(s=>{subjectStats[s.id]={total:0,done:0,name:s.name,color:s.color};});
-    allSessions.forEach(s=>{if(subjectStats[s.subjectId]){subjectStats[s.subjectId].total++;if(s.isCompleted)subjectStats[s.subjectId].done++;}});
+    (window.projects||[]).forEach(p=>{subjectStats[p.id]={total:0,done:0,name:p.name,color:p.color};});
+    allSessions.forEach(s=>{
+        const pid = s.projectId || s.subjectId;
+        if(subjectStats[pid]){subjectStats[pid].total++;if(s.isCompleted)subjectStats[pid].done++;}
+    });
     let activeDays=new Set();
     allSessions.filter(s=>s.isCompleted).forEach(s=>activeDays.add(s.date));
     const avgPerDay=activeDays.size>0?(completed.length/activeDays.size).toFixed(1):0;
@@ -1393,7 +1551,7 @@ function getGlobalStats(){
 }
 
 function renderAnalytics(){
-    if(window.subjects.length===0) return;
+    if(!window.projects || window.projects.length===0) return;
     const stats=getGlobalStats();
     const isDark=document.documentElement.classList.contains('dark');
     document.getElementById('ana-completed').innerText=`${stats.completed} / ${stats.total}`;
@@ -1401,18 +1559,20 @@ function renderAnalytics(){
     document.getElementById('ana-hours').innerText=stats.hours+'h';
     document.getElementById('ana-streak').innerText=window.streak.count;
     document.getElementById('ana-sessions-day').innerText=stats.avgPerDay;
-    document.getElementById('ana-subjects-active').innerText=window.subjects.length;
-    const breakdown=document.getElementById('subjectBreakdown');breakdown.innerHTML='';
-    Object.values(stats.subjectStats).sort((a,b)=>b.done-a.done).forEach(s=>{
-        const pct=s.total>0?Math.round(s.done/s.total*100):0;
-        breakdown.innerHTML+=`<div>
-            <div class="flex justify-between text-xs mb-1.5">
-                <span class="flex items-center gap-1.5 font-bold"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${s.color}"></span>${s.name}</span>
-                <span style="color:var(--muted)">${s.done}/${s.total} (${pct}%)</span>
-            </div>
-            <div class="prog-track" style="height:7px"><div class="prog-fill" style="width:${pct}%;background:${s.color}"></div></div>
-        </div>`;
-    });
+    document.getElementById('ana-subjects-active').innerText=window.projects.length;
+    const breakdown=document.getElementById('subjectBreakdown');if(breakdown) breakdown.innerHTML='';
+    if(breakdown) {
+        Object.values(stats.subjectStats).sort((a,b)=>b.done-a.done).forEach(s=>{
+            const pct=s.total>0?Math.round(s.done/s.total*100):0;
+            breakdown.innerHTML+=`<div>
+                <div class="flex justify-between text-xs mb-1.5">
+                    <span class="flex items-center gap-1.5 font-bold"><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${s.color}"></span>${s.name}</span>
+                    <span style="color:var(--muted)">${s.done}/${s.total} (${pct}%)</span>
+                </div>
+                <div class="prog-track" style="height:7px"><div class="prog-fill" style="width:${pct}%;background:${s.color}"></div></div>
+            </div>`;
+        });
+    }
     renderHeatmap(isDark);renderWeeklyChart(isDark);renderSubjectTimeChart(stats,isDark);renderPomoSubjectChart(isDark);renderExamCountdown();
 }
 
@@ -1494,41 +1654,47 @@ function renderPomoSubjectChart(isDark){
 
 function renderExamCountdown(){
     const container=document.getElementById('examCountdown');
+    if(!container) return;
     const today=new Date();today.setHours(0,0,0,0);
-    const sorted=[...window.subjects].filter(s=>s.examDate).sort((a,b)=>new Date(a.examDate)-new Date(b.examDate));
-    if(sorted.length===0){container.innerHTML=`<p class="text-sm" style="color:var(--muted)">Aucun examen configuré.</p>`;return;}
-    container.innerHTML=sorted.map(s=>{
-        const examDate=new Date(s.examDate);examDate.setHours(0,0,0,0);
-        const days=Math.ceil((examDate-today)/86400000);
+    const sorted=[...(window.projects||[])].filter(p=>p.deadline).sort((a,b)=>new Date(a.deadline)-new Date(b.deadline));
+    if(sorted.length===0){container.innerHTML=`<p class="text-sm" style="color:var(--muted)">Aucune échéance de projet configurée.</p>`;return;}
+    container.innerHTML=sorted.map(p=>{
+        const deadlineDate=new Date(p.deadline);deadlineDate.setHours(0,0,0,0);
+        const days=Math.ceil((deadlineDate-today)/86400000);
         const pct=Math.max(0,Math.min(100,100-(days/60*100)));
         const urgencyColor=days>14?'var(--sage)':days>7?'var(--gold)':'#dc2626';
         const urgencyBg=days>14?'var(--sage-l)':days>7?'var(--gold-l)':'rgba(220,38,38,.1)';
-        const urgencyText=days<0?'Passé':days===0?'Auj. !':days===1?'Demain !':days+' jours';
+        const urgencyText=days<0?'Livré':days===0?'Auj. !':days===1?'Demain !':days+' jours';
+        const badgeType=p.isHardDeadline?'🔴 Ferme':'🔵 Filée';
         return `<div class="flex items-center gap-4 p-3.5 rounded-2xl" style="background:var(--bg);border:1px solid var(--border)">
-            <div class="w-2.5 h-10 rounded-full shrink-0" style="background:${s.color}"></div>
+            <div class="w-2.5 h-10 rounded-full shrink-0" style="background:${p.color}"></div>
             <div class="flex-grow min-w-0">
                 <div class="flex justify-between items-center mb-1.5">
-                    <span class="font-black text-sm truncate">${s.name}</span>
+                    <span class="font-black text-sm truncate">[${p.code}] ${p.name} <span class="text-[10px] font-extrabold ml-1 opacity-75">${badgeType}</span></span>
                     <span class="text-xs font-black px-2.5 py-0.5 rounded-full shrink-0 ml-2" style="background:${urgencyBg};color:${urgencyColor}">${urgencyText}</span>
                 </div>
-                <div class="prog-track" style="height:7px"><div class="prog-fill" style="width:${pct}%;background:${s.color}"></div></div>
+                <div class="prog-track" style="height:7px"><div class="prog-fill" style="width:${pct}%;background:${p.color}"></div></div>
             </div>
         </div>`;
     }).join('');
 }
 
-// ────────────────── AI COACH ──────────────────
+// ────────────────── AI COACH & SAAS CONTEXT ──────────────────
 function buildContext(){
     const today=new Date();today.setHours(0,0,0,0);const todayStr=getLocalDateString(today);
-    let ctx=`=== CONTEXTE DE L'ÉTUDIANT ===\nDate: ${todayStr}\nSérie actuelle: ${window.streak.count} jour(s)\n\n`;
-    if(window.subjects.length===0){ctx+='Aucune matière configurée.\n';return ctx;}
-    ctx+='MATIÈRES:\n';
-    window.subjects.forEach(s=>{const examDate=new Date(s.examDate);examDate.setHours(0,0,0,0);const days=Math.ceil((examDate-today)/86400000);ctx+=`- ${s.name} | Difficulté: ${s.difficulty}/5 | Examen dans: ${days>=0?days+' jours':'passé'}\n`;});
+    let ctx=`=== CONTEXTE SYSTÈME DE GESTION DE PROJETS SAAS ===\nDate: ${todayStr}\nSérie d'exécution: ${window.streak.count} jour(s)\n\n`;
+    if(!window.projects || window.projects.length===0){ctx+='Aucun projet en cours.\n';return ctx;}
+    ctx+='PROJETS & JALONS (WBS):\n';
+    window.projects.forEach(p=>{
+        const deadlineD=p.deadline?new Date(p.deadline):null;
+        const days=deadlineD?Math.ceil((deadlineD-today)/86400000):-1;
+        ctx+=`- Projet [${p.code}] ${p.name} | Échéance: ${p.isHardDeadline?'🔴 Ferme':'🔵 Filée'} (${days>=0?days+'j restants':'N/A'})\n`;
+        (p.milestones||[]).forEach(m=>{
+            ctx+=`   • Jalon WBS: ${m.title} | Charge: ${m.estimatedHours}h | Effort cognitif: ${m.cognitiveLoad}\n`;
+        });
+    });
     const gs=getGlobalStats();
-    ctx+=`\nPROGRESSION:\n- Sessions complétées: ${gs.completed}/${gs.total}\n- Heures de révision: ~${gs.hours}h\n- Taux de complétion: ${gs.total>0?Math.round(gs.completed/gs.total*100):0}%\n`;
-    let weekCompleted=0,weekTotal=0;
-    for(let i=0;i<7;i++){let d=new Date(window.currentWeekStart);d.setDate(d.getDate()+i);let s=window.scheduleData[getLocalDateString(d)]||[];weekTotal+=s.length;weekCompleted+=s.filter(x=>x.isCompleted).length;}
-    ctx+=`- Cette semaine: ${weekCompleted}/${weekTotal} sessions\n`;
+    ctx+=`\nAVANCEMENT GLOBAL:\n- Sessions projet complétées: ${gs.completed}/${gs.total}\n- Heures projet accomplies: ~${gs.hours}h\n`;
     return ctx;
 }
 
