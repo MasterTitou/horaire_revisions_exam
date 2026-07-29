@@ -507,8 +507,8 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
-                        <button onclick="startPomodoro()" class="w-11 h-11 rounded-full text-white flex items-center justify-center text-lg shadow-sm hover:scale-105 active:scale-95 transition-all" style="background: linear-gradient(135deg, #FF6B35, #FF3D00);">
-                            ⏸
+                        <button onclick="togglePlayPausePomodoro()" id="pomoPlayPauseBtnInline" class="w-11 h-11 rounded-full text-white flex items-center justify-center text-lg shadow-sm hover:scale-105 active:scale-95 transition-all" style="background: linear-gradient(135deg, #FF6B35, #FF3D00);" title="Démarrer / Pause">
+                            ▶
                         </button>
                         <button onclick="resetPomodoro()" class="w-10 h-10 rounded-full card flex items-center justify-center text-base hover:scale-105 transition-transform" title="Réinitialiser">
                             ↻
@@ -1030,16 +1030,34 @@ window.updateSubjectDifficulty = function(subId, newDiff) {
         const diffLabel = document.getElementById('diff-val-' + subId);
         if(diffLabel) diffLabel.innerText = sub.difficulty + '/5';
         window.saveDataToLocal();
-        updateUI();
     }
+}
+
+window.commitSubjectDifficultyChange = function() {
+    let weekEmpty = true;
+    for(let i=0; i<7; i++) {
+        let d = new Date(window.currentWeekStart);
+        d.setDate(d.getDate() + i);
+        if(window.scheduleData[getLocalDateString(d)]) weekEmpty = false;
+    }
+    if(!weekEmpty) generateNewSchedule();
+    updateUI();
+    window.saveDataToLocal();
 }
 
 window.updateSubjectDate = function(subId, newDate) {
     const sub = window.subjects.find(s => s.id === subId);
     if(sub) {
         sub.examDate = newDate;
-        window.saveDataToLocal();
+        let weekEmpty = true;
+        for(let i=0; i<7; i++) {
+            let d = new Date(window.currentWeekStart);
+            d.setDate(d.getDate() + i);
+            if(window.scheduleData[getLocalDateString(d)]) weekEmpty = false;
+        }
+        if(!weekEmpty) generateNewSchedule();
         updateUI();
+        window.saveDataToLocal();
     }
 }
 
@@ -1051,12 +1069,17 @@ function renderSubjectList() {
         list.innerHTML = `<p class="text-center text-sm py-4" style="color:var(--muted)">Aucune matière ajoutée</p>`;
         return;
     }
-    const today = new Date(); today.setHours(0,0,0,0);
     const MONTHS_FR = ["Janv","Févr","Mars","Avril","Mai","Juin","Juil","Août","Sept","Oct","Nov","Déc"];
 
     [...window.subjects].sort((a,b) => new Date(a.examDate) - new Date(b.examDate)).forEach(sub => {
-        const d = new Date(sub.examDate);
-        const ds = isNaN(d.getTime()) ? 'Pas de date' : `${d.getDate()} ${MONTHS_FR[d.getMonth()]}`;
+        let ds = 'Pas de date';
+        if(sub.examDate) {
+            const parts = sub.examDate.split('-');
+            if(parts.length === 3) {
+                const d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+                if(!isNaN(d.getTime())) ds = `${d.getDate()} ${MONTHS_FR[d.getMonth()]}`;
+            }
+        }
 
         list.innerHTML += `
         <div class="card p-3.5 flex flex-col gap-2.5 transition-all hover:border-teal-500/40" style="border-radius: 20px; background: var(--bg-card); border: 1.5px solid var(--border);">
@@ -1083,7 +1106,7 @@ function renderSubjectList() {
             </div>
             <div class="flex items-center justify-between gap-3 pt-2" style="border-top: 1px solid var(--border)">
                 <span class="text-xs font-extrabold shrink-0" style="color: var(--muted)">Importance <span id="diff-val-${sub.id}" style="color: var(--terra)">${sub.difficulty}/5</span></span>
-                <input type="range" min="1" max="5" value="${sub.difficulty}" oninput="updateSubjectDifficulty('${sub.id}', this.value)" class="w-full h-1.5 rounded-lg appearance-none cursor-pointer" style="accent-color: var(--terra)">
+                <input type="range" min="1" max="5" value="${sub.difficulty}" oninput="updateSubjectDifficulty('${sub.id}', this.value)" onchange="commitSubjectDifficultyChange()" class="w-full h-1.5 rounded-lg appearance-none cursor-pointer" style="accent-color: var(--terra)">
             </div>
         </div>`;
     });
@@ -1592,26 +1615,40 @@ window.toggleAiDebugModal=function(){document.getElementById('aiDebugModal')?.cl
 window.syncPomoSubject=function(val){window.gamification.currentPomoSubject=val;window.saveDataToLocal();}
 
 function updatePomoStatusText(text){
-    ['pomoStatus','pomoFloatingStatus','pomoModalStatus'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerText=text;});
+    ['pomoStatus','pomoFloatingStatus','pomoModalStatus','pomoStatusInline'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerText=text;});
+}
+
+function updatePomoButtons(){
+    const isRunning = !!pomoInterval;
+    const btn = document.getElementById('pomoPlayPauseBtnInline');
+    if(btn) btn.innerText = isRunning ? '⏸' : '▶';
 }
 
 // ────────────────── POMODORO ──────────────────
 let pomoInterval=null,pomoTimeLeft=25*60,isPomoBreak=false;
 function updatePomoDisplay(){
     const f=`${String(Math.floor(pomoTimeLeft/60)).padStart(2,'0')}:${String(pomoTimeLeft%60).padStart(2,'0')}`;
-    ['pomoTime','pomoFloatingTime','pomoModalTime','pomoHandleTime'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerText=f;});
+    ['pomoTime','pomoFloatingTime','pomoModalTime','pomoHandleTime','pomoTimeInline'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerText=f;});
 }
 function savePomoState(){localStorage.setItem('pomoState',JSON.stringify({timeLeft:pomoTimeLeft,isBreak:isPomoBreak,endTime:pomoInterval?(Date.now()+pomoTimeLeft*1000):null}));}
 
+window.togglePlayPausePomodoro = function() {
+    if(pomoInterval) {
+        pausePomodoro();
+    } else {
+        startPomodoro();
+    }
+}
+
 window.startPomodoro=function(){
     if(pomoInterval) return;
-    updatePomoStatusText(isPomoBreak?'☕ Pause':'🧠 Focus');savePomoState();
+    updatePomoStatusText(isPomoBreak?'☕ Pause':'🧠 Focus');savePomoState();updatePomoButtons();
     if(!isPomoBreak&&currentPomoSound){const audio=document.getElementById('pomoAudio');audio.src=SOUNDS[currentPomoSound];audio.play().catch(e=>console.log('Audio:',e));}
     pomoInterval=setInterval(()=>{
         pomoTimeLeft--;updatePomoDisplay();
         if(pomoTimeLeft%10===0)savePomoState();
         if(pomoTimeLeft<=0){
-            clearInterval(pomoInterval);pomoInterval=null;document.getElementById('pomoAudio').pause();
+            clearInterval(pomoInterval);pomoInterval=null;document.getElementById('pomoAudio').pause();updatePomoButtons();
             if(!isPomoBreak){window.gamification.pomodorosCompleted++;addXP(15,'Pomodoro terminé');const sel=document.getElementById('pomoSubjectSelect');const subId=sel?sel.value:'';if(subId)window.gamification.subjectPomoStats[subId]=(window.gamification.subjectPomoStats[subId]||0)+1;checkBadges();window.saveDataToLocal();}
             isPomoBreak=!isPomoBreak;const settings=window.gamification.pomoSettings;pomoTimeLeft=isPomoBreak?(settings.break*60):(settings.focus*60);
             const msg=isPomoBreak?'Pause !':'On s\'y remet !';showNotification(msg,isPomoBreak?'☕':'💪',isPomoBreak?'bg-indigo-500':'bg-blue-600');sendSystemNotification(msg);
@@ -1619,8 +1656,8 @@ window.startPomodoro=function(){
         }
     },1000);
 }
-window.pausePomodoro=function(){clearInterval(pomoInterval);pomoInterval=null;document.getElementById('pomoAudio').pause();updatePomoStatusText('⏸ En pause');savePomoState();}
-window.resetPomodoro=function(){clearInterval(pomoInterval);pomoInterval=null;document.getElementById('pomoAudio').pause();isPomoBreak=false;pomoTimeLeft=window.gamification.pomoSettings.focus*60;updatePomoDisplay();updatePomoStatusText('Prêt');localStorage.removeItem('pomoState');}
+window.pausePomodoro=function(){clearInterval(pomoInterval);pomoInterval=null;document.getElementById('pomoAudio').pause();updatePomoStatusText('⏸ En pause');updatePomoButtons();savePomoState();}
+window.resetPomodoro=function(){clearInterval(pomoInterval);pomoInterval=null;document.getElementById('pomoAudio').pause();isPomoBreak=false;pomoTimeLeft=window.gamification.pomoSettings.focus*60;updatePomoDisplay();updatePomoStatusText('Prêt');updatePomoButtons();localStorage.removeItem('pomoState');}
 
 function loadPomoState(){
     const saved=localStorage.getItem('pomoState');const settings=window.gamification.pomoSettings;
