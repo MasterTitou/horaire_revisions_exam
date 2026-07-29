@@ -15,10 +15,18 @@ const DEFAULT_SKILLS: Record<string, DomainSkill> = {
   security: { id: 'security', name: 'Sécurité & Réseaux', icon: '🛡️', hoursSpent: 4, level: 1 }
 };
 
+const DEFAULT_CALIBRATION = {
+  highFactor: 1.25,
+  mediumFactor: 1.10,
+  lowFactor: 1.00,
+  lastCalibrated: 'Aujourd\'hui'
+};
+
 const DEFAULT_GAMIFICATION: Gamification = {
   xp: 0,
   level: 1,
   velocityIndex: 90,
+  calibration: DEFAULT_CALIBRATION,
   skills: DEFAULT_SKILLS,
   quests: [],
   badges: [],

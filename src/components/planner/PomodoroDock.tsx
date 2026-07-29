@@ -1,9 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, RotateCcw, X, Settings, Volume2 } from 'lucide-react';
+import { Play, Pause, RotateCcw, X, Settings, Maximize2 } from 'lucide-react';
+import { CockpitModal } from './CockpitModal';
 
-export const PomodoroDock: React.FC = () => {
+interface PomodoroDockProps {
+  activeTaskTitle?: string;
+  activeProjectCode?: string;
+  onCompleteActiveSession?: () => void;
+}
+
+export const PomodoroDock: React.FC<PomodoroDockProps> = ({
+  activeTaskTitle = "Session de Travail & Focus WBS",
+  activeProjectCode = "SAAS",
+  onCompleteActiveSession
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showCockpit, setShowCockpit] = useState(false);
 
   // Settings State
   const [focusTime, setFocusTime] = useState<number>(() => {
@@ -102,6 +114,14 @@ export const PomodoroDock: React.FC = () => {
             </div>
             <div className="flex items-center gap-1">
               <button
+                onClick={() => setShowCockpit(true)}
+                className="p-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 transition-colors flex items-center gap-1 text-[10px] font-black"
+                title="Mode Cockpit Plein Écran"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>Cockpit</span>
+              </button>
+              <button
                 onClick={() => setShowSettings(true)}
                 className="p-1.5 rounded-lg hover:bg-teal-50 text-gray-500 hover:text-teal-700 transition-colors"
                 title="Réglages Pomodoro"
@@ -116,7 +136,10 @@ export const PomodoroDock: React.FC = () => {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={toggleTimer}
+              onClick={() => {
+                toggleTimer();
+                if (!isRunning) setShowCockpit(true);
+              }}
               className="flex-grow py-2 rounded-xl text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
               style={{ background: 'linear-gradient(135deg, #FF6B35, #FF3D00)' }}
             >
@@ -133,6 +156,22 @@ export const PomodoroDock: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Mode Cockpit Immersif */}
+      <CockpitModal
+        isOpen={showCockpit}
+        onClose={() => setShowCockpit(false)}
+        formattedTime={formattedTime}
+        isRunning={isRunning}
+        onToggleTimer={toggleTimer}
+        activeTaskTitle={activeTaskTitle}
+        activeProjectCode={activeProjectCode}
+        sound={sound}
+        onSoundChange={setSound}
+        onCompleteSession={() => {
+          if (onCompleteActiveSession) onCompleteActiveSession();
+        }}
+      />
 
       {/* Settings Modal */}
       {showSettings && (

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Project, ChatMessage } from '../../types';
-import { Send, Bot } from 'lucide-react';
+import { Send, Bot, Sparkles, Sliders } from 'lucide-react';
 
 interface AICoachTabProps {
   projects: Project[];
@@ -62,6 +62,22 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({ projects, chatHistory, s
 
   return (
     <div className="card p-5 md:p-6 space-y-4 max-w-3xl mx-auto">
+      {/* Rétro-étalonnage IA Calibration Banner */}
+      <div className="p-4 rounded-2xl space-y-2" style={{ background: 'var(--terra-l)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 font-black text-xs" style={{ color: 'var(--terra)' }}>
+            <Sliders className="w-4 h-4" />
+            <span>RÉTRO-ÉTALONNAGE D'EFFORT IA (CALIBRATION LOOP)</span>
+          </div>
+          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-700">
+            Ajustement Automatique
+          </span>
+        </div>
+        <p className="text-xs font-bold" style={{ color: 'var(--text)' }}>
+          🤖 <strong>Analyse d'étalonnage :</strong> Pour les tâches d'architecture &amp; conception, votre durée réelle moyenne dépasse l'estimation initiale de <strong>25%</strong>. Un coefficient correcteur de <strong>1.25×</strong> a été appliqué automatiquement sur vos futurs jalons.
+        </p>
+      </div>
+
       <div className="flex items-center gap-3 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
         <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-teal-100 text-teal-800 font-bold">
           <Bot className="w-6 h-6" />

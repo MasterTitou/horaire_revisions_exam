@@ -57,10 +57,18 @@ export interface DynamicQuest {
   isCompleted: boolean;
 }
 
+export interface CalibrationLoop {
+  highFactor: number;   // e.g. 1.25 for +25% correction on Arch tasks
+  mediumFactor: number; // e.g. 1.10 for +10% correction on Dev tasks
+  lowFactor: number;    // e.g. 1.00
+  lastCalibrated: string;
+}
+
 export interface Gamification {
   xp: number;
   level: number;
-  velocityIndex: number; // Ratio Heures Réalisées / Heures Prévues sur 14j glissants (%)
+  velocityIndex: number;
+  calibration: CalibrationLoop;
   skills: Record<string, DomainSkill>;
   quests: DynamicQuest[];
   badges: string[];
