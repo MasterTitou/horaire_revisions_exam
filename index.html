@@ -73,16 +73,19 @@
         @keyframes confetti { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(-100px) rotate(720deg); opacity: 0; } }
         .confetti-particle { position: fixed; pointer-events: none; animation: confetti 1.5s ease-out forwards; z-index: 200; }
         .levelup-toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 150; animation: fadeIn 0.5s ease; }
+        .bottom-tab-btn { transition: color 0.2s, transform 0.2s; }
+        .bottom-tab-btn.active { color: #3b82f6 !important; font-weight: 700; }
+        .bottom-tab-btn.active span:first-child { transform: translateY(-2px); display: inline-block; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
 
 <!-- Login Overlay -->
 <div id="loginOverlay" class="login-overlay">
-    <div class="login-card p-10 rounded-3xl w-full max-w-sm mx-4 shadow-2xl text-center">
-        <div class="login-icon text-6xl mb-6">📚</div>
-        <h2 class="text-2xl font-bold text-white mb-2">Mon Assistant de Révision</h2>
-        <p class="text-slate-400 text-sm mb-8">Connecte-toi pour accéder à ton planning</p>
+    <div class="login-card p-8 md:p-10 rounded-3xl w-full max-w-sm mx-4 shadow-2xl text-center">
+        <div class="login-icon text-5xl md:text-6xl mb-4 md:mb-6">📚</div>
+        <h2 class="text-xl md:text-2xl font-bold text-white mb-2">Mon Assistant de Révision</h2>
+        <p class="text-slate-400 text-xs md:text-sm mb-6 md:mb-8">Connecte-toi pour accéder à ton planning</p>
         <div class="space-y-4">
             <input type="password" id="loginPassword" placeholder="Mot de passe"
                 class="login-input w-full p-3 rounded-xl bg-slate-800 border border-slate-600 text-white placeholder-slate-500 outline-none text-center text-lg tracking-widest"
@@ -97,105 +100,72 @@
     </div>
 </div>
 
-<div id="appContainer" class="max-w-7xl mx-auto px-4 py-8" style="display:none;">
+<div id="appContainer" class="max-w-7xl mx-auto px-3 md:px-4 pt-4 md:pt-8 pb-32" style="display:none;">
 
-    <!-- Header -->
-    <header class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
-        <div class="text-center md:text-left">
-            <h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-2">Mon Assistant de Révision</h1>
-            <p class="text-slate-600 dark:text-slate-400">Planifie, concentre-toi, et maintiens ta série !</p>
-        </div>
-        <div class="flex items-center gap-4">
-            <span id="syncIndicator" class="text-xs text-slate-400 dark:text-slate-500 italic hidden">☁️ Synchronisé</span>
-            <!-- XP Bar -->
-            <div class="glass-card px-3 py-2 rounded-full flex items-center gap-2 shadow-sm">
-                <span id="levelBadge" class="text-sm font-bold">🌱</span>
-                <div class="xp-bar-bg rounded-full h-2 w-20"><div id="xpBarFill" class="xp-bar-fill h-2 rounded-full" style="width:0%"></div></div>
-                <span id="xpLabel" class="text-xs font-semibold text-indigo-500 dark:text-indigo-400">Niv.1</span>
+    <!-- Header (Compact Mobile & Desktop) -->
+    <header class="mb-4 md:mb-8 flex flex-col md:flex-row justify-between items-center gap-3">
+        <div class="text-center md:text-left flex items-center justify-between w-full md:w-auto">
+            <div>
+                <h1 class="text-xl md:text-4xl font-bold text-slate-900 dark:text-white leading-tight">Mon Assistant de Révision</h1>
+                <p class="text-slate-500 dark:text-slate-400 text-xs md:text-sm hidden md:block">Planifie, concentre-toi, et maintiens ta série !</p>
             </div>
-            <div class="glass-card px-4 py-2 rounded-full flex items-center font-bold text-orange-500 shadow-sm">
-                <span class="flame-icon mr-2 text-xl">🔥</span>
+            <button onclick="toggleTheme()" class="md:hidden glass-card p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition shrink-0">
+                <span id="themeIconMobile" class="text-lg">🌙</span>
+            </button>
+        </div>
+
+        <div class="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-between md:justify-end">
+            <span id="syncIndicator" class="text-[10px] md:text-xs text-slate-400 dark:text-slate-500 italic hidden">☁️ Synchronisé</span>
+            <!-- XP Bar -->
+            <div class="glass-card px-2.5 py-1.5 md:px-3 md:py-2 rounded-full flex items-center gap-2 shadow-sm">
+                <span id="levelBadge" class="text-xs md:text-sm font-bold">🌱</span>
+                <div class="xp-bar-bg rounded-full h-2 w-14 md:w-20"><div id="xpBarFill" class="xp-bar-fill h-2 rounded-full" style="width:0%"></div></div>
+                <span id="xpLabel" class="text-[11px] md:text-xs font-semibold text-indigo-500 dark:text-indigo-400">Niv.1</span>
+            </div>
+            <div class="glass-card px-3 py-1.5 md:px-4 md:py-2 rounded-full flex items-center font-bold text-orange-500 shadow-sm text-xs md:text-sm">
+                <span class="flame-icon mr-1.5 text-base md:text-xl">🔥</span>
                 <span id="streakCount">0 Jour(s)</span>
             </div>
-            <button onclick="toggleTheme()" class="glass-card p-3 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+            <button onclick="toggleTheme()" class="hidden md:flex glass-card p-3 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition">
                 <span id="themeIcon" class="text-xl">🌙</span>
             </button>
         </div>
     </header>
 
-    <!-- Main Tab Navigation -->
-    <div class="flex gap-2 mb-6 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-fit flex-wrap">
-        <button class="tab-btn active px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('planner')" id="tab-planner">📅 Planning</button>
-        <button class="tab-btn px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('analytics')" id="tab-analytics">📊 Analytique</button>
-        <button class="tab-btn px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('ai')" id="tab-ai">🤖 Coach IA</button>
-        <button class="tab-btn px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('profile')" id="tab-profile">🏆 Profil</button>
+    <!-- Main Tab Navigation (Desktop Header Nav) -->
+    <div class="hidden md:flex gap-2 mb-6 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-fit flex-wrap">
+        <button class="tab-btn tab-planner active px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('planner')" id="tab-planner">📅 Planning</button>
+        <button class="tab-btn tab-analytics px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('analytics')" id="tab-analytics">📊 Analytique</button>
+        <button class="tab-btn tab-ai px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('ai')" id="tab-ai">🤖 Coach IA</button>
+        <button class="tab-btn tab-profile px-5 py-2 rounded-lg font-semibold text-sm" onclick="switchMainTab('profile')" id="tab-profile">🏆 Profil</button>
     </div>
 
     <!-- ===== PLANNER TAB ===== -->
     <div id="panel-planner" class="tab-panel">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-4 space-y-6">
-                <!-- Pomodoro -->
-                <div class="glass-card p-6 rounded-2xl shadow-sm text-center relative overflow-hidden">
-                    <button onclick="togglePomoSettings()" class="absolute top-4 right-4 text-slate-400 hover:text-blue-500 transition">⚙️</button>
-                    <h2 class="text-xl font-semibold mb-2 dark:text-white flex items-center justify-center gap-2">⏱️ Pomodoro</h2>
-                    
-                    <!-- Subject Selector -->
-                    <select id="pomoSubjectSelect" class="w-full mb-4 p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:border-blue-500 transition-colors">
-                        <option value="">🎯 Choisir une matière...</option>
-                    </select>
-
-                    <p id="pomoStatus" class="text-sm text-slate-500 dark:text-slate-400 mb-2">Prêt à travailler ?</p>
-                    <div id="pomoTime" class="text-5xl font-bold text-blue-600 dark:text-blue-400 mb-6 font-mono">25:00</div>
-                    
-                    <!-- Settings Panel (Hidden by default) -->
-                    <div id="pomoSettingsPanel" class="hidden mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 text-left space-y-3">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-semibold dark:text-slate-300">Focus (min):</span>
-                            <input type="number" id="pomoFocusInput" value="25" min="1" max="90" class="w-16 p-1 rounded border border-slate-300 dark:bg-slate-900 text-center text-sm">
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-semibold dark:text-slate-300">Pause (min):</span>
-                            <input type="number" id="pomoBreakInput" value="5" min="1" max="30" class="w-16 p-1 rounded border border-slate-300 dark:bg-slate-900 text-center text-sm">
-                        </div>
-                        <button onclick="applyPomoSettings()" class="w-full py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition">Appliquer</button>
-                    </div>
-
-                    <div class="flex justify-center gap-3 mb-6">
-                        <button onclick="startPomodoro()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition">Démarrer</button>
-                        <button onclick="pausePomodoro()" class="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white px-4 py-2 rounded-lg font-medium transition">Pause</button>
-                        <button onclick="resetPomodoro()" class="bg-red-100 hover:bg-red-200 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-4 py-2 rounded-lg font-medium transition">Reset</button>
-                    </div>
-
-                    <!-- Ambient Sounds -->
-                    <div class="flex justify-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-700">
-                        <button onclick="setPomoSound(null)" class="sound-btn p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Aucun" id="sound-none">🔇</button>
-                        <button onclick="setPomoSound('rain')" class="sound-btn p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Pluie" id="sound-rain">🌧️</button>
-                        <button onclick="setPomoSound('forest')" class="sound-btn p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Forêt" id="sound-forest">🌲</button>
-                        <button onclick="setPomoSound('white')" class="sound-btn p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Bruit blanc" id="sound-white">💨</button>
-                        <button onclick="setPomoSound('lofi')" class="sound-btn p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Lo-fi" id="sound-lofi">🎹</button>
-                    </div>
-                </div>
                 <!-- Subject Config -->
-                <div class="glass-card p-6 rounded-2xl shadow-sm">
-                    <h2 class="text-xl font-semibold mb-4 dark:text-white">📚 Matières & Examens</h2>
-                    <div class="space-y-3 mb-6">
-                        <input type="text" id="subjectInput" placeholder="Nouvelle matière (ex: Droit civil)" class="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors">
+                <div class="glass-card p-5 md:p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-lg md:text-xl font-semibold mb-4 dark:text-white flex items-center justify-between">
+                        <span>📚 Matières & Examens</span>
+                    </h2>
+                    <div class="space-y-3 mb-4">
+                        <input type="text" id="subjectInput" placeholder="Nouvelle matière (ex: Droit civil)" class="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors text-sm">
                         <div class="flex items-center gap-2">
-                            <span class="text-sm dark:text-slate-300 w-1/3 font-medium">Date de l'examen:</span>
-                            <input type="date" id="subjectExamDate" class="w-2/3 p-2 border border-slate-200 dark:border-slate-700 rounded-lg outline-none dark:bg-slate-800 dark:text-white text-sm focus:border-blue-500 transition-colors">
+                            <span class="text-xs dark:text-slate-300 w-1/3 font-medium">Date examen:</span>
+                            <input type="date" id="subjectExamDate" class="w-2/3 p-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none dark:bg-slate-800 dark:text-white text-xs focus:border-blue-500 transition-colors">
                         </div>
                         <div class="flex items-center gap-2">
-                            <span class="text-sm dark:text-slate-300 w-1/3 font-medium">Poids (1-5):</span>
+                            <span class="text-xs dark:text-slate-300 w-1/3 font-medium">Poids (1-5):</span>
                             <input type="range" id="difficultyInput" min="1" max="5" value="3" class="w-2/3 accent-blue-500">
                         </div>
-                        <button onclick="addSubject()" class="w-full bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 py-2 rounded-lg font-semibold hover:opacity-90 transition-opacity mt-2">Ajouter à l'algorithme</button>
+                        <button onclick="addSubject()" class="w-full bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 py-2.5 rounded-xl text-xs font-semibold hover:opacity-90 transition-opacity mt-1">Ajouter à l'algorithme</button>
                     </div>
-                    <div id="subjectList" class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-2"></div>
+                    <div id="subjectList" class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1"></div>
                 </div>
                 <!-- Chart -->
-                <div class="glass-card p-6 rounded-2xl shadow-sm">
-                    <h2 class="text-sm uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold mb-4 text-center">Répartition de l'effort</h2>
+                <div class="glass-card p-5 rounded-2xl shadow-sm hidden md:block">
+                    <h2 class="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold mb-3 text-center">Répartition de l'effort</h2>
                     <div class="chart-container"><canvas id="distributionChart"></canvas></div>
                 </div>
             </div>
@@ -318,72 +288,58 @@
 
     <!-- ===== AI COACH TAB ===== -->
     <div id="panel-ai" class="tab-panel hidden">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
             <!-- Left: Quick actions -->
             <div class="lg:col-span-4 space-y-6">
-                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                <div class="glass-card p-5 md:p-6 rounded-2xl shadow-sm">
                     <h2 class="text-xl font-semibold mb-2 dark:text-white">🤖 Coach IA</h2>
-                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-5">Analyse ton planning et donne des conseils personnalisés basés sur tes matières, tes deadlines et ta progression.</p>
+                    <p class="text-xs md:text-sm text-slate-500 dark:text-slate-400 mb-4">Analyse ton planning et donne des conseils personnalisés basés sur tes matières, tes deadlines et ta progression.</p>
                     
-                    <div class="space-y-2 mb-5">
+                    <div class="space-y-2">
                         <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Suggestions rapides</p>
                         <button onclick="askAI('Analyse mon planning de révision et donne-moi 3 conseils concrets pour optimiser mon temps.')" 
-                            class="w-full text-left px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-sm font-medium transition border border-blue-100 dark:border-blue-800">
+                            class="w-full text-left px-3.5 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs md:text-sm font-medium transition border border-blue-100 dark:border-blue-800">
                             💡 Optimiser mon planning
                         </button>
                         <button onclick="askAI('Quelles matières devrais-je prioriser en urgence cette semaine ? Explique ton raisonnement.')"
-                            class="w-full text-left px-4 py-3 rounded-xl bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/40 text-orange-700 dark:text-orange-300 text-sm font-medium transition border border-orange-100 dark:border-orange-800">
+                            class="w-full text-left px-3.5 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/40 text-orange-700 dark:text-orange-300 text-xs md:text-sm font-medium transition border border-orange-100 dark:border-orange-800">
                             🎯 Quoi prioriser cette semaine ?
                         </button>
                         <button onclick="askAI('Donne-moi des techniques de mémorisation efficaces adaptées à mon profil de révision.')"
-                            class="w-full text-left px-4 py-3 rounded-xl bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 text-green-700 dark:text-green-300 text-sm font-medium transition border border-green-100 dark:border-green-800">
+                            class="w-full text-left px-3.5 py-2.5 rounded-xl bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 text-green-700 dark:text-green-300 text-xs md:text-sm font-medium transition border border-green-100 dark:border-green-800">
                             🧠 Techniques de mémorisation
                         </button>
                         <button onclick="askAI('Comment éviter la procrastination et rester motivé jusqu\'à mes examens ? Conseils pratiques.')"
-                            class="w-full text-left px-4 py-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-sm font-medium transition border border-purple-100 dark:border-purple-800">
+                            class="w-full text-left px-3.5 py-2.5 rounded-xl bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-xs md:text-sm font-medium transition border border-purple-100 dark:border-purple-800">
                             💪 Rester motivé
                         </button>
                         <button onclick="askAI('Évalue ma progression globale et dis-moi si je suis sur la bonne voie pour mes examens.')"
-                            class="w-full text-left px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium transition border border-slate-200 dark:border-slate-600">
+                            class="w-full text-left px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs md:text-sm font-medium transition border border-slate-200 dark:border-slate-600">
                             📊 Évaluer ma progression
                         </button>
-                    </div>
-
-                    <div class="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Statut Backend</p>
-                        <div class="flex items-center gap-2">
-                            <div class="w-2 h-2 rounded-full bg-green-500"></div>
-                            <p class="text-xs text-slate-400">Prêt pour Vercel (Sécurisé)</p>
-                        </div>
-                        <p class="text-[10px] text-slate-400 mt-2">La clé API est gérée côté serveur pour plus de sécurité.</p>
-                    </div>
-                </div>
-
-                <!-- Context Panel -->
-                <div class="glass-card p-5 rounded-2xl shadow-sm">
-                    <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-3">Contexte envoyé à l'IA</h3>
-                    <div id="aiContextDisplay" class="text-xs text-slate-600 dark:text-slate-400 space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
-                        <p class="italic">Ajoute des matières pour que l'IA ait du contexte.</p>
                     </div>
                 </div>
             </div>
 
             <!-- Right: Chat -->
             <div class="lg:col-span-8">
-                <div class="glass-card rounded-2xl shadow-sm flex flex-col" style="height: 680px;">
-                    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <div class="glass-card rounded-2xl shadow-sm flex flex-col" style="height: 580px;">
+                    <div class="p-4 md:p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                         <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">🤖</div>
+                            <div class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-base">🤖</div>
                             <div>
-                                <p class="font-semibold dark:text-white">Coach de Révision IA</p>
-                                <p class="text-xs text-green-500">● En ligne</p>
+                                <p class="font-semibold text-sm md:text-base dark:text-white">Coach de Révision IA</p>
+                                <p class="text-[10px] md:text-xs text-green-500">● En ligne</p>
                             </div>
                         </div>
-                        <button onclick="clearChat()" class="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">Effacer</button>
+                        <div class="flex items-center gap-2">
+                            <button onclick="toggleAiDebugModal()" class="text-xs bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-600 px-2.5 py-1 rounded-lg transition font-medium">⚙️ Context</button>
+                            <button onclick="clearChat()" class="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">Effacer</button>
+                        </div>
                     </div>
 
-                    <div id="chatMessages" class="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+                    <div id="chatMessages" class="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 custom-scrollbar">
                         <div class="ai-message">
                             <div class="flex gap-3 items-start">
                                 <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm shrink-0">🤖</div>
@@ -394,13 +350,13 @@
                         </div>
                     </div>
 
-                    <div class="p-4 border-t border-slate-200 dark:border-slate-700">
-                        <div class="flex gap-3">
-                            <input type="text" id="aiChatInput" placeholder="Pose une question à ton coach..." 
-                                class="flex-1 p-3 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:border-blue-500 transition text-sm"
+                    <div class="p-3 md:p-4 border-t border-slate-200 dark:border-slate-700">
+                        <div class="flex gap-2 md:gap-3">
+                            <input type="text" id="aiChatInput" placeholder="Pose une question..." 
+                                class="flex-1 p-2.5 md:p-3 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:border-blue-500 transition text-sm"
                                 onkeydown="if(event.key==='Enter') sendChatMessage()">
                             <button onclick="sendChatMessage()" id="sendBtn"
-                                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-semibold transition text-sm">
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 md:px-5 py-2.5 md:py-3 rounded-xl font-semibold transition text-xs md:text-sm">
                                 Envoyer
                             </button>
                         </div>
@@ -455,6 +411,122 @@
         </div>
     </div>
 </div>
+
+<!-- Floating Dockable Pomodoro Widget -->
+<div id="pomoFloatingWidget" class="fixed bottom-16 left-3 right-3 md:bottom-6 md:right-6 md:left-auto md:w-96 z-30 glass-card p-2.5 md:p-3 rounded-2xl shadow-xl border border-blue-500/30 backdrop-blur-xl transition-all duration-300">
+    <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+            <button onclick="togglePomoModal()" class="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 font-bold hover:scale-105 transition" title="Paramètres & Sons">
+                ⏱️
+            </button>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5">
+                    <span id="pomoFloatingTime" class="font-mono font-bold text-base md:text-lg text-blue-600 dark:text-blue-400 leading-none">25:00</span>
+                    <span id="pomoFloatingStatus" class="text-[10px] uppercase font-semibold tracking-wide text-slate-400 truncate">Prêt</span>
+                </div>
+                <select id="pomoSubjectSelect" class="w-full text-xs font-medium bg-transparent text-slate-700 dark:text-slate-200 outline-none truncate cursor-pointer" onchange="syncPomoSubject(this.value)">
+                    <option value="">🎯 Choisir une matière...</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-1 shrink-0">
+            <button onclick="startPomodoro()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-xl font-medium transition shadow-sm text-xs" title="Démarrer">▶️</button>
+            <button onclick="pausePomodoro()" class="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white p-2 rounded-xl font-medium transition text-xs" title="Pause">⏸️</button>
+            <button onclick="resetPomodoro()" class="bg-red-100 hover:bg-red-200 text-red-600 dark:bg-red-900/30 dark:text-red-400 p-2 rounded-xl font-medium transition text-xs" title="Réinitialiser">🔄</button>
+            <button onclick="togglePomoModal()" class="text-slate-400 hover:text-blue-500 p-1.5 rounded-lg text-xs" title="Réglages">⚙️</button>
+        </div>
+    </div>
+</div>
+
+<!-- Pomodoro Full Settings Modal -->
+<div id="pomoModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-700 relative text-center">
+        <button onclick="togglePomoModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl font-bold">✕</button>
+        <h3 class="font-bold text-xl mb-1 dark:text-white flex items-center justify-center gap-2">⏱️ Pomodoro</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Réglages du temps et ambiance sonore</p>
+
+        <div class="mb-4 text-center">
+            <div id="pomoModalTime" class="text-5xl font-bold text-blue-600 dark:text-blue-400 mb-2 font-mono">25:00</div>
+            <p id="pomoModalStatus" class="text-xs text-slate-500 dark:text-slate-400">Prêt à travailler ?</p>
+        </div>
+
+        <div class="space-y-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700/50 text-left mb-5">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold dark:text-slate-300">Temps Focus (min):</span>
+                <input type="number" id="pomoFocusInput" value="25" min="1" max="90" class="w-16 p-1.5 rounded-lg border border-slate-300 dark:bg-slate-800 text-center text-sm font-semibold dark:text-white outline-none">
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold dark:text-slate-300">Temps Pause (min):</span>
+                <input type="number" id="pomoBreakInput" value="5" min="1" max="30" class="w-16 p-1.5 rounded-lg border border-slate-300 dark:bg-slate-800 text-center text-sm font-semibold dark:text-white outline-none">
+            </div>
+            <button onclick="applyPomoSettings()" class="w-full py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition">Appliquer les durées</button>
+        </div>
+
+        <div class="mb-5">
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Ambiance sonore</p>
+            <div class="flex justify-center gap-3">
+                <button onclick="setPomoSound(null)" class="sound-btn p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-700" title="Aucun" id="sound-none">🔇</button>
+                <button onclick="setPomoSound('rain')" class="sound-btn p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-700" title="Pluie" id="sound-rain">🌧️</button>
+                <button onclick="setPomoSound('forest')" class="sound-btn p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-700" title="Forêt" id="sound-forest">🌲</button>
+                <button onclick="setPomoSound('white')" class="sound-btn p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-700" title="Bruit blanc" id="sound-white">💨</button>
+                <button onclick="setPomoSound('lofi')" class="sound-btn p-2.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-700" title="Lo-fi" id="sound-lofi">🎹</button>
+            </div>
+        </div>
+
+        <button onclick="togglePomoModal()" class="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 font-semibold text-sm text-slate-700 dark:text-slate-200 hover:opacity-90 transition">Fermer</button>
+    </div>
+</div>
+
+<!-- AI Debug & Context Modal -->
+<div id="aiDebugModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-700 relative space-y-4">
+        <div class="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-700">
+            <h3 class="font-bold text-lg dark:text-white">⚙️ Configuration & Contexte IA</h3>
+            <button onclick="toggleAiDebugModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+        </div>
+
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Statut Backend</p>
+            <div class="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div class="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
+                <div>
+                    <p class="text-xs font-medium text-slate-700 dark:text-slate-200">Prêt pour Vercel (Sécurisé)</p>
+                    <p class="text-[10px] text-slate-400">La clé API est gérée côté serveur pour plus de sécurité.</p>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Contexte transmis à l'IA</p>
+            <div id="aiContextDisplay" class="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-400 space-y-1 max-h-52 overflow-y-auto custom-scrollbar font-mono">
+                <p class="italic">Ajoute des matières pour que l'IA ait du contexte.</p>
+            </div>
+        </div>
+
+        <button onclick="toggleAiDebugModal()" class="w-full py-2 bg-slate-200 dark:bg-slate-700 rounded-xl font-semibold text-sm text-slate-800 dark:text-white">Fermer</button>
+    </div>
+</div>
+
+<!-- Bottom Navigation Bar (Mobile Ergonomics) -->
+<nav id="bottomNav" class="fixed bottom-0 left-0 right-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 shadow-lg px-2 py-1.5 flex justify-around items-center md:hidden">
+    <button onclick="switchMainTab('planner')" class="bottom-tab-btn tab-planner active flex flex-col items-center justify-center py-1 px-3 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400">
+        <span class="text-xl">📅</span>
+        <span class="text-[10px] font-semibold tracking-tight">Planning</span>
+    </button>
+    <button onclick="switchMainTab('analytics')" class="bottom-tab-btn tab-analytics flex flex-col items-center justify-center py-1 px-3 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400">
+        <span class="text-xl">📊</span>
+        <span class="text-[10px] font-semibold tracking-tight">Analytique</span>
+    </button>
+    <button onclick="switchMainTab('ai')" class="bottom-tab-btn tab-ai flex flex-col items-center justify-center py-1 px-3 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400">
+        <span class="text-xl">🤖</span>
+        <span class="text-[10px] font-semibold tracking-tight">Coach IA</span>
+    </button>
+    <button onclick="switchMainTab('profile')" class="bottom-tab-btn tab-profile flex flex-col items-center justify-center py-1 px-3 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400">
+        <span class="text-xl">🏆</span>
+        <span class="text-[10px] font-semibold tracking-tight">Profil</span>
+    </button>
+</nav>
 
 <!-- Notification -->
 <div id="notifModal" class="hidden fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 transition-opacity">
@@ -530,9 +602,10 @@ function getLocalDateString(dateObj) {
 // --- Tab Switching ---
 window.switchMainTab = function(tab) {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('panel-' + tab).classList.remove('hidden');
-    document.getElementById('tab-' + tab).classList.add('active');
+    document.querySelectorAll('.tab-btn, .bottom-tab-btn').forEach(b => b.classList.remove('active'));
+    const panel = document.getElementById('panel-' + tab);
+    if(panel) panel.classList.remove('hidden');
+    document.querySelectorAll('.tab-' + tab).forEach(b => b.classList.add('active'));
     if (tab === 'analytics') renderAnalytics();
     if (tab === 'ai') updateAIContext();
 }
@@ -631,7 +704,9 @@ function loadDataFromLocal() {
             if (!window.gamification.subjectPomoStats) window.gamification.subjectPomoStats = {};
             if (data.isDarkMode) {
                 document.documentElement.classList.add('dark');
-                document.getElementById('themeIcon').innerText = '☀️';
+                const icon = '☀️';
+                if(document.getElementById('themeIcon')) document.getElementById('themeIcon').innerText = icon;
+                if(document.getElementById('themeIconMobile')) document.getElementById('themeIconMobile').innerText = icon;
             }
             // Restore chat messages
             if (window.chatHistory.length > 0) {
@@ -648,7 +723,10 @@ function loadDataFromLocal() {
 // --- Theme ---
 window.toggleTheme = function() {
     document.documentElement.classList.toggle('dark');
-    document.getElementById('themeIcon').innerText = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+    const isDark = document.documentElement.classList.contains('dark');
+    const icon = isDark ? '☀️' : '🌙';
+    if(document.getElementById('themeIcon')) document.getElementById('themeIcon').innerText = icon;
+    if(document.getElementById('themeIconMobile')) document.getElementById('themeIconMobile').innerText = icon;
     renderChart(); renderAnalytics(); window.saveDataToLocal();
 }
 
@@ -916,28 +994,28 @@ function renderCalendar() {
     for(let i=0;i<7;i++) {
         let d=new Date(window.currentWeekStart); d.setDate(d.getDate()+i);
         let dateStr=getLocalDateString(d), isToday=dateStr===todayStr;
-        let borderClass = isToday ? "border-blue-500 border-2" : "border-slate-200 dark:border-slate-600 border-t-4";
+        let borderClass = isToday ? "border-blue-500 border-2 bg-blue-50/20 dark:bg-blue-950/20" : "border-slate-200 dark:border-slate-700 border-t-2";
         const dayCard = document.createElement('div');
-        dayCard.className=`day-card glass-card p-5 rounded-2xl shadow-sm transition-colors ${borderClass}`;
+        dayCard.className=`day-card glass-card p-3.5 md:p-4 rounded-2xl shadow-sm transition-colors ${borderClass}`;
         dayCard.setAttribute('ondragover','handleDragOver(event)'); dayCard.setAttribute('ondragleave','handleDragLeave(event)'); dayCard.setAttribute('ondrop',`handleDrop(event,'${dateStr}')`);
         const sessions = window.scheduleData[dateStr]||[];
-        let html=`<h3 class="font-bold text-lg mb-4 flex justify-between items-center dark:text-white ${isToday?'text-blue-600 dark:text-blue-400':''}">${DAYS[i]} ${d.getDate()} <span class="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-slate-500 dark:text-slate-300 font-normal">${sessions.length} sess.</span></h3><div class="space-y-3 min-h-[50px]">`;
+        let html=`<h3 class="font-bold text-sm md:text-base mb-3 flex justify-between items-center dark:text-white ${isToday?'text-blue-600 dark:text-blue-400':''}">${DAYS[i]} ${d.getDate()} <span class="text-[10px] md:text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500 dark:text-slate-400 font-semibold">${sessions.length} sess.</span></h3><div class="space-y-2 min-h-[40px]">`;
         sessions.forEach((session,si) => {
             const subject=window.subjects.find(s=>s.id===session.subjectId)||{name:"Supprimé",color:"#ccc"};
             const checked=session.isCompleted;
             html+=`<div draggable="true" ondragstart="handleDragStart(event,'${dateStr}',${si})" ondragend="handleDragEnd(event)"
-                class="flex items-center p-3 rounded-xl border transition-all cursor-pointer group ${checked?'bg-blue-50/60 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800':'border-slate-100 dark:border-slate-700 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800'}" onclick="toggleSession('${dateStr}',${si})">
-                <div class="w-2 h-10 rounded-full mr-3 shrink-0" style="background-color:${subject.color}"></div>
+                class="flex items-center p-2.5 rounded-xl border transition-all cursor-pointer group ${checked?'bg-blue-50/70 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800/60':'border-slate-100 dark:border-slate-700/80 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800'}" onclick="toggleSession('${dateStr}',${si})">
+                <div class="w-1.5 h-8 rounded-full mr-2.5 shrink-0" style="background-color:${subject.color}"></div>
                 <div class="flex-grow min-w-0">
-                    <span class="block text-sm font-semibold truncate dark:text-slate-100 ${checked?'line-through opacity-60':''}">${subject.name}</span>
-                    <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <span class="block text-xs md:text-sm font-semibold truncate dark:text-slate-100 ${checked?'line-through opacity-60':''}">${subject.name}</span>
+                    <div class="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-400">
                         <span class="truncate">${session.note}</span>
-                        <button onclick="openEditModal('${dateStr}',${si},event)" class="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-blue-500" title="Modifier">✏️</button>
-                        <button onclick="deleteSession('${dateStr}',${si},event)" class="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-red-500" title="Supprimer">🗑️</button>
+                        <button onclick="openEditModal('${dateStr}',${si},event)" class="opacity-70 md:opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-blue-500" title="Modifier">✏️</button>
+                        <button onclick="deleteSession('${dateStr}',${si},event)" class="opacity-70 md:opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-red-500" title="Supprimer">🗑️</button>
                     </div>
                 </div>
-                <div class="w-6 h-6 border-2 rounded-full flex items-center justify-center shrink-0 ml-2 transition-colors ${checked?'bg-blue-100 dark:bg-blue-800 border-blue-300 dark:border-blue-600':'border-slate-200 dark:border-slate-600'}">
-                    <span class="${checked?'':'hidden'} text-blue-600 dark:text-blue-400 text-xs font-bold">✓</span>
+                <div class="w-5 h-5 border-2 rounded-full flex items-center justify-center shrink-0 ml-1.5 transition-colors ${checked?'bg-blue-600 border-blue-600 text-white':'border-slate-300 dark:border-slate-600'}">
+                    <span class="${checked?'':'hidden'} text-[10px] font-bold">✓</span>
                 </div>
             </div>`;
         });
@@ -1340,9 +1418,38 @@ window.clearChat = function() {
     window.saveDataToLocal();
 }
 
+// --- Modals & Widgets ---
+window.togglePomoModal = function() {
+    const m = document.getElementById('pomoModal');
+    if(m) m.classList.toggle('hidden');
+}
+
+window.toggleAiDebugModal = function() {
+    const m = document.getElementById('aiDebugModal');
+    if(m) m.classList.toggle('hidden');
+}
+
+window.syncPomoSubject = function(val) {
+    window.gamification.currentPomoSubject = val;
+    window.saveDataToLocal();
+}
+
+function updatePomoStatusText(text) {
+    ['pomoStatus', 'pomoFloatingStatus', 'pomoModalStatus'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.innerText = text;
+    });
+}
+
 // --- Pomodoro ---
 let pomoInterval=null, pomoTimeLeft=25*60, isPomoBreak=false;
-function updatePomoDisplay() { document.getElementById('pomoTime').innerText=`${String(Math.floor(pomoTimeLeft/60)).padStart(2,'0')}:${String(pomoTimeLeft%60).padStart(2,'0')}`; }
+function updatePomoDisplay() {
+    const formatted = `${String(Math.floor(pomoTimeLeft/60)).padStart(2,'0')}:${String(pomoTimeLeft%60).padStart(2,'0')}`;
+    ['pomoTime', 'pomoFloatingTime', 'pomoModalTime'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.innerText = formatted;
+    });
+}
 
 function savePomoState() {
     localStorage.setItem('pomoState', JSON.stringify({
@@ -1354,7 +1461,8 @@ function savePomoState() {
 
 window.startPomodoro=function() { 
     if(pomoInterval) return; 
-    document.getElementById('pomoStatus').innerText=isPomoBreak?"☕ Pause":"🧠 Concentration"; 
+    const statusText = isPomoBreak ? "☕ Pause" : "🧠 Focus";
+    updatePomoStatusText(statusText); 
     savePomoState();
     
     // Play sound
@@ -1376,7 +1484,8 @@ window.startPomodoro=function() {
                 window.gamification.pomodorosCompleted++; 
                 addXP(15,'Pomodoro terminé'); 
                 // Track subject stat
-                const subId = document.getElementById('pomoSubjectSelect').value;
+                const selectEl = document.getElementById('pomoSubjectSelect');
+                const subId = selectEl ? selectEl.value : '';
                 if(subId) {
                     window.gamification.subjectPomoStats[subId] = (window.gamification.subjectPomoStats[subId] || 0) + 1;
                 }
@@ -1392,7 +1501,7 @@ window.startPomodoro=function() {
             showNotification(msg,isPomoBreak?"☕":"💪",isPomoBreak?"bg-indigo-500":"bg-blue-600");
             sendSystemNotification(msg);
             updatePomoDisplay();
-            document.getElementById('pomoStatus').innerText="En attente...";
+            updatePomoStatusText("En attente...");
             savePomoState();
         }
     },1000); 
@@ -1402,7 +1511,7 @@ window.pausePomodoro=function() {
     clearInterval(pomoInterval);
     pomoInterval=null;
     document.getElementById('pomoAudio').pause();
-    document.getElementById('pomoStatus').innerText="⏸️ En pause"; 
+    updatePomoStatusText("⏸️ En pause"); 
     savePomoState();
 }
 
@@ -1413,7 +1522,7 @@ window.resetPomodoro=function() {
     isPomoBreak=false;
     pomoTimeLeft = window.gamification.pomoSettings.focus * 60;
     updatePomoDisplay();
-    document.getElementById('pomoStatus').innerText="Prêt ?"; 
+    updatePomoStatusText("Prêt"); 
     localStorage.removeItem('pomoState');
 }
 
@@ -1443,8 +1552,7 @@ function loadPomoState() {
 }
 
 window.togglePomoSettings = function() {
-    const p = document.getElementById('pomoSettingsPanel');
-    p.classList.toggle('hidden');
+    togglePomoModal();
 }
 
 window.applyPomoSettings = function() {
@@ -1459,7 +1567,8 @@ window.applyPomoSettings = function() {
             updatePomoDisplay();
         }
         window.saveDataToLocal();
-        togglePomoSettings();
+        const modal = document.getElementById('pomoModal');
+        if(modal) modal.classList.add('hidden');
         showNotification('Réglages appliqués !', '⚙️', 'bg-blue-500');
     }
 }

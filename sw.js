@@ -1,4 +1,4 @@
-const CACHE_NAME = 'revision-planner-v3';
+const CACHE_NAME = 'revision-planner-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -35,29 +35,37 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// Fetch : Cache First, Network Fallback
+// Fetch : Network First for navigation, Cache First for static assets
 self.addEventListener('fetch', event => {
   // Ne pas cacher les appels API
   if (event.request.url.includes('/api/')) {
     return event.respondWith(fetch(event.request));
   }
 
+  // Network-First for HTML/Navigation so updates apply automatically
+  if (event.request.mode === 'navigate' || event.request.url.endsWith('/index.html') || event.request.url.endsWith('/')) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        if (response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(event.request) || caches.match('/index.html'))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
       return fetch(event.request).then(response => {
-        // Mettre en cache les nouvelles ressources
         if (response.status === 200) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         }
         return response;
       });
-    }).catch(() => {
-      // Fallback hors-ligne
-      if (event.request.mode === 'navigate') {
-        return caches.match('/index.html');
-      }
-    })
+    }).catch(() => caches.match('/index.html'))
   );
 });
