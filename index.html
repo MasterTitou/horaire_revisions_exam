@@ -67,37 +67,37 @@
         /* ── BACKGROUND GEOMETRIC BLOBS ── */
         .bg-blob-purple {
             position: fixed;
-            top: -60px;
-            right: -40px;
-            width: 320px;
-            height: 280px;
+            top: -40px;
+            right: -30px;
+            width: 340px;
+            height: 300px;
             background: #E4D7F5;
             border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
-            z-index: 0;
+            z-index: -1;
             pointer-events: none;
         }
 
         .bg-blob-orange {
             position: fixed;
-            bottom: -80px;
-            right: -60px;
-            width: 380px;
-            height: 380px;
+            bottom: -60px;
+            right: -40px;
+            width: 400px;
+            height: 400px;
             background: #FDE2D6;
             border-radius: 60% 40% 30% 70% / 50% 60% 40% 50%;
-            z-index: 0;
+            z-index: -1;
             pointer-events: none;
         }
 
         .bg-blob-teal {
             position: fixed;
-            top: 140px;
-            left: -80px;
-            width: 280px;
-            height: 280px;
+            top: 120px;
+            left: -60px;
+            width: 300px;
+            height: 300px;
             background: #D8F2EC;
             border-radius: 50% 50% 40% 60% / 60% 40% 60% 40%;
-            z-index: 0;
+            z-index: -1;
             pointer-events: none;
         }
 
@@ -363,7 +363,7 @@
 </div>
 
 <!-- ========== APP ========== -->
-<div id="appContainer" class="max-w-7xl mx-auto px-3 md:px-6 pt-4 md:pt-8 pb-28 md:pb-10" style="display:none">
+<div id="appContainer" class="relative z-10 max-w-7xl mx-auto px-3 md:px-6 pt-4 md:pt-8 pb-28 md:pb-10" style="display:none">
 
     <!-- HEADER -->
     <header class="mb-5 md:mb-7 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
