@@ -529,26 +529,6 @@
                     </div>
                 </div>
 
-                <!-- Pomodoro Minuteur Card (matching mockup widget) -->
-                <div class="card p-4 md:p-5 flex items-center justify-between gap-3" style="border-radius: 22px; border-left: 5px solid var(--terra)">
-                    <div class="flex flex-col min-w-0">
-                        <span class="text-xs font-extrabold text-muted">Pomodoro minuteur - Session en cours</span>
-                        <div class="flex items-center gap-2 mt-1">
-                            <span id="pomoTimeInline" class="text-2xl font-black font-mono tracking-tight" style="color: var(--terra)">25:00</span>
-                            <span id="pomoStatusInline" class="text-xs font-bold px-2.5 py-0.5 rounded-full" style="background: var(--terra-l); color: var(--terra)">Prêt</span>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2 shrink-0">
-                        <button onclick="togglePlayPausePomodoro()" id="pomoPlayPauseBtnInline" class="w-11 h-11 rounded-full text-white flex items-center justify-center text-lg shadow-sm hover:scale-105 active:scale-95 transition-all" style="background: linear-gradient(135deg, #FF6B35, #FF3D00);" title="Démarrer / Pause">
-                            ▶
-                        </button>
-                        <button onclick="resetPomodoro()" class="w-10 h-10 rounded-full card flex items-center justify-center text-base hover:scale-105 transition-transform" title="Réinitialiser">
-                            ↻
-                        </button>
-                        <button onclick="togglePomoModal()" class="w-10 h-10 rounded-full card flex items-center justify-center text-sm hover:scale-105 transition-transform" title="Réglages">
-                            ✕
-                        </button>
-                    </div>
                 </div>
 
             </div>
@@ -765,14 +745,14 @@
     <button id="pomoTabHandle" onclick="togglePomoDock()"
         class="absolute left-0 -translate-x-full text-white py-3 px-2.5 rounded-l-2xl shadow-2xl flex flex-col items-center gap-1"
         style="background:linear-gradient(180deg,var(--terra),var(--terra-d));border:1px solid rgba(255,255,255,.15);border-right:none">
-        <span class="text-base">⏱</span>
+        <span class="text-base">🍅</span>
         <span id="pomoHandleTime" class="font-mono text-[10px] font-black leading-none">25:00</span>
         <span id="pomoHandleArrow" class="text-[10px] font-black">◀</span>
     </button>
     <div id="pomoDockBody" class="card p-4 flex flex-col gap-3 w-72 md:w-80" style="border-radius:22px 0 0 22px;border-right:none">
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-                <span class="text-lg">⏱</span>
+                <span class="text-lg">🍅</span>
                 <div>
                     <span id="pomoFloatingTime" class="font-mono font-black text-xl leading-none" style="color:var(--terra)">25:00</span>
                     <span id="pomoFloatingStatus" class="text-[10px] uppercase font-black tracking-wider ml-2" style="color:var(--muted)">Prêt</span>
