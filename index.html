@@ -377,9 +377,7 @@
                 </button>
             </div>
             <div class="flex items-center gap-2 text-xs font-bold" style="color:var(--muted)">
-                <span id="syncIndicator" class="hidden">☁️ Synchronisé</span>
-                <span id="syncDot">•</span>
-                <span id="headerTaskCount">5 tâches à venir</span>
+                <span id="syncIndicator">Synchronisé</span>
             </div>
         </div>
 
@@ -1265,14 +1263,6 @@ window.updateUI = function() {
     
     const streakEl = document.getElementById('streakCount');
     if(streakEl) streakEl.innerText = `${window.streak.count} j Série`;
-    
-    // Count upcoming tasks
-    let upcomingCount = 0;
-    Object.values(window.scheduleData).forEach(sessions => {
-        sessions.forEach(s => { if(!s.isCompleted) upcomingCount++; });
-    });
-    const taskCountEl = document.getElementById('headerTaskCount');
-    if(taskCountEl) taskCountEl.innerText = `${upcomingCount} tâche${upcomingCount > 1 ? 's' : ''} à venir`;
 }
 
 function renderCalendar(){
