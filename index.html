@@ -524,23 +524,23 @@
     </div>
 </div>
 
-<!-- Bottom Navigation Bar (iPhone 11 & Mobile Ergonomics Standard) -->
-<nav id="bottomNav" class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800 shadow-2xl px-3 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,12px))] flex justify-around items-center md:hidden">
-    <button onclick="switchMainTab('planner')" class="bottom-tab-btn tab-planner active flex flex-col items-center justify-center py-1 px-4 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all">
-        <span class="text-2xl mb-0.5">📅</span>
-        <span class="text-xs font-semibold tracking-tight">Planning</span>
+<!-- Bottom Navigation Bar (Floating Capsule Pill Standard) -->
+<nav id="bottomNav" class="fixed bottom-3 left-4 right-4 max-w-sm mx-auto z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-stone-200/80 dark:border-slate-800 shadow-2xl rounded-full px-2 py-1.5 flex justify-around items-center md:hidden">
+    <button onclick="switchMainTab('planner')" class="bottom-tab-btn tab-planner active flex flex-col items-center justify-center py-1.5 px-3 text-stone-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-all">
+        <span class="text-xl mb-0.5">📅</span>
+        <span class="text-[11px] font-semibold tracking-tight">Planning</span>
     </button>
-    <button onclick="switchMainTab('analytics')" class="bottom-tab-btn tab-analytics flex flex-col items-center justify-center py-1 px-4 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all">
-        <span class="text-2xl mb-0.5">📊</span>
-        <span class="text-xs font-semibold tracking-tight">Analytique</span>
+    <button onclick="switchMainTab('analytics')" class="bottom-tab-btn tab-analytics flex flex-col items-center justify-center py-1.5 px-3 text-stone-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-all">
+        <span class="text-xl mb-0.5">📊</span>
+        <span class="text-[11px] font-semibold tracking-tight">Analytique</span>
     </button>
-    <button onclick="switchMainTab('ai')" class="bottom-tab-btn tab-ai flex flex-col items-center justify-center py-1 px-4 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all">
-        <span class="text-2xl mb-0.5">🤖</span>
-        <span class="text-xs font-semibold tracking-tight">Coach IA</span>
+    <button onclick="switchMainTab('ai')" class="bottom-tab-btn tab-ai flex flex-col items-center justify-center py-1.5 px-3 text-stone-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-all">
+        <span class="text-xl mb-0.5">🤖</span>
+        <span class="text-[11px] font-semibold tracking-tight">Coach IA</span>
     </button>
-    <button onclick="switchMainTab('profile')" class="bottom-tab-btn tab-profile flex flex-col items-center justify-center py-1 px-4 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all">
-        <span class="text-2xl mb-0.5">🏆</span>
-        <span class="text-xs font-semibold tracking-tight">Profil</span>
+    <button onclick="switchMainTab('profile')" class="bottom-tab-btn tab-profile flex flex-col items-center justify-center py-1.5 px-3 text-stone-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-all">
+        <span class="text-xl mb-0.5">🏆</span>
+        <span class="text-[11px] font-semibold tracking-tight">Profil</span>
     </button>
 </nav>
 
@@ -1025,20 +1025,36 @@ function renderCalendar() {
         let dateStr=getLocalDateString(d), isToday=dateStr===todayStr;
         let borderClass = isToday ? "border-amber-500 border-2 bg-amber-500/10 dark:bg-amber-500/15 shadow-md shadow-amber-500/10" : "border-stone-200/80 dark:border-slate-700/80 border-t-2";
         const dayCard = document.createElement('div');
-        dayCard.className=`day-card glass-card p-3.5 md:p-4 rounded-3xl shadow-sm transition-all ${borderClass}`;
+        dayCard.className=`day-card glass-card p-4 rounded-3xl shadow-sm transition-all ${borderClass}`;
         dayCard.setAttribute('ondragover','handleDragOver(event)'); dayCard.setAttribute('ondragleave','handleDragLeave(event)'); dayCard.setAttribute('ondrop',`handleDrop(event,'${dateStr}')`);
         const sessions = window.scheduleData[dateStr]||[];
-        let html=`<h3 class="font-bold text-sm md:text-base mb-3 flex justify-between items-center dark:text-white ${isToday?'text-amber-600 dark:text-amber-400':''}">${DAYS[i]} ${d.getDate()} <span class="text-[10px] md:text-xs bg-stone-100 dark:bg-slate-800/80 px-2.5 py-0.5 rounded-full text-stone-500 dark:text-slate-400 font-bold border border-stone-200/50 dark:border-slate-700/50">${sessions.length} sess.</span></h3><div class="space-y-2 min-h-[40px]">`;
+        const completedCount = sessions.filter(s=>s.isCompleted).length;
+        const isDoneAll = sessions.length > 0 && completedCount === sessions.length;
+        
+        let badgeStyle = isDoneAll 
+            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" 
+            : "bg-stone-100 dark:bg-slate-800/80 text-stone-500 dark:text-slate-400 border-stone-200/50 dark:border-slate-700/50";
+
+        let html=`<div class="flex justify-between items-center mb-3">
+            <h3 class="font-bold text-sm md:text-base dark:text-white ${isToday?'text-amber-600 dark:text-amber-400':''}">${DAYS[i]} ${d.getDate()}</h3>
+            <span class="text-[10px] md:text-xs px-2.5 py-0.5 rounded-full font-bold border ${badgeStyle}">${completedCount}/${sessions.length} fait</span>
+        </div><div class="space-y-2 min-h-[40px]">`;
+
         sessions.forEach((session,si) => {
             const subject=window.subjects.find(s=>s.id===session.subjectId)||{name:"Supprimé",color:"#ccc"};
             const checked=session.isCompleted;
+            let noteLabel = session.note || "";
+            if (noteLabel.includes("Matin")) noteLabel = "☀️ Matin";
+            else if (noteLabel.includes("Après-midi")) noteLabel = "⛅ Après-midi";
+            else if (noteLabel.includes("Soir")) noteLabel = "🌙 Soir";
+
             html+=`<div draggable="true" ondragstart="handleDragStart(event,'${dateStr}',${si})" ondragend="handleDragEnd(event)"
                 class="flex items-center p-2.5 rounded-2xl border transition-all cursor-pointer group ${checked?'bg-amber-500/10 dark:bg-amber-500/15 border-amber-500/30':'border-stone-100 dark:border-slate-700/60 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800'}" onclick="toggleSession('${dateStr}',${si})">
                 <div class="w-1.5 h-8 rounded-full mr-2.5 shrink-0 shadow-sm" style="background-color:${subject.color}"></div>
                 <div class="flex-grow min-w-0">
                     <span class="block text-xs md:text-sm font-semibold truncate dark:text-slate-100 ${checked?'line-through opacity-60':''}">${subject.name}</span>
                     <div class="flex items-center gap-1.5 text-[11px] text-stone-400 dark:text-slate-400 font-medium">
-                        <span class="truncate">${session.note}</span>
+                        <span class="truncate font-semibold">${noteLabel}</span>
                         <button onclick="openEditModal('${dateStr}',${si},event)" class="opacity-70 md:opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-amber-500" title="Modifier">✏️</button>
                         <button onclick="deleteSession('${dateStr}',${si},event)" class="opacity-70 md:opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-red-500" title="Supprimer">🗑️</button>
                     </div>
