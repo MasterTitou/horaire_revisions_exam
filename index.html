@@ -64,6 +64,11 @@
             transition: background 0.35s ease, color 0.25s ease;
         }
 
+        /* ── SAFE AREA FOR IPHONE (NOTCH & STATUS BAR) ── */
+        #appContainer {
+            padding-top: calc(env(safe-area-inset-top, 20px) + 0.75rem) !important;
+        }
+
         /* ── ORGANIC SOFT MESH GRADIENT BLOBS ── */
         .bg-blob-purple {
             position: fixed;
