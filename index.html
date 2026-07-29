@@ -56,7 +56,7 @@
 
         body {
             font-family: 'Nunito', sans-serif;
-            background-color: #F2F8F6;
+            background-color: #F6F8F9;
             color: var(--text);
             min-height: 100vh;
             position: relative;
@@ -64,40 +64,49 @@
             transition: background 0.35s ease, color 0.25s ease;
         }
 
-        /* ── BACKGROUND GEOMETRIC BLOBS ── */
+        /* ── ORGANIC SOFT MESH GRADIENT BLOBS ── */
         .bg-blob-purple {
             position: fixed;
-            top: -40px;
-            right: -30px;
-            width: 340px;
-            height: 300px;
-            background: #E4D7F5;
+            top: -5%;
+            right: -10%;
+            width: 60vw;
+            max-width: 650px;
+            height: 25vh;
+            min-height: 250px;
+            background: #E6E0F3;
             border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
-            z-index: -1;
-            pointer-events: none;
-        }
-
-        .bg-blob-orange {
-            position: fixed;
-            bottom: -60px;
-            right: -40px;
-            width: 400px;
-            height: 400px;
-            background: #FDE2D6;
-            border-radius: 60% 40% 30% 70% / 50% 60% 40% 50%;
-            z-index: -1;
+            filter: blur(30px);
+            z-index: 0;
             pointer-events: none;
         }
 
         .bg-blob-teal {
             position: fixed;
-            top: 120px;
-            left: -60px;
-            width: 300px;
-            height: 300px;
-            background: #D8F2EC;
+            top: -2%;
+            left: -5%;
+            width: 50vw;
+            max-width: 550px;
+            height: 15vh;
+            min-height: 180px;
+            background: #E1F5EE;
             border-radius: 50% 50% 40% 60% / 60% 40% 60% 40%;
-            z-index: -1;
+            filter: blur(30px);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .bg-blob-orange {
+            position: fixed;
+            bottom: 10%;
+            right: -15%;
+            width: 70vw;
+            max-width: 750px;
+            height: 40vh;
+            min-height: 380px;
+            background: #FCE5D8;
+            border-radius: 60% 40% 30% 70% / 50% 60% 40% 50%;
+            filter: blur(30px);
+            z-index: 0;
             pointer-events: none;
         }
 
@@ -108,13 +117,18 @@
         .dark .bg-blob-orange { background: rgba(255, 107, 53, 0.15); }
         .dark .bg-blob-teal { background: rgba(14, 132, 120, 0.15); }
 
-        /* ── CARDS ── */
+        /* ── UI CARDS (Superposées z-index 1) ── */
         .card {
-            background: var(--bg-card);
+            background: #FFFFFF;
             border: 1px solid var(--border);
             border-radius: 24px;
-            box-shadow: 0 8px 28px var(--shadow), 0 2px 6px rgba(0,0,0,0.02);
+            box-shadow: 0px 10px 25px rgba(0, 0, 0, 0.035);
+            position: relative;
+            z-index: 1;
             transition: all 0.25s ease;
+        }
+        .dark .card {
+            background: var(--bg-card);
         }
         .card-hover:hover {
             box-shadow: 0 14px 35px var(--shadow), 0 4px 12px rgba(0,0,0,0.04);
