@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#c96a3a">
+    <meta name="theme-color" content="#0E8478">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="Mon assistant de révision – planifie, concentre-toi et maintiens ta série !">
@@ -13,45 +13,55 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700;800;900;1000&display=swap');
 
         :root {
-            --bg:        #fdf8f0;
-            --bg-card:   rgba(255,255,255,0.94);
-            --border:    rgba(200,178,148,0.6);
-            --shadow:    rgba(160,110,70,0.10);
-            --text:      #2d2010;
-            --muted:     #8a7256;
-            --terra:     #c96a3a;
-            --terra-d:   #a85428;
-            --terra-l:   rgba(201,106,58,0.12);
-            --terra-l2:  rgba(201,106,58,0.06);
-            --sage:      #4d8944;
-            --sage-l:    rgba(77,137,68,0.12);
-            --plum:      #7c3f97;
-            --plum-l:    rgba(124,63,151,0.12);
-            --gold:      #b88a2d;
-            --gold-l:    rgba(184,138,45,0.12);
+            --bg:        #F4F8F6;
+            --bg-card:   #FFFFFF;
+            --border:    rgba(215, 232, 227, 0.85);
+            --shadow:    rgba(15, 56, 52, 0.05);
+            --text:      #0F3834;
+            --muted:     #5C7C77;
+            --terra:     #0E8478;
+            --terra-d:   #0A6B61;
+            --terra-l:   #E8F5F2;
+            --terra-l2:  #F0F8F6;
+            --sage:      #2E7D32;
+            --sage-l:    #E8F6ED;
+            --plum:      #6B46C1;
+            --plum-l:    #F3E8FF;
+            --gold:      #FF6B35;
+            --gold-l:    #FFF0EB;
         }
         .dark {
-            --bg:        #1a1309;
-            --bg-card:   rgba(35,25,12,0.95);
-            --border:    rgba(90,65,35,0.5);
-            --shadow:    rgba(0,0,0,0.4);
-            --text:      #ede4d4;
-            --muted:     #9a8464;
-            --terra-l:   rgba(201,106,58,0.14);
-            --terra-l2:  rgba(201,106,58,0.07);
-            --sage-l:    rgba(77,137,68,0.14);
-            --plum-l:    rgba(124,63,151,0.14);
-            --gold-l:    rgba(184,138,45,0.14);
+            --bg:        #0B1615;
+            --bg-card:   #122421;
+            --border:    rgba(35, 75, 70, 0.6);
+            --shadow:    rgba(0, 0, 0, 0.35);
+            --text:      #E2F5F2;
+            --muted:     #7B9C97;
+            --terra:     #14B8A6;
+            --terra-d:   #0F9688;
+            --terra-l:   rgba(20, 184, 166, 0.15);
+            --terra-l2:  rgba(20, 184, 166, 0.08);
+            --sage:      #4ADE80;
+            --sage-l:    rgba(74, 222, 128, 0.15);
+            --plum:      #A78BFA;
+            --plum-l:    rgba(167, 139, 250, 0.15);
+            --gold:      #FF8C42;
+            --gold-l:    rgba(255, 140, 66, 0.15);
         }
 
         *, *::before, *::after { box-sizing: border-box; }
 
         body {
             font-family: 'Nunito', sans-serif;
-            background: var(--bg);
+            background: 
+                radial-gradient(circle at 90% 5%, rgba(220, 205, 246, 0.55) 0%, transparent 40%),
+                radial-gradient(circle at 98% 85%, rgba(255, 218, 202, 0.6) 0%, transparent 42%),
+                radial-gradient(circle at 5% 20%, rgba(210, 243, 238, 0.45) 0%, transparent 35%),
+                var(--bg);
+            background-attachment: fixed;
             color: var(--text);
             min-height: 100vh;
             transition: background 0.35s ease, color 0.25s ease;
@@ -61,83 +71,177 @@
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border);
-            border-radius: 22px;
-            box-shadow: 0 2px 18px var(--shadow), 0 1px 3px rgba(0,0,0,0.04);
-            transition: box-shadow 0.2s ease;
+            border-radius: 24px;
+            box-shadow: 0 10px 30px var(--shadow), 0 2px 8px rgba(0,0,0,0.02);
+            transition: all 0.25s ease;
         }
         .card-hover:hover {
-            box-shadow: 0 6px 28px var(--shadow), 0 2px 6px rgba(0,0,0,0.06);
+            box-shadow: 0 14px 35px var(--shadow), 0 4px 12px rgba(0,0,0,0.04);
+            transform: translateY(-2px);
         }
 
         /* ── INPUTS ── */
         .inp {
             width: 100%;
-            padding: 0.7rem 0.95rem;
+            padding: 0.8rem 1.1rem;
             border: 1.5px solid var(--border);
-            border-radius: 13px;
+            border-radius: 18px;
             background: var(--bg);
             color: var(--text);
             font-family: 'Nunito', sans-serif;
-            font-size: 0.88rem;
-            font-weight: 600;
+            font-size: 0.9rem;
+            font-weight: 700;
             outline: none;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
         .inp:focus {
             border-color: var(--terra);
-            box-shadow: 0 0 0 3px var(--terra-l);
+            box-shadow: 0 0 0 4px var(--terra-l);
         }
-        .inp::placeholder { color: var(--muted); opacity: 0.7; font-weight: 500; }
+        .inp::placeholder { color: var(--muted); opacity: 0.7; font-weight: 600; }
 
         /* ── BUTTONS ── */
         .btn-main {
             display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-            background: linear-gradient(135deg, #df7a4e, #c96a3a);
-            color: white; border: none; border-radius: 13px;
-            padding: 0.72rem 1.4rem; font-weight: 800; font-size: 0.88rem;
+            background: var(--terra);
+            color: white; border: none; border-radius: 50px;
+            padding: 0.82rem 1.6rem; font-weight: 800; font-size: 0.92rem;
             font-family: 'Nunito', sans-serif; cursor: pointer;
-            box-shadow: 0 3px 14px rgba(201,106,58,0.30);
-            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            box-shadow: 0 4px 16px rgba(14, 132, 120, 0.28);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
         }
-        .btn-main:hover  { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(201,106,58,0.40); }
+        .btn-main:hover  { transform: translateY(-1px); background: var(--terra-d); box-shadow: 0 6px 22px rgba(14, 132, 120, 0.38); }
         .btn-main:active { transform: translateY(0); }
 
         .btn-soft {
             display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
-            background: var(--terra-l); color: var(--terra); border: 1.5px solid rgba(201,106,58,0.22);
-            border-radius: 13px; padding: 0.6rem 1.1rem; font-weight: 700; font-size: 0.82rem;
+            background: var(--terra-l); color: var(--terra); border: 1.5px solid rgba(14, 132, 120, 0.2);
+            border-radius: 50px; padding: 0.65rem 1.2rem; font-weight: 800; font-size: 0.84rem;
             font-family: 'Nunito', sans-serif; cursor: pointer;
             transition: background 0.18s ease, color 0.18s ease;
         }
-        .btn-soft:hover { background: rgba(201,106,58,0.2); }
+        .btn-soft:hover { background: rgba(14, 132, 120, 0.22); }
 
         .btn-ghost {
             display: inline-flex; align-items: center; justify-content: center;
             background: transparent; color: var(--muted);
-            border: 1.5px solid var(--border); border-radius: 12px;
-            padding: 0.55rem 1rem; font-weight: 700; font-size: 0.82rem;
+            border: 1.5px solid var(--border); border-radius: 16px;
+            padding: 0.6rem 1.1rem; font-weight: 800; font-size: 0.84rem;
             font-family: 'Nunito', sans-serif; cursor: pointer;
             transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
         }
-        .btn-ghost:hover { background: var(--terra-l); color: var(--terra); border-color: rgba(201,106,58,0.3); }
+        .btn-ghost:hover { background: var(--terra-l); color: var(--terra); border-color: rgba(14, 132, 120, 0.3); }
 
         /* ── TABS ── */
         .tab-btn {
-            border-radius: 13px; padding: 0.58rem 1.3rem;
-            font-weight: 800; font-size: 0.86rem; border: none; cursor: pointer;
+            border-radius: 16px; padding: 0.6rem 1.4rem;
+            font-weight: 800; font-size: 0.88rem; border: none; cursor: pointer;
             color: var(--muted); background: transparent; font-family: 'Nunito', sans-serif;
             transition: all 0.22s ease;
         }
         .tab-btn.active {
-            background: linear-gradient(135deg, #df7a4e, #c96a3a);
-            color: white; box-shadow: 0 3px 12px rgba(201,106,58,0.32);
+            background: var(--terra);
+            color: white; box-shadow: 0 4px 14px rgba(14, 132, 120, 0.3);
         }
         .tab-btn:not(.active):hover { background: var(--terra-l); color: var(--terra); }
 
         /* ── BOTTOM NAV ── */
         .bnav-btn {
-            display: flex; flex-direction: column; align-items: center;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
             padding: 0.45rem 0.8rem; border: none; background: none; cursor: pointer;
+            font-family: 'Nunito', sans-serif; color: var(--muted); position: relative;
+            transition: color 0.2s ease;
+        }
+        .bnav-btn.active { color: var(--terra); font-weight: 900; }
+        .bnav-icon { font-size: 1.35rem; display: inline-block; transition: transform 0.2s ease; }
+        .bnav-btn.active .bnav-icon { transform: translateY(-2px) scale(1.12); }
+        .bnav-label { font-size: 0.68rem; font-weight: 800; margin-top: 2px; }
+        .bnav-indicator {
+            width: 0; height: 3px; background: var(--terra); border-radius: 99px;
+            position: absolute; bottom: -2px; transition: width 0.25s ease;
+        }
+        .bnav-btn.active .bnav-indicator { width: 22px; }
+
+        /* ── PROGRESS / XP ── */
+        .prog-track { background: var(--terra-l); border-radius: 99px; overflow: hidden; }
+        .prog-fill  { height: 100%; border-radius: 99px; background: var(--terra); transition: width 0.7s ease; }
+        .xp-track { background: rgba(14, 132, 120, 0.15); border-radius: 99px; height: 6px; }
+        .xp-fill  { height: 6px; border-radius: 99px; background: var(--terra); transition: width 0.7s ease; }
+
+        /* ── SESSION ITEM ── */
+        .sess { border-radius: 16px; border: 1.5px solid var(--border); background: var(--bg-card); transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease; cursor: pointer; }
+        .sess.done { background: var(--terra-l2); border-color: rgba(14, 132, 120, 0.25); }
+        .sess:not(.done):hover { border-color: rgba(14, 132, 120, 0.35); transform: translateY(-1px); }
+        .check-dot {
+            width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; transition: all 0.18s ease;
+        }
+        .check-dot.on { background: var(--terra); border-color: var(--terra); }
+
+        /* ── DAY CARD ── */
+        .day-card { transition: all 0.2s ease; border-radius: 24px; }
+        .day-card.today { border: 2px solid var(--terra) !important; box-shadow: 0 0 0 4px var(--terra-l), 0 6px 24px var(--shadow); }
+        .drag-over { border: 2px dashed var(--terra) !important; background: var(--terra-l) !important; }
+
+        /* ── BADGE ── */
+        .badge-card { transition: all 0.3s; }
+        .badge-card.locked  { filter: grayscale(1) opacity(0.35); }
+        .badge-card.unlocked { animation: badgePop 0.5s ease; }
+        @keyframes badgePop { 0%{transform:scale(.5);opacity:0} 55%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
+
+        /* ── ANIMATIONS ── */
+        @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        .fade-in, .ai-message { animation: fadeUp 0.35s ease forwards; }
+        @keyframes pulseF { 0%,100%{transform:scale(1)} 50%{transform:scale(1.2)} }
+        .flame { display:inline-block; animation: pulseF 2s ease-in-out infinite; }
+        @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+        .bob { animation: bob 3s ease-in-out infinite; }
+        @keyframes blink { 0%,50%{opacity:1} 51%,100%{opacity:0} }
+        .typing-cursor::after { content:'▋'; animation: blink 1s infinite; }
+        .ai-bubble { border-radius: 20px 20px 20px 6px; }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
+        .shake { animation: shake 0.4s ease; }
+        @keyframes confetti { 0%{transform:translateY(0) rotate(0deg);opacity:1} 100%{transform:translateY(-110px) rotate(720deg);opacity:0} }
+        .confetti-particle { position:fixed;pointer-events:none;animation:confetti 1.5s ease-out forwards;z-index:200; }
+        .levelup-toast { position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:150;animation:fadeUp .5s ease; }
+
+        /* ── HEATMAP ── */
+        .hm-cell { border-radius: 6px; transition: opacity 0.2s; cursor: default; }
+
+        /* ── CHARTS ── */
+        .ch-wrap { position:relative; width:100%; height:190px; }
+        .ch-wrap-lg { position:relative; width:100%; max-width:480px; margin:auto; height:230px; }
+
+        /* ── SCROLLBAR ── */
+        .scr::-webkit-scrollbar { width: 5px; }
+        .scr::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+
+        /* ── MODAL BG ── */
+        .overlay { background: rgba(11, 48, 43, 0.45); backdrop-filter: blur(8px); }
+
+        /* ── QUICK BTNS ── */
+        .qbtn { display:block; width:100%; text-align:left; padding:.75rem 1rem; border-radius:16px; font-weight:700; font-size:.86rem; font-family:'Nunito',sans-serif; cursor:pointer; transition:background .18s ease; border:1.5px solid transparent; }
+        .qbtn-t { background:var(--terra-l); color:var(--terra); border-color:rgba(14, 132, 120,.22); }
+        .qbtn-t:hover { background:rgba(14, 132, 120,.22); }
+        .qbtn-s { background:var(--sage-l); color:var(--sage); border-color:rgba(46, 125, 50,.22); }
+        .qbtn-s:hover { background:rgba(46, 125, 50,.22); }
+        .qbtn-p { background:var(--plum-l); color:var(--plum); border-color:rgba(107, 70, 193,.22); }
+        .qbtn-p:hover { background:rgba(107, 70, 193,.22); }
+        .qbtn-n { background:var(--terra-l2); color:var(--muted); border-color:var(--border); }
+        .qbtn-n:hover { background:var(--terra-l); color:var(--terra); }
+
+        /* ── LOGIN ── */
+        .login-bg { position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center; background:linear-gradient(145deg,#061E1C 0%,#0B302B 55%,#041412 100%); }
+        .login-card { background:rgba(18, 36, 33, .96); border:1px solid rgba(20, 184, 166, .28); border-radius:32px; box-shadow:0 30px 80px rgba(0,0,0,.65); }
+        .login-inp { width:100%; padding:1rem 1.2rem; background:rgba(255,255,255,.06); border:1.5px solid rgba(20, 184, 166, .22); border-radius:18px; color:#E2F5F2; font-size:1rem; text-align:center; letter-spacing:.15em; outline:none; font-family:'Nunito',sans-serif; font-weight:700; transition:all .25s; }
+        .login-inp:focus { border-color:#14B8A6; box-shadow:0 0 0 4px rgba(20, 184, 166, .2); }
+
+        /* ── NOTIF ── */
+        #notifModal { border-radius:18px; backdrop-filter:blur(8px); }
+
+        @media(max-width:768px){ body{padding-bottom:5.5rem;} }
+    </style>
+</head>
             font-family: 'Nunito', sans-serif; color: var(--muted);
             transition: color 0.18s ease;
         }
@@ -251,36 +355,47 @@
 
     <!-- HEADER -->
     <header class="mb-5 md:mb-7 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-        <div class="flex items-center justify-between w-full md:w-auto gap-3">
-            <div>
-                <h1 class="text-xl md:text-3xl font-black leading-tight">Mes Révisions <span class="flame">🔥</span></h1>
-                <p class="text-sm mt-0.5 hidden md:block" style="color:var(--muted)">Planifie · Concentre-toi · Progresse</p>
+        <div class="flex flex-col gap-1 w-full md:w-auto">
+            <div class="flex items-center justify-between w-full md:w-auto gap-3">
+                <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight flex items-center gap-2" style="color:var(--text)">
+                    Mes Révisions <span class="flame text-2xl">🔥</span>
+                </h1>
+                <button onclick="toggleTheme()" class="md:hidden w-10 h-10 rounded-full card flex items-center justify-center shadow-xs">
+                    <span id="themeIconMobile">🌙</span>
+                </button>
             </div>
-            <button onclick="toggleTheme()" class="md:hidden card p-2.5" style="min-width:40px">
-                <span id="themeIconMobile">🌙</span>
-            </button>
+            <div class="flex items-center gap-2 text-xs font-bold" style="color:var(--muted)">
+                <span id="syncIndicator" class="hidden">☁️ Synchronisé</span>
+                <span id="syncDot">•</span>
+                <span id="headerTaskCount">5 tâches à venir</span>
+            </div>
         </div>
-        <div class="flex items-center gap-2 w-full md:w-auto">
-            <span id="syncIndicator" class="hidden text-xs italic" style="color:var(--muted)">☁️ Synchronisé</span>
-            <!-- XP -->
-            <div class="card px-3 py-2 flex items-center gap-2 flex-1 md:w-44">
+
+        <div class="flex items-center gap-2.5 w-full md:w-auto justify-end">
+            <!-- Level Badge Pill -->
+            <div class="card px-3.5 py-2 flex items-center gap-2.5 rounded-full" style="background: linear-gradient(135deg, rgba(76, 175, 80, 0.14), rgba(46, 125, 50, 0.08)); border: 1px solid rgba(76, 175, 80, 0.25);">
                 <span id="levelBadge" class="text-base">🌱</span>
-                <div class="xp-track flex-1"><div id="xpBarFill" class="xp-fill" style="width:0%"></div></div>
-                <span id="xpLabel" class="text-xs font-black" style="color:var(--terra)">Niv.1</span>
+                <div class="xp-track w-16 h-2 rounded-full overflow-hidden" style="background: rgba(76, 175, 80, 0.2)">
+                    <div id="xpBarFill" class="xp-fill h-full rounded-full transition-all duration-500" style="width:0%; background: #2E7D32;"></div>
+                </div>
+                <span id="xpLabel" class="text-xs font-black" style="color: #2E7D32;">Niv.1</span>
             </div>
-            <!-- Streak -->
-            <div class="card px-3 py-2 flex items-center gap-1.5 font-black text-sm shrink-0" style="color:var(--terra)">
-                <span class="flame text-base">🔥</span>
+
+            <!-- Streak Badge Pill -->
+            <div class="px-3.5 py-2 flex items-center gap-1.5 font-black text-xs text-white rounded-full shadow-xs" style="background: linear-gradient(135deg, #FF6B35, #FF3D00);">
+                <span class="flame text-sm">🔥</span>
                 <span id="streakCount">0 j</span>
             </div>
-            <button onclick="toggleTheme()" class="hidden md:flex card p-2.5">
+
+            <!-- Theme Toggle -->
+            <button onclick="toggleTheme()" class="hidden md:flex w-10 h-10 rounded-full card items-center justify-center shadow-xs hover:scale-105 transition-transform">
                 <span id="themeIcon">🌙</span>
             </button>
         </div>
     </header>
 
     <!-- DESKTOP TABS -->
-    <nav class="hidden md:flex gap-1.5 mb-6 p-1.5 rounded-2xl w-fit card" style="border-radius:20px">
+    <nav class="hidden md:flex gap-1.5 mb-6 p-1.5 rounded-2xl w-fit card" style="border-radius:22px">
         <button class="tab-btn tab-planner active" onclick="switchMainTab('planner')" id="tab-planner">📅 Planning</button>
         <button class="tab-btn tab-analytics" onclick="switchMainTab('analytics')" id="tab-analytics">📊 Analytique</button>
         <button class="tab-btn tab-ai" onclick="switchMainTab('ai')" id="tab-ai">✨ Coach IA</button>
@@ -292,35 +407,38 @@
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
 
             <!-- Left -->
-            <div class="lg:col-span-4 space-y-5">
+            <div class="lg:col-span-5 space-y-5">
 
-                <!-- Add subject -->
-                <div class="card p-5 md:p-6">
-                    <h2 class="font-black text-lg mb-4 flex items-center gap-2">
-                        <span class="w-8 h-8 rounded-xl flex items-center justify-center text-sm" style="background:var(--terra-l)">📚</span>
+                <!-- Matières & Examens Card -->
+                <div class="card p-5 md:p-6 space-y-4">
+                    <h2 class="font-extrabold text-xl flex items-center gap-2.5" style="color: var(--text)">
+                        <span class="w-9 h-9 rounded-2xl flex items-center justify-center text-lg" style="background: var(--terra-l)">📚</span>
                         Matières &amp; Examens
                     </h2>
-                    <div class="space-y-3 mb-4">
+
+                    <!-- Subjects List Render Target -->
+                    <div id="subjectList" class="space-y-3 max-h-72 overflow-y-auto scr pr-1"></div>
+
+                    <!-- Add Subject Form -->
+                    <div class="space-y-3 pt-2" style="border-top: 1px solid var(--border)">
                         <input type="text" id="subjectInput" placeholder="Ex : Droit Civil, Maths…" class="inp">
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="text-xs font-black mb-1.5 block" style="color:var(--muted)">Date d'examen</label>
-                                <input type="date" id="subjectExamDate" class="inp" style="font-size:.82rem">
+                                <label class="text-xs font-extrabold mb-1 block" style="color:var(--muted)">Date d'examen</label>
+                                <input type="date" id="subjectExamDate" class="inp text-xs">
                             </div>
                             <div>
-                                <label class="text-xs font-black mb-1.5 block" style="color:var(--muted)">Importance <span id="diffVal" style="color:var(--terra)">3</span>/5</label>
-                                <input type="range" id="difficultyInput" min="1" max="5" value="3"
-                                    class="w-full mt-2.5" style="accent-color:var(--terra)">
+                                <label class="text-xs font-extrabold mb-1 block" style="color:var(--muted)">Importance <span id="diffVal" style="color:var(--terra)">3</span>/5</label>
+                                <input type="range" id="difficultyInput" min="1" max="5" value="3" class="w-full mt-2.5" style="accent-color:var(--terra)">
                             </div>
                         </div>
-                        <button onclick="addSubject()" class="btn-main w-full text-sm">
-                            <span style="font-size:1.1rem">＋</span> Ajouter la matière
+                        <button onclick="addSubject()" class="btn-main w-full text-base py-3 font-extrabold">
+                            <span>＋</span> Ajouter la matière
                         </button>
                     </div>
-                    <div id="subjectList" class="space-y-2 max-h-52 overflow-y-auto scr pr-1"></div>
                 </div>
 
-                <!-- Chart -->
+                <!-- Distribution Chart -->
                 <div class="card p-5 hidden md:block">
                     <h2 class="text-xs font-black uppercase tracking-widest mb-3 text-center" style="color:var(--muted)">Répartition de l'effort</h2>
                     <div class="ch-wrap-lg"><canvas id="distributionChart"></canvas></div>
@@ -328,42 +446,79 @@
             </div>
 
             <!-- Right -->
-            <div class="lg:col-span-8 space-y-5">
+            <div class="lg:col-span-7 space-y-5">
 
-                <!-- Planning header -->
-                <div class="card p-4 md:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3" style="border-left:4px solid var(--terra)">
+                <!-- Ton Planning Card Header -->
+                <div class="card p-5 space-y-3" style="border-left: 5px solid var(--terra)">
                     <div>
-                        <h2 class="text-xl font-black">Ton Planning</h2>
+                        <h2 class="text-2xl font-black" style="color: var(--text)">Ton Planning</h2>
                         <p class="text-sm mt-0.5" style="color:var(--muted)">Généré automatiquement selon tes échéances.</p>
                     </div>
-                    <div class="flex items-center gap-2 shrink-0">
-                        <div class="flex items-center gap-1 p-1 rounded-xl card" style="border-radius:14px">
-                            <button onclick="changeWeek(-1)" class="btn-ghost border-0 px-3 py-1.5 text-xs">‹</button>
-                            <span id="weekLabel" class="px-2 text-xs font-black min-w-[125px] text-center">…</span>
-                            <button onclick="changeWeek(1)"  class="btn-ghost border-0 px-3 py-1.5 text-xs">›</button>
+                    <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+                        <div class="flex items-center gap-1.5 p-1.5 rounded-2xl card" style="border-radius:18px">
+                            <button onclick="changeWeek(-1)" class="btn-ghost border-0 px-3 py-1.5 text-xs font-black">‹</button>
+                            <span id="weekLabel" class="px-2 text-xs font-black min-w-[130px] text-center">…</span>
+                            <button onclick="changeWeek(1)"  class="btn-ghost border-0 px-3 py-1.5 text-xs font-black">›</button>
                         </div>
-                        <button onclick="regenerateSchedule()" class="btn-ghost text-base px-3 py-2" title="Régénérer">↺</button>
+                        <button onclick="regenerateSchedule()" class="w-10 h-10 rounded-2xl card flex items-center justify-center text-lg hover:scale-105 transition-transform" title="Régénérer">
+                            ↻
+                        </button>
                     </div>
                 </div>
 
-                <!-- Calendar -->
+                <!-- Calendar Days Grid -->
                 <div id="calendarContainer" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
 
-                <!-- Stats -->
-                <div class="grid grid-cols-3 gap-3">
-                    <div class="card p-4 text-center">
+                <!-- 3 Stat Widgets Row -->
+                <div class="grid grid-cols-3 gap-3 md:gap-4">
+                    <div class="card p-4 text-center flex flex-col items-center justify-center">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg mb-1.5" style="background: var(--terra-l); color: var(--terra)">
+                            🕒
+                        </div>
                         <span class="block text-2xl md:text-3xl font-black" style="color:var(--terra)" id="totalHours">0h</span>
-                        <span class="text-[10px] font-black uppercase tracking-wider" style="color:var(--muted)">Heures prévues</span>
+                        <span class="text-[10px] md:text-xs font-extrabold tracking-wider uppercase mt-1" style="color:var(--muted)">HEURES PRÉVUES</span>
                     </div>
-                    <div class="card p-4 text-center">
-                        <span class="block text-2xl md:text-3xl font-black" style="color:var(--sage)" id="completionRate">0%</span>
-                        <span class="text-[10px] font-black uppercase tracking-wider" style="color:var(--muted)">Complété</span>
+                    <div class="card p-4 text-center flex flex-col items-center justify-center relative overflow-hidden">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg mb-1.5" style="background: var(--terra-l); color: var(--terra)">
+                            📊
+                        </div>
+                        <span class="block text-2xl md:text-3xl font-black" style="color:var(--terra)" id="completionRate">0%</span>
+                        <span class="text-[10px] md:text-xs font-extrabold tracking-wider uppercase mt-1" style="color:var(--muted)">COMPLÉTÉ</span>
+                        <div class="w-12 h-1.5 rounded-full mt-2 overflow-hidden" style="background: var(--border)">
+                            <div id="statCompletionBar" class="h-full rounded-full transition-all duration-500" style="width:0%; background: var(--terra)"></div>
+                        </div>
                     </div>
-                    <div class="card p-4 text-center">
-                        <span class="block text-2xl md:text-3xl font-black" style="color:var(--plum)" id="daysLeft">--</span>
-                        <span class="text-[10px] font-black uppercase tracking-wider" style="color:var(--muted)">Prochain exam</span>
+                    <div class="card p-4 text-center flex flex-col items-center justify-center">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg mb-1.5" style="background: var(--terra-l); color: var(--terra)">
+                            📅
+                        </div>
+                        <span class="block text-xl md:text-2xl font-black truncate max-w-full px-1" style="color:var(--terra)" id="daysLeft">--</span>
+                        <span class="text-[10px] md:text-xs font-extrabold tracking-wider uppercase mt-1" style="color:var(--muted)">PROCHAIN EXAM</span>
                     </div>
                 </div>
+
+                <!-- Pomodoro Minuteur Card (matching mockup widget) -->
+                <div class="card p-4 md:p-5 flex items-center justify-between gap-3" style="border-radius: 22px; border-left: 5px solid var(--terra)">
+                    <div class="flex flex-col min-w-0">
+                        <span class="text-xs font-extrabold text-muted">Pomodoro minuteur - Session en cours</span>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span id="pomoTimeInline" class="text-2xl font-black font-mono tracking-tight" style="color: var(--terra)">25:00</span>
+                            <span id="pomoStatusInline" class="text-xs font-bold px-2.5 py-0.5 rounded-full" style="background: var(--terra-l); color: var(--terra)">Prêt</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button onclick="startPomodoro()" class="w-11 h-11 rounded-full text-white flex items-center justify-center text-lg shadow-sm hover:scale-105 active:scale-95 transition-all" style="background: linear-gradient(135deg, #FF6B35, #FF3D00);">
+                            ⏸
+                        </button>
+                        <button onclick="resetPomodoro()" class="w-10 h-10 rounded-full card flex items-center justify-center text-base hover:scale-105 transition-transform" title="Réinitialiser">
+                            ↻
+                        </button>
+                        <button onclick="togglePomoModal()" class="w-10 h-10 rounded-full card flex items-center justify-center text-sm hover:scale-105 transition-transform" title="Réglages">
+                            ✕
+                        </button>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -668,11 +823,11 @@
 </div>
 
 <!-- ===== BOTTOM NAV ===== -->
-<nav id="bottomNav" class="fixed bottom-3 left-3 right-3 max-w-sm mx-auto z-40 flex justify-around items-center px-2 py-2 md:hidden card" style="border-radius:26px;backdrop-filter:blur(20px)">
-    <button onclick="switchMainTab('planner')"   class="bnav-btn tab-planner active"><span class="bnav-icon">📅</span><span class="bnav-label">Planning</span></button>
-    <button onclick="switchMainTab('analytics')" class="bnav-btn tab-analytics"><span class="bnav-icon">📊</span><span class="bnav-label">Stats</span></button>
-    <button onclick="switchMainTab('ai')"        class="bnav-btn tab-ai"><span class="bnav-icon">✨</span><span class="bnav-label">Coach</span></button>
-    <button onclick="switchMainTab('profile')"   class="bnav-btn tab-profile"><span class="bnav-icon">🏅</span><span class="bnav-label">Profil</span></button>
+<nav id="bottomNav" class="fixed bottom-3 left-4 right-4 max-w-sm mx-auto z-40 flex justify-around items-center px-3 py-2 card shadow-xl md:hidden" style="border-radius: 28px; backdrop-filter: blur(16px); background: var(--bg-card);">
+    <button onclick="switchMainTab('planner')"   class="bnav-btn tab-planner active"><span class="bnav-icon">📅</span><span class="bnav-label">Planning</span><div class="bnav-indicator"></div></button>
+    <button onclick="switchMainTab('analytics')" class="bnav-btn tab-analytics"><span class="bnav-icon">📊</span><span class="bnav-label">Stats</span><div class="bnav-indicator"></div></button>
+    <button onclick="switchMainTab('ai')"        class="bnav-btn tab-ai"><span class="bnav-icon">✨</span><span class="bnav-label">Coach</span><div class="bnav-indicator"></div></button>
+    <button onclick="switchMainTab('profile')"   class="bnav-btn tab-profile"><span class="bnav-icon">🏅</span><span class="bnav-label">Profil</span><div class="bnav-indicator"></div></button>
 </nav>
 
 <!-- NOTIF -->
@@ -868,34 +1023,67 @@ window.addSubject = function() {
     updateUI(); window.saveDataToLocal();
 }
 
-window.deleteSubject = function(id) {
-    window.subjects=window.subjects.filter(s=>s.id!==id);
-    Object.keys(window.scheduleData).forEach(k=>{window.scheduleData[k]=window.scheduleData[k].filter(s=>s.subjectId!==id);});
-    updateUI(); window.saveDataToLocal();
+window.updateSubjectDifficulty = function(subId, newDiff) {
+    const sub = window.subjects.find(s => s.id === subId);
+    if(sub) {
+        sub.difficulty = parseInt(newDiff);
+        const diffLabel = document.getElementById('diff-val-' + subId);
+        if(diffLabel) diffLabel.innerText = sub.difficulty + '/5';
+        window.saveDataToLocal();
+        updateUI();
+    }
+}
+
+window.updateSubjectDate = function(subId, newDate) {
+    const sub = window.subjects.find(s => s.id === subId);
+    if(sub) {
+        sub.examDate = newDate;
+        window.saveDataToLocal();
+        updateUI();
+    }
 }
 
 function renderSubjectList() {
-    const list=document.getElementById('subjectList');
-    list.innerHTML='';
-    if(window.subjects.length===0){
-        list.innerHTML=`<p class="text-center text-sm py-4" style="color:var(--muted)">Aucune matière ajoutée</p>`;
+    const list = document.getElementById('subjectList');
+    if(!list) return;
+    list.innerHTML = '';
+    if(window.subjects.length === 0) {
+        list.innerHTML = `<p class="text-center text-sm py-4" style="color:var(--muted)">Aucune matière ajoutée</p>`;
         return;
     }
-    const today=new Date();today.setHours(0,0,0,0);
-    [...window.subjects].sort((a,b)=>new Date(a.examDate)-new Date(b.examDate)).forEach(sub=>{
-        const d=new Date(sub.examDate);
-        const ds=isNaN(d.getTime())?'Pas de date':`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
-        const examD=new Date(sub.examDate);examD.setHours(0,0,0,0);
-        const days=Math.ceil((examD-today)/86400000);
-        const urg=days<=3?'#dc2626':days<=7?'var(--gold)':'var(--sage)';
-        list.innerHTML+=`<div class="flex justify-between items-center p-2.5 rounded-2xl" style="background:var(--bg);border:1px solid var(--border)">
-            <div class="flex items-center gap-2 truncate">
-                <div class="w-3 h-3 rounded-full shrink-0" style="background:${sub.color}"></div>
-                <span class="text-sm font-bold truncate">${sub.name}</span>
+    const today = new Date(); today.setHours(0,0,0,0);
+    const MONTHS_FR = ["Janv","Févr","Mars","Avril","Mai","Juin","Juil","Août","Sept","Oct","Nov","Déc"];
+
+    [...window.subjects].sort((a,b) => new Date(a.examDate) - new Date(b.examDate)).forEach(sub => {
+        const d = new Date(sub.examDate);
+        const ds = isNaN(d.getTime()) ? 'Pas de date' : `${d.getDate()} ${MONTHS_FR[d.getMonth()]}`;
+
+        list.innerHTML += `
+        <div class="card p-3.5 flex flex-col gap-2.5 transition-all hover:border-teal-500/40" style="border-radius: 20px; background: var(--bg-card); border: 1.5px solid var(--border);">
+            <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0" style="background: var(--terra-l)">
+                        📚
+                    </div>
+                    <div class="truncate">
+                        <span class="font-extrabold text-sm md:text-base block truncate" style="color: var(--text)">${sub.name}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <div class="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold shadow-2xs cursor-pointer" style="background: var(--bg); border: 1px solid var(--border); color: var(--text)">
+                        <input type="date" value="${sub.examDate || ''}" onchange="updateSubjectDate('${sub.id}', this.value)" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                        <span>${ds}</span>
+                        <span class="text-[10px]" style="color: var(--muted)">▼</span>
+                        <span class="ml-0.5">📅</span>
+                    </div>
+                    <button onclick="deleteSubject('${sub.id}')" class="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:text-red-500" style="color: var(--muted)" title="Supprimer">
+                        ⚙️
+                    </button>
+                </div>
             </div>
-            <div class="flex items-center gap-1.5 shrink-0">
-                <span class="text-xs font-black px-2 py-0.5 rounded-lg" style="color:${urg};background:var(--bg-card);border:1px solid var(--border)">📅 ${ds}</span>
-                <button onclick="deleteSubject('${sub.id}')" class="text-base hover:scale-110 transition-transform" style="color:var(--muted)">🗑</button>
+            <div class="flex items-center justify-between gap-3 pt-2" style="border-top: 1px solid var(--border)">
+                <span class="text-xs font-extrabold shrink-0" style="color: var(--muted)">Importance <span id="diff-val-${sub.id}" style="color: var(--terra)">${sub.difficulty}/5</span></span>
+                <input type="range" min="1" max="5" value="${sub.difficulty}" oninput="updateSubjectDifficulty('${sub.id}', this.value)" class="w-full h-1.5 rounded-lg appearance-none cursor-pointer" style="accent-color: var(--terra)">
             </div>
         </div>`;
     });
@@ -1032,10 +1220,28 @@ function updateStreak(){
 }
 
 // ────────────────── MAIN UI ──────────────────
-window.updateUI=function(){renderSubjectList();renderChart();renderCalendar();updateStats();updateGamificationUI();document.getElementById('streakCount').innerText=`${window.streak.count} j`;}
+window.updateUI = function() {
+    renderSubjectList();
+    renderChart();
+    renderCalendar();
+    updateStats();
+    updateGamificationUI();
+    
+    const streakEl = document.getElementById('streakCount');
+    if(streakEl) streakEl.innerText = `${window.streak.count} j Série`;
+    
+    // Count upcoming tasks
+    let upcomingCount = 0;
+    Object.values(window.scheduleData).forEach(sessions => {
+        sessions.forEach(s => { if(!s.isCompleted) upcomingCount++; });
+    });
+    const taskCountEl = document.getElementById('headerTaskCount');
+    if(taskCountEl) taskCountEl.innerText = `${upcomingCount} tâche${upcomingCount > 1 ? 's' : ''} à venir`;
+}
 
 function renderCalendar(){
     const container=document.getElementById('calendarContainer');
+    if(!container) return;
     container.innerHTML='';
     let endOfWeek=new Date(window.currentWeekStart);endOfWeek.setDate(endOfWeek.getDate()+6);
     document.getElementById('weekLabel').innerText=`${window.currentWeekStart.getDate()} ${MONTHS[window.currentWeekStart.getMonth()]} – ${endOfWeek.getDate()} ${MONTHS[endOfWeek.getMonth()]}`;
@@ -1093,16 +1299,48 @@ function renderCalendar(){
     }
 }
 
-function updateStats(){
-    let total=0,completed=0;
-    for(let i=0;i<7;i++){let d=new Date(window.currentWeekStart);d.setDate(d.getDate()+i);let s=window.scheduleData[getLocalDateString(d)]||[];total+=s.length;completed+=s.filter(x=>x.isCompleted).length;}
-    document.getElementById('totalHours').innerText=Math.round(total*10/3)+'h';
-    document.getElementById('completionRate').innerText=(total>0?Math.round(completed/total*100):0)+'%';
-    if(window.subjects.length>0){
-        const today=new Date();today.setHours(0,0,0,0);let min=Infinity;
-        window.subjects.forEach(s=>{if(s.examDate){let d=new Date(s.examDate);d.setHours(0,0,0,0);let diff=Math.ceil((d-today)/86400000);if(diff>=0&&diff<min)min=diff;}});
-        document.getElementById('daysLeft').innerText=min===Infinity?'Terminés':min===0?'Auj.':min+' j';
-    } else document.getElementById('daysLeft').innerText='--';
+function updateStats() {
+    let total = 0, completed = 0;
+    for(let i=0; i<7; i++) {
+        let d = new Date(window.currentWeekStart);
+        d.setDate(d.getDate() + i);
+        let s = window.scheduleData[getLocalDateString(d)] || [];
+        total += s.length;
+        completed += s.filter(x => x.isCompleted).length;
+    }
+    const hours = Math.round(total * 10 / 3);
+    const pct = total > 0 ? Math.round(completed / total * 100) : 0;
+    
+    const hEl = document.getElementById('totalHours');
+    if(hEl) hEl.innerText = hours + 'h';
+    
+    const cEl = document.getElementById('completionRate');
+    if(cEl) cEl.innerText = pct + '%';
+    
+    const barEl = document.getElementById('statCompletionBar');
+    if(barEl) barEl.style.width = pct + '%';
+
+    if(window.subjects.length > 0) {
+        const today = new Date(); today.setHours(0,0,0,0); let min = Infinity;
+        let nextExamStr = '';
+        const MONTHS_SHORT = ["Janv","Févr","Mars","Avril","Mai","Juin","Juil","Août","Sept","Oct","Nov","Déc"];
+        
+        window.subjects.forEach(s => {
+            if(s.examDate) {
+                let d = new Date(s.examDate); d.setHours(0,0,0,0);
+                let diff = Math.ceil((d - today) / 86400000);
+                if(diff >= 0 && diff < min) {
+                    min = diff;
+                    nextExamStr = `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+                }
+            }
+        });
+        const daysEl = document.getElementById('daysLeft');
+        if(daysEl) daysEl.innerText = min === Infinity ? 'Terminés' : (nextExamStr || (min === 0 ? 'Auj.' : min + ' j'));
+    } else {
+        const daysEl = document.getElementById('daysLeft');
+        if(daysEl) daysEl.innerText = '--';
+    }
 }
 
 // ────────────────── CHARTS ──────────────────
