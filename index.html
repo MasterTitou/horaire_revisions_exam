@@ -412,29 +412,39 @@
     </div>
 </div>
 
-<!-- Floating Dockable Pomodoro Widget -->
-<div id="pomoFloatingWidget" class="fixed bottom-16 left-3 right-3 md:bottom-6 md:right-6 md:left-auto md:w-96 z-30 glass-card p-2.5 md:p-3 rounded-2xl shadow-xl border border-blue-500/30 backdrop-blur-xl transition-all duration-300">
-    <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2 min-w-0 flex-1">
-            <button onclick="togglePomoModal()" class="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 font-bold hover:scale-105 transition" title="Paramètres & Sons">
-                ⏱️
-            </button>
-            <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-1.5">
-                    <span id="pomoFloatingTime" class="font-mono font-bold text-base md:text-lg text-blue-600 dark:text-blue-400 leading-none">25:00</span>
-                    <span id="pomoFloatingStatus" class="text-[10px] uppercase font-semibold tracking-wide text-slate-400 truncate">Prêt</span>
+<!-- Edge-Docked Side Tab Pomodoro Widget -->
+<div id="pomoDockContainer" class="fixed right-0 bottom-24 md:bottom-8 z-30 flex items-center transition-transform duration-300 ease-in-out translate-x-full">
+    <!-- Edge Handle Tab (Attached to right screen edge, visible when collapsed) -->
+    <button id="pomoTabHandle" onclick="togglePomoDock()" class="absolute left-0 -translate-x-full bg-blue-600 text-white py-2.5 px-2 rounded-l-2xl shadow-2xl flex flex-col items-center justify-center gap-1 hover:bg-blue-700 transition border-l border-t border-b border-blue-400">
+        <span class="text-sm">⏱️</span>
+        <span id="pomoHandleTime" class="font-mono text-[10px] font-bold leading-tight">25:00</span>
+        <span id="pomoHandleArrow" class="text-[10px] font-bold">◀</span>
+    </button>
+
+    <!-- Expanded Widget Panel Body -->
+    <div id="pomoDockBody" class="glass-card p-3 rounded-l-2xl shadow-2xl border-l border-t border-b border-blue-500/30 backdrop-blur-xl w-72 md:w-80 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-base">⏱️</span>
+                <div>
+                    <span id="pomoFloatingTime" class="font-mono font-bold text-lg text-blue-600 dark:text-blue-400 leading-none">25:00</span>
+                    <span id="pomoFloatingStatus" class="text-[10px] uppercase font-semibold text-slate-400 ml-2">Prêt</span>
                 </div>
-                <select id="pomoSubjectSelect" class="w-full text-xs font-medium bg-transparent text-slate-700 dark:text-slate-200 outline-none truncate cursor-pointer" onchange="syncPomoSubject(this.value)">
-                    <option value="">🎯 Choisir une matière...</option>
-                </select>
+            </div>
+            <div class="flex items-center gap-1">
+                <button onclick="togglePomoModal()" class="text-slate-400 hover:text-blue-500 p-1 rounded-lg text-xs" title="Réglages">⚙️</button>
+                <button onclick="togglePomoDock()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg text-xs font-bold" title="Réduire">▶</button>
             </div>
         </div>
 
-        <div class="flex items-center gap-1 shrink-0">
-            <button onclick="startPomodoro()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-xl font-medium transition shadow-sm text-xs" title="Démarrer">▶️</button>
-            <button onclick="pausePomodoro()" class="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white p-2 rounded-xl font-medium transition text-xs" title="Pause">⏸️</button>
-            <button onclick="resetPomodoro()" class="bg-red-100 hover:bg-red-200 text-red-600 dark:bg-red-900/30 dark:text-red-400 p-2 rounded-xl font-medium transition text-xs" title="Réinitialiser">🔄</button>
-            <button onclick="togglePomoModal()" class="text-slate-400 hover:text-blue-500 p-1.5 rounded-lg text-xs" title="Réglages">⚙️</button>
+        <select id="pomoSubjectSelect" class="w-full text-xs font-medium bg-slate-100 dark:bg-slate-800 p-1.5 rounded-lg text-slate-700 dark:text-slate-200 outline-none truncate cursor-pointer" onchange="syncPomoSubject(this.value)">
+            <option value="">🎯 Choisir une matière...</option>
+        </select>
+
+        <div class="flex justify-around items-center pt-1 border-t border-slate-100 dark:border-slate-800">
+            <button onclick="startPomodoro()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl font-medium transition text-xs shadow-sm flex items-center gap-1">▶️ Démarrer</button>
+            <button onclick="pausePomodoro()" class="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white px-3 py-1.5 rounded-xl font-medium transition text-xs flex items-center gap-1">⏸️ Pause</button>
+            <button onclick="resetPomodoro()" class="bg-red-100 hover:bg-red-200 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-3 py-1.5 rounded-xl font-medium transition text-xs flex items-center gap-1">🔄 Reset</button>
         </div>
     </div>
 </div>
@@ -1432,6 +1442,20 @@ window.clearChat = function() {
 }
 
 // --- Modals & Widgets ---
+let isPomoDockOpen = false;
+window.togglePomoDock = function() {
+    isPomoDockOpen = !isPomoDockOpen;
+    const container = document.getElementById('pomoDockContainer');
+    const arrow = document.getElementById('pomoHandleArrow');
+    if (isPomoDockOpen) {
+        container.classList.remove('translate-x-full');
+        if (arrow) arrow.innerText = '▶';
+    } else {
+        container.classList.add('translate-x-full');
+        if (arrow) arrow.innerText = '◀';
+    }
+}
+
 window.togglePomoModal = function() {
     const m = document.getElementById('pomoModal');
     if(m) m.classList.toggle('hidden');
@@ -1458,7 +1482,7 @@ function updatePomoStatusText(text) {
 let pomoInterval=null, pomoTimeLeft=25*60, isPomoBreak=false;
 function updatePomoDisplay() {
     const formatted = `${String(Math.floor(pomoTimeLeft/60)).padStart(2,'0')}:${String(pomoTimeLeft%60).padStart(2,'0')}`;
-    ['pomoTime', 'pomoFloatingTime', 'pomoModalTime'].forEach(id => {
+    ['pomoTime', 'pomoFloatingTime', 'pomoModalTime', 'pomoHandleTime'].forEach(id => {
         const el = document.getElementById(id);
         if(el) el.innerText = formatted;
     });
