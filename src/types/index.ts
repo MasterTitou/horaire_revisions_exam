@@ -37,9 +37,32 @@ export interface Streak {
   lastDate: string;
 }
 
+export interface DomainSkill {
+  id: string;
+  name: string;
+  icon: string;
+  hoursSpent: number;
+  level: number;
+}
+
+export interface DynamicQuest {
+  id: string;
+  milestoneId: string;
+  projectId: string;
+  title: string;
+  projectCode: string;
+  dueDate: string;
+  targetHours: number;
+  completedHours: number;
+  isCompleted: boolean;
+}
+
 export interface Gamification {
   xp: number;
   level: number;
+  velocityIndex: number; // Ratio Heures Réalisées / Heures Prévues sur 14j glissants (%)
+  skills: Record<string, DomainSkill>;
+  quests: DynamicQuest[];
   badges: string[];
   pomodorosCompleted: number;
   sessionsCompleted: number;

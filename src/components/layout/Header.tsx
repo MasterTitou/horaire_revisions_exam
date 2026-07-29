@@ -1,5 +1,5 @@
 import React from 'react';
-import { Flame, Moon, Sun, Leaf } from 'lucide-react';
+import { Zap, Moon, Sun, Leaf } from 'lucide-react';
 import { Gamification, Streak } from '../../types';
 
 interface HeaderProps {
@@ -11,16 +11,14 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  streak,
   gamification,
   isDarkMode,
   toggleTheme,
   syncStatus
 }) => {
-  const levelXp = (gamification.level - 1) * 300;
-  const xpInLevel = Math.max(0, gamification.xp - levelXp);
-  const xpNeeded = 300;
-  const pct = Math.min(100, (xpInLevel / xpNeeded) * 100);
+  const velocity = gamification.velocityIndex || 100;
+  const velocityColor = velocity >= 85 ? '#2E7D32' : velocity >= 60 ? '#FF8C42' : '#E11D48';
+  const velocityBg = velocity >= 85 ? 'rgba(46, 125, 50, 0.12)' : velocity >= 60 ? 'rgba(255, 140, 66, 0.15)' : 'rgba(225, 29, 72, 0.12)';
 
   return (
     <header className="mb-5 md:mb-7 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
@@ -44,21 +42,22 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-2.5 w-full md:w-auto justify-end">
-        {/* Level Badge Pill */}
-        <div className="card px-3.5 py-2 flex items-center gap-2.5 rounded-full" style={{ background: 'linear-gradient(135deg, rgba(76, 175, 80, 0.14), rgba(46, 125, 50, 0.08))', border: '1px solid rgba(76, 175, 80, 0.25)' }}>
-          <span className="flex items-center justify-center text-emerald-600">
-            <Leaf className="w-4 h-4" />
-          </span>
-          <div className="xp-track w-16 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(76, 175, 80, 0.2)' }}>
-            <div className="xp-fill h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: '#2E7D32' }}></div>
-          </div>
-          <span className="text-xs font-black" style={{ color: '#2E7D32' }}>Niv.{gamification.level}</span>
+        {/* Indice de Vélocité Performance Pill */}
+        <div
+          className="px-3.5 py-2 flex items-center gap-1.5 font-black text-xs rounded-full shadow-xs transition-all"
+          style={{ background: velocityBg, color: velocityColor, border: `1px solid ${velocityColor}40` }}
+          title="Indice de Vélocité (Heures Exécutées / Heures Prévues sur 14j)"
+        >
+          <Zap className="w-4 h-4" />
+          <span>{velocity}% Vélocité</span>
         </div>
 
-        {/* Streak Badge Pill */}
-        <div className="px-3.5 py-2 flex items-center gap-1.5 font-black text-xs text-white rounded-full shadow-xs" style={{ background: 'linear-gradient(135deg, #FF6B35, #FF3D00)' }}>
-          <Flame className="w-4 h-4 text-white" />
-          <span>{streak.count} j</span>
+        {/* Level Badge Pill */}
+        <div className="card px-3.5 py-2 flex items-center gap-2 rounded-full" style={{ background: 'var(--terra-l)', border: '1px solid var(--border)' }}>
+          <span className="flex items-center justify-center text-teal-700">
+            <Leaf className="w-4 h-4" />
+          </span>
+          <span className="text-xs font-black" style={{ color: 'var(--terra)' }}>Maîtrise Niv.{gamification.level}</span>
         </div>
 
         {/* Theme Toggle */}

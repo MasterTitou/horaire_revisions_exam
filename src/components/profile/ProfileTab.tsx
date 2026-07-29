@@ -1,79 +1,130 @@
 import React from 'react';
 import { Gamification } from '../../types';
-import { Trophy, Award, Target, Zap } from 'lucide-react';
+import { Zap, Target, BookOpen, Layers } from 'lucide-react';
 
 interface ProfileTabProps {
   gamification: Gamification;
 }
 
-const BADGES_CONFIG = [
-  { id: 'first_step', name: 'Premier Pas', icon: '👣', desc: 'Compléter 1 session' },
-  { id: 'marathon', name: 'Marathonien', icon: '🏃', desc: 'Compléter 10 sessions' },
-  { id: 'centurion', name: 'Centurion', icon: '💯', desc: 'Compléter 100 sessions' },
-  { id: 'campfire', name: 'Feu de Camp', icon: '🏕️', desc: 'Série de 3 jours' },
-  { id: 'inferno', name: 'Inferno', icon: '🌋', desc: 'Série de 7 jours' },
-  { id: 'pomo_master', name: 'Pomo Master', icon: '🍅', desc: '10 Pomodoros' }
-];
-
 export const ProfileTab: React.FC<ProfileTabProps> = ({ gamification }) => {
+  const velocity = gamification.velocityIndex || 100;
+  const velocityLabel = velocity >= 90 ? '⚡ Rythme Optimal' : velocity >= 70 ? '📈 Exécution Régulière' : '⚠️ Réajustement Incurré';
+  const velocityColor = velocity >= 85 ? 'var(--sage)' : velocity >= 60 ? 'var(--gold)' : '#E11D48';
+
+  const skillsList = Object.values(gamification.skills || {});
+  const questsList = gamification.quests || [];
+
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      {/* Level Card */}
-      <div className="card p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-3xl flex items-center justify-center text-3xl font-black text-white shadow-lg" style={{ background: 'linear-gradient(135deg, #0E8478, #2E7D32)' }}>
-            {gamification.level}
-          </div>
-          <div>
-            <h2 className="font-extrabold text-xl" style={{ color: 'var(--text)' }}>Productivité SaaS &amp; Récompenses</h2>
-            <p className="text-xs" style={{ color: 'var(--muted)' }}>XP Total accumulé : <strong className="text-teal-700">{gamification.xp} XP</strong></p>
-          </div>
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Top Banner: Velocity & Performance Metric */}
+      <div className="card p-6 flex flex-col md:flex-row items-center justify-between gap-6" style={{ borderLeft: '6px solid var(--terra)' }}>
+        <div className="space-y-1 text-center md:text-left">
+          <span className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
+            Métrique de Performance SaaS (14 jours glissants)
+          </span>
+          <h2 className="text-2xl font-black flex items-center justify-center md:justify-start gap-2" style={{ color: 'var(--text)' }}>
+            Indice de Vélocité : <span style={{ color: velocityColor }}>{velocity}%</span>
+          </h2>
+          <p className="text-xs font-bold" style={{ color: 'var(--muted)' }}>
+            Rapport exact entre le temps prévu dans le planning et les heures réellement complétées.
+          </p>
         </div>
 
-        <div className="flex items-center gap-6">
-          <div className="text-center">
-            <div className="flex items-center gap-1 text-teal-700 font-black text-xl justify-center">
-              <Zap className="w-5 h-5" />
-              <span>{gamification.sessionsCompleted}</span>
-            </div>
-            <span className="text-[10px] font-bold uppercase text-muted">Sessions</span>
-          </div>
-          <div className="text-center">
-            <div className="flex items-center gap-1 text-teal-700 font-black text-xl justify-center">
-              <Trophy className="w-5 h-5" />
-              <span>{gamification.bestStreak}j</span>
-            </div>
-            <span className="text-[10px] font-bold uppercase text-muted">Meilleure Série</span>
-          </div>
+        <div className="px-5 py-3 rounded-2xl flex flex-col items-center justify-center shrink-0" style={{ background: 'var(--terra-l)', border: '1px solid var(--border)' }}>
+          <Zap className="w-7 h-7 mb-1" style={{ color: 'var(--terra)' }} />
+          <span className="font-black text-sm" style={{ color: 'var(--terra)' }}>{velocityLabel}</span>
         </div>
       </div>
 
-      {/* Badges Grid */}
-      <div className="card p-6">
-        <h3 className="font-extrabold text-base mb-4 flex items-center gap-2" style={{ color: 'var(--text)' }}>
-          <Award className="w-5 h-5 text-teal-700" />
-          Badges &amp; Jalons Débloqués
-        </h3>
+      {/* Arbre de Compétences par Domaine (Skill Tree) */}
+      <div className="card p-6 space-y-4">
+        <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
+          <h3 className="font-extrabold text-lg flex items-center gap-2" style={{ color: 'var(--text)' }}>
+            <BookOpen className="w-5 h-5 text-teal-700" />
+            Arbre de Compétences &amp; Maîtrise par Domaine
+          </h3>
+          <span className="text-xs font-extrabold px-2.5 py-1 rounded-full" style={{ background: 'var(--bg)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
+            Effort Cumulé
+          </span>
+        </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {BADGES_CONFIG.map(b => {
-            const isUnlocked = gamification.sessionsCompleted >= (b.id === 'marathon' ? 10 : 1);
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {skillsList.map(skill => {
+            const levelXp = skill.level * 10;
+            const pct = Math.min(100, Math.round(((skill.hoursSpent % 10) / 10) * 100));
+
             return (
-              <div
-                key={b.id}
-                className={`p-3.5 rounded-2xl flex items-center gap-3 transition-all ${
-                  isUnlocked ? 'card' : 'opacity-40 grayscale'
-                }`}
-                style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}
-              >
-                <span className="text-2xl">{b.icon}</span>
-                <div className="min-w-0">
-                  <span className="block font-extrabold text-xs truncate" style={{ color: 'var(--text)' }}>{b.name}</span>
-                  <span className="block text-[10px] truncate" style={{ color: 'var(--muted)' }}>{b.desc}</span>
+              <div key={skill.id} className="p-4 rounded-2xl space-y-2" style={{ background: 'var(--bg)', border: '1.5px solid var(--border)' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl">{skill.icon}</span>
+                    <div>
+                      <h4 className="font-extrabold text-sm" style={{ color: 'var(--text)' }}>{skill.name}</h4>
+                      <span className="text-[10px] font-bold" style={{ color: 'var(--muted)' }}>⏱ {skill.hoursSpent}h pratiquées</span>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-black" style={{ background: 'var(--terra-l)', color: 'var(--terra)' }}>
+                    Niv. {skill.level}
+                  </span>
+                </div>
+
+                <div className="space-y-1 pt-1">
+                  <div className="flex justify-between text-[10px] font-extrabold" style={{ color: 'var(--muted)' }}>
+                    <span>Progression</span>
+                    <span>{pct}% vers Niv.{skill.level + 1}</span>
+                  </div>
+                  <div className="prog-track" style={{ height: '7px' }}>
+                    <div className="prog-fill" style={{ width: `${pct}%`, background: 'var(--terra)' }}></div>
+                  </div>
                 </div>
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Quêtes Dynamiques issues des Jalons WBS */}
+      <div className="card p-6 space-y-4">
+        <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
+          <h3 className="font-extrabold text-lg flex items-center gap-2" style={{ color: 'var(--text)' }}>
+            <Target className="w-5 h-5 text-teal-700" />
+            Quêtes Hebdomadaires (Jalons WBS)
+          </h3>
+          <span className="text-xs font-extrabold px-2.5 py-1 rounded-full" style={{ background: 'var(--terra-l)', color: 'var(--terra)' }}>
+            Objectifs Urgents
+          </span>
+        </div>
+
+        <div className="space-y-3">
+          {questsList.length === 0 ? (
+            <p className="text-center text-xs py-6" style={{ color: 'var(--muted)' }}>
+              Aucune quête en cours. Ajoutez un projet et des jalons dans le planning !
+            </p>
+          ) : (
+            questsList.map(q => (
+              <div key={q.id} className="p-3.5 rounded-2xl flex items-center justify-between gap-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--terra-l)', color: 'var(--terra)' }}>
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block font-extrabold text-xs truncate" style={{ color: 'var(--text)' }}>
+                      [{q.projectCode}] {q.title}
+                    </span>
+                    <span className="block text-[10px]" style={{ color: 'var(--muted)' }}>
+                      Échéance: {q.dueDate || 'À venir'} · Target: {q.targetHours}h
+                    </span>
+                  </div>
+                </div>
+
+                <div className="shrink-0 text-right">
+                  <span className="text-xs font-black px-2.5 py-1 rounded-full" style={{ background: q.isCompleted ? 'var(--sage-l)' : 'var(--bg-card)', color: q.isCompleted ? 'var(--sage)' : 'var(--muted)', border: '1px solid var(--border)' }}>
+                    {q.isCompleted ? '✓ Livré' : 'En cours'}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
