@@ -640,8 +640,15 @@ async function syncToCloud(data) {
             },
             body: JSON.stringify(data)
         });
-        if (res.ok) showSyncStatus('synced');
-        else showSyncStatus('error');
+        if (res.ok) {
+            showSyncStatus('synced');
+        } else {
+            if (res.status === 401 || res.status === 404) {
+                window.authToken = '';
+                localStorage.removeItem('authToken');
+            }
+            showSyncStatus('error');
+        }
     } catch (e) { showSyncStatus('error'); }
 }
 
@@ -673,7 +680,13 @@ async function loadDataFromCloud() {
             } else {
                 showSyncStatus('synced'); // No data yet is fine
             }
-        } else { showSyncStatus('error'); }
+        } else { 
+            if (res.status === 401 || res.status === 404) {
+                window.authToken = '';
+                localStorage.removeItem('authToken');
+            }
+            showSyncStatus('error');
+        }
     } catch (e) { showSyncStatus('error'); }
 }
 
