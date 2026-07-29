@@ -4,8 +4,8 @@ export const SLOTS = ["Matin (3h20)", "Après-midi (3h20)", "Soir (3h20)"];
 export const HPH = 10 / 3;
 
 export const DEFAULT_CALIBRATION: CalibrationLoop = {
-  highFactor: 1.25,   // +25% correction sur Architecture
-  mediumFactor: 1.10, // +10% correction sur Dev
+  highFactor: 1.25,   // +25% correction sur Architecture / Stratégie
+  mediumFactor: 1.10, // +10% correction sur Dev / Exécution
   lowFactor: 1.00,
   lastCalibrated: 'Aujourd\'hui'
 };
@@ -22,6 +22,61 @@ export function getStartOfWeek(date: Date): Date {
   return d;
 }
 
+/**
+ * Calcul du Chemin Critique (CPM - Critical Path Method) sur le graphe DAG des jalons WBS.
+ * Identifie les jalons où la Marge Totale (Slack) est égale à zéro.
+ */
+export function computeCriticalPath(projects: Project[]): Record<string, boolean> {
+  const criticalMap: Record<string, boolean> = {};
+
+  projects.forEach(project => {
+    const milestones = project.milestones;
+    if (!milestones || milestones.length === 0) return;
+
+    const msMap = new Map<string, Milestone>();
+    milestones.forEach(m => msMap.set(m.id, m));
+
+    // Calculate depth/duration of dependencies chain for each milestone
+    const getChainDuration = (mId: string, visited = new Set<string>()): number => {
+      if (visited.has(mId)) return 0;
+      visited.add(mId);
+
+      const ms = msMap.get(mId);
+      if (!ms) return 0;
+
+      let maxParentDuration = 0;
+      if (ms.dependsOn && ms.dependsOn.length > 0) {
+        ms.dependsOn.forEach(parentId => {
+          maxParentDuration = Math.max(maxParentDuration, getChainDuration(parentId, new Set(visited)));
+        });
+      }
+
+      return maxParentDuration + (ms.estimatedHours || 10);
+    };
+
+    let maxProjectChain = 0;
+    const durationsMap: Record<string, number> = {};
+
+    milestones.forEach(m => {
+      const dur = getChainDuration(m.id);
+      durationsMap[m.id] = dur;
+      maxProjectChain = Math.max(maxProjectChain, dur);
+    });
+
+    // Milestones on the longest path are marked as Critical Path (Slack === 0)
+    milestones.forEach(m => {
+      if (maxProjectChain > 0 && durationsMap[m.id] >= maxProjectChain * 0.85) {
+        criticalMap[m.id] = true;
+        m.isCriticalPath = true;
+      } else {
+        m.isCriticalPath = false;
+      }
+    });
+  });
+
+  return criticalMap;
+}
+
 export function generateSchedule(
   projects: Project[],
   currentWeekStart: Date,
@@ -30,10 +85,21 @@ export function generateSchedule(
 ): ScheduleData {
   if (!projects || projects.length === 0) return {};
 
+  // Compute Critical Path prior to scheduling
+  const criticalMap = computeCriticalPath(projects);
+
   const scheduleData: ScheduleData = { ...existingSchedule };
 
   // Calculate actual completed hours per milestone across existing schedule
   const milestoneCompletedHours: Record<string, number> = {};
+  const completedMilestoneIds = new Set<string>();
+
+  projects.forEach(p => {
+    p.milestones.forEach(m => {
+      if (m.isCompleted) completedMilestoneIds.add(m.id);
+    });
+  });
+
   Object.values(existingSchedule).forEach(sessions => {
     sessions.forEach(sess => {
       if (sess.isCompleted && sess.milestoneId) {
@@ -51,9 +117,11 @@ export function generateSchedule(
     color: string;
     dueDate: string;
     isHardDeadline: boolean;
+    isCriticalPath: boolean;
     cognitiveLoad: CognitiveLoad;
     estimatedHours: number;
     completedHours: number;
+    dependsOn: string[];
   }
 
   const allMilestones: FlatMilestone[] = [];
@@ -62,7 +130,7 @@ export function generateSchedule(
       if (!ms.isCompleted) {
         const actualDone = Math.max(ms.completedHours || 0, milestoneCompletedHours[ms.id] || 0);
 
-        // RÉTRO-ÉTALONNAGE IA : Application du coefficient correcteur selon l'effort cognitif
+        // RÉTRO-ÉTALONNAGE IA : Application du coefficient correcteur selon l'effort
         const calFactor = ms.cognitiveLoad === 'high' ? calibration.highFactor : (ms.cognitiveLoad === 'medium' ? calibration.mediumFactor : calibration.lowFactor);
         const calibratedEstimate = Math.round(ms.estimatedHours * calFactor);
 
@@ -74,9 +142,11 @@ export function generateSchedule(
           color: proj.color,
           dueDate: ms.dueDate || proj.deadline || '',
           isHardDeadline: ms.isHardDeadline || proj.isHardDeadline,
+          isCriticalPath: !!criticalMap[ms.id],
           cognitiveLoad: ms.cognitiveLoad || 'medium',
           estimatedHours: calibratedEstimate,
-          completedHours: actualDone
+          completedHours: actualDone,
+          dependsOn: ms.dependsOn || []
         });
       }
     });
@@ -107,6 +177,15 @@ export function generateSchedule(
         if (m.dueDate && dateStr > m.dueDate) return false;
         // Evening slot rule: strictly avoid high cognitive load tasks at night
         if (slotIdx === 2 && m.cognitiveLoad === 'high') return false;
+
+        // DÉPENDANCES DAG STRICTES : Un jalon ne peut être planifié que si tous ses prérequis sont terminés
+        if (m.dependsOn && m.dependsOn.length > 0) {
+          const allPrereqsDone = m.dependsOn.every(prereqId => {
+            return completedMilestoneIds.has(prereqId) || (milestoneCompletedHours[prereqId] || 0) >= 10;
+          });
+          if (!allPrereqsDone) return false;
+        }
+
         return true;
       });
 
@@ -145,7 +224,10 @@ export function generateSchedule(
         if (m.cognitiveLoad === targetCog) cogMatchBonus = 2.0;
         else if (slotIdx === 0 && m.cognitiveLoad === 'medium') cogMatchBonus = 0.5;
 
-        const score = (pressure * 2.0) + cogMatchBonus + (remainingHours / 5);
+        // CRITICAL PATH BONUS (+3.5) : Priorité absolue aux jalons sur le Chemin Critique (aucun retard toléré)
+        const criticalBonus = m.isCriticalPath ? 3.5 : 0;
+
+        const score = (pressure * 2.0) + cogMatchBonus + criticalBonus + (remainingHours / 5);
         return { milestone: m, score };
       });
 

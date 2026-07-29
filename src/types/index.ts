@@ -9,6 +9,8 @@ export interface Milestone {
   cognitiveLoad: CognitiveLoad;
   isHardDeadline: boolean;
   isCompleted: boolean;
+  dependsOn?: string[]; // IDs des jalons prérequis obligatoires
+  isCriticalPath?: boolean; // Calculé dynamiquement (Slack === 0)
 }
 
 export interface Project {

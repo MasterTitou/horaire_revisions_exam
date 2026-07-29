@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Project, CognitiveLoad } from '../../types';
-import { Layers, Trash2, X } from 'lucide-react';
+import { Layers, Trash2, X, Link, Flame } from 'lucide-react';
 
 interface ProjectWBSCardProps {
   projects: Project[];
   onAddProject: (name: string, code: string, deadline: string, isHardDeadline: boolean) => void;
-  onAddMilestone: (projId: string, title: string, dueDate: string, estimatedHours: number, cognitiveLoad: CognitiveLoad) => void;
+  onAddMilestone: (projId: string, title: string, dueDate: string, estimatedHours: number, cognitiveLoad: CognitiveLoad, dependsOn?: string[]) => void;
   onDeleteProject: (projId: string) => void;
   onDeleteMilestone: (projId: string, msId: string) => void;
 }
@@ -31,6 +31,7 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
   const [msDate, setMsDate] = useState('');
   const [msHours, setMsHours] = useState(10);
   const [msCognitive, setMsCognitive] = useState<CognitiveLoad>('medium');
+  const [selectedParentId, setSelectedParentId] = useState<string>('');
 
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,17 +46,19 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
   const handleCreateMilestone = (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeProjForMs || !msTitle.trim()) return;
-    onAddMilestone(activeProjForMs.id, msTitle.trim(), msDate, msHours, msCognitive);
+    const dependsOn = selectedParentId ? [selectedParentId] : [];
+    onAddMilestone(activeProjForMs.id, msTitle.trim(), msDate, msHours, msCognitive, dependsOn);
     setMsTitle('');
     setMsDate('');
+    setSelectedParentId('');
     setActiveProjForMs(null);
   };
 
   // Universal Effort Badges
   const cogBadges: Record<CognitiveLoad, React.ReactNode> = {
-    high: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'rgba(107,70,193,0.15)', color: 'var(--plum)' }}>🧠 Stratégie/High</span>,
-    medium: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'var(--terra-l)', color: 'var(--terra)' }}>⚙️ Exécution/Mid</span>,
-    low: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'var(--sage-l)', color: 'var(--sage)' }}>📝 Logistique/Low</span>
+    high: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'rgba(107,70,193,0.15)', color: 'var(--plum)' }}>🧠 Stratégie</span>,
+    medium: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'var(--terra-l)', color: 'var(--terra)' }}>⚙️ Exécution</span>,
+    low: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'var(--sage-l)', color: 'var(--sage)' }}>📝 Logistique</span>
   };
 
   return (
@@ -65,7 +68,7 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
           <span className="w-9 h-9 rounded-2xl flex items-center justify-center shrink-0" style={{ background: '#DDF2ED', color: 'var(--terra)' }}>
             <Layers className="w-5 h-5" />
           </span>
-          Projets &amp; Jalons Universels (WBS)
+          Projets &amp; Jalons (DAG WBS)
         </h2>
         <button
           onClick={() => { setShowProjForm(!showProjForm); setActiveProjForMs(null); }}
@@ -127,27 +130,45 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
                   {proj.milestones.length === 0 ? (
                     <p className="text-[10px] italic py-1 text-center" style={{ color: 'var(--muted)' }}>Aucun jalon (WBS) dans ce projet</p>
                   ) : (
-                    proj.milestones.map(ms => (
-                      <div key={ms.id} className="flex items-center justify-between p-2 rounded-xl text-xs gap-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                        <div className="min-w-0 flex-grow">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-extrabold truncate" style={{ color: 'var(--text)' }}>{ms.title}</span>
-                            {cogBadges[ms.cognitiveLoad]}
+                    proj.milestones.map(ms => {
+                      const isCritical = ms.isCriticalPath;
+                      const hasParent = ms.dependsOn && ms.dependsOn.length > 0;
+                      const parentMs = hasParent ? proj.milestones.find(p => p.id === ms.dependsOn![0]) : null;
+
+                      return (
+                        <div key={ms.id} className={`flex items-center justify-between p-2 rounded-xl text-xs gap-2 transition-all ${isCritical ? 'ring-1 ring-red-500/40 bg-red-500/5' : ''}`} style={{ background: isCritical ? undefined : 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                          <div className="min-w-0 flex-grow">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-extrabold truncate" style={{ color: 'var(--text)' }}>{ms.title}</span>
+                              {cogBadges[ms.cognitiveLoad]}
+                              {isCritical && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0 flex items-center gap-1" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
+                                  <Flame className="w-3 h-3 text-red-500" />
+                                  Chemin Critique
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] mt-0.5" style={{ color: 'var(--muted)' }}>
+                              <span>⏱ {ms.estimatedHours}h estimées</span>
+                              <span>📅 {ms.dueDate || 'Pas de date'}</span>
+                              {parentMs && (
+                                <span className="flex items-center gap-0.5 text-teal-600 font-bold" title={`Prérequis : ${parentMs.title}`}>
+                                  <Link className="w-3 h-3" />
+                                  Après: {parentMs.title}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 text-[10px] mt-0.5" style={{ color: 'var(--muted)' }}>
-                            <span>⏱ {ms.estimatedHours}h estimées</span>
-                            <span>📅 {ms.dueDate || 'Pas de date'}</span>
-                          </div>
+                          <button
+                            onClick={() => onDeleteMilestone(proj.id, ms.id)}
+                            className="text-xs hover:text-red-500 p-1 font-bold"
+                            title="Supprimer jalon"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                        <button
-                          onClick={() => onDeleteMilestone(proj.id, ms.id)}
-                          className="text-xs hover:text-red-500 p-1 font-bold"
-                          title="Supprimer jalon"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -204,11 +225,11 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
         </form>
       )}
 
-      {/* Form: Add Milestone */}
+      {/* Form: Add Milestone with Dependencies */}
       {activeProjForMs && (
         <form onSubmit={handleCreateMilestone} className="space-y-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase tracking-wider block" style={{ color: 'var(--terra)' }}>Ajouter un Jalon (WBS)</span>
+            <span className="text-xs font-black uppercase tracking-wider block" style={{ color: 'var(--terra)' }}>Ajouter un Jalon (WBS &amp; Dépendances)</span>
             <span className="text-xs font-bold text-muted">{activeProjForMs.code}</span>
           </div>
           <input
@@ -248,10 +269,32 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
               >
                 <option value="high">🧠 Stratégie / High</option>
                 <option value="medium">⚙️ Exécution / Mid</option>
-                <option value="low">📝 Routine / Low</option>
+                <option value="low">📝 Logistique / Low</option>
               </select>
             </div>
           </div>
+
+          {/* Dépendance obligatoire (Séquençage Logique DAG) */}
+          {activeProjForMs.milestones.length > 0 && (
+            <div>
+              <label className="text-[10px] font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>
+                🔗 Dépendance obligatoire (Doit être exécuté APRES) :
+              </label>
+              <select
+                value={selectedParentId}
+                onChange={e => setSelectedParentId(e.target.value)}
+                className="inp text-xs font-bold"
+              >
+                <option value="">Aucune dépendance (Démarre immédiatement)</option>
+                {activeProjForMs.milestones.map(m => (
+                  <option key={m.id} value={m.id}>
+                    🔒 Après : {m.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button type="submit" className="btn-main w-full text-xs py-2.5 font-extrabold">
             ＋ Enregistrer le jalon
           </button>

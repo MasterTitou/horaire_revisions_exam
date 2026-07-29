@@ -190,7 +190,8 @@ export function useProjectStore() {
     title: string,
     dueDate: string,
     estimatedHours: number,
-    cognitiveLoad: 'high' | 'medium' | 'low'
+    cognitiveLoad: 'high' | 'medium' | 'low',
+    dependsOn?: string[]
   ) => {
     const updatedProjects = projects.map(p => {
       if (p.id === projId) {
@@ -206,7 +207,8 @@ export function useProjectStore() {
               dueDate: dueDate || p.deadline,
               cognitiveLoad,
               isHardDeadline: p.isHardDeadline,
-              isCompleted: false
+              isCompleted: false,
+              dependsOn: dependsOn || []
             }
           ]
         };
