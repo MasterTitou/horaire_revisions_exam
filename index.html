@@ -56,19 +56,57 @@
 
         body {
             font-family: 'Nunito', sans-serif;
-            background: 
-                radial-gradient(ellipse 55% 50% at 88% 3%, rgba(195, 175, 232, 0.55) 0%, transparent 100%),
-                radial-gradient(ellipse 50% 45% at 95% 80%, rgba(255, 200, 175, 0.5) 0%, transparent 100%),
-                radial-gradient(ellipse 45% 40% at 8% 15%, rgba(185, 235, 225, 0.45) 0%, transparent 100%),
-                var(--bg);
-            background-attachment: fixed;
+            background-color: #F2F8F6;
             color: var(--text);
             min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
             transition: background 0.35s ease, color 0.25s ease;
         }
-        .dark body, html.dark body {
-            background: var(--bg);
+
+        /* ── BACKGROUND GEOMETRIC BLOBS ── */
+        .bg-blob-purple {
+            position: fixed;
+            top: -60px;
+            right: -40px;
+            width: 320px;
+            height: 280px;
+            background: #E4D7F5;
+            border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+            z-index: 0;
+            pointer-events: none;
         }
+
+        .bg-blob-orange {
+            position: fixed;
+            bottom: -80px;
+            right: -60px;
+            width: 380px;
+            height: 380px;
+            background: #FDE2D6;
+            border-radius: 60% 40% 30% 70% / 50% 60% 40% 50%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .bg-blob-teal {
+            position: fixed;
+            top: 140px;
+            left: -80px;
+            width: 280px;
+            height: 280px;
+            background: #D8F2EC;
+            border-radius: 50% 50% 40% 60% / 60% 40% 60% 40%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .dark body, html.dark body {
+            background-color: var(--bg);
+        }
+        .dark .bg-blob-purple { background: rgba(107, 70, 193, 0.18); }
+        .dark .bg-blob-orange { background: rgba(255, 107, 53, 0.15); }
+        .dark .bg-blob-teal { background: rgba(14, 132, 120, 0.15); }
 
         /* ── CARDS ── */
         .card {
@@ -302,7 +340,10 @@
 </head>
 <body>
 
-
+<!-- Background Geometric Blobs -->
+<div class="bg-blob-purple"></div>
+<div class="bg-blob-orange"></div>
+<div class="bg-blob-teal"></div>
 <!-- ========== LOGIN ========== -->
 <div id="loginOverlay" class="login-bg">
     <div class="login-card p-8 md:p-12 w-full max-w-xs mx-4 text-center">
