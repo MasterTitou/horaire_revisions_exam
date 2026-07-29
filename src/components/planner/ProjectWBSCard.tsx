@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Project, CognitiveLoad } from '../../types';
-import { Layers, Plus, Trash2, X } from 'lucide-react';
+import { Layers, Trash2, X } from 'lucide-react';
 
 interface ProjectWBSCardProps {
   projects: Project[];
@@ -51,10 +51,11 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
     setActiveProjForMs(null);
   };
 
+  // Universal Effort Badges
   const cogBadges: Record<CognitiveLoad, React.ReactNode> = {
-    high: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'rgba(107,70,193,0.15)', color: 'var(--plum)' }}>🧠 Arch/High</span>,
-    medium: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'var(--terra-l)', color: 'var(--terra)' }}>⚙️ Dev/Mid</span>,
-    low: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'var(--sage-l)', color: 'var(--sage)' }}>📝 Doc/Low</span>
+    high: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'rgba(107,70,193,0.15)', color: 'var(--plum)' }}>🧠 Stratégie/High</span>,
+    medium: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'var(--terra-l)', color: 'var(--terra)' }}>⚙️ Exécution/Mid</span>,
+    low: <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'var(--sage-l)', color: 'var(--sage)' }}>📝 Logistique/Low</span>
   };
 
   return (
@@ -64,7 +65,7 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
           <span className="w-9 h-9 rounded-2xl flex items-center justify-center shrink-0" style={{ background: '#DDF2ED', color: 'var(--terra)' }}>
             <Layers className="w-5 h-5" />
           </span>
-          Projets &amp; Jalons (WBS)
+          Projets &amp; Jalons Universels (WBS)
         </h2>
         <button
           onClick={() => { setShowProjForm(!showProjForm); setActiveProjForMs(null); }}
@@ -77,10 +78,12 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
       {/* Projects & WBS List */}
       <div className="space-y-3 max-h-80 overflow-y-auto scr pr-1">
         {projects.length === 0 ? (
-          <div className="text-center py-6">
-            <p className="text-xs font-bold mb-2" style={{ color: 'var(--muted)' }}>Aucun projet ou jalon configuré</p>
+          <div className="text-center py-6 space-y-2">
+            <p className="text-xs font-bold" style={{ color: 'var(--muted)' }}>
+              Aucun projet configuré (Potager, Fusée, Finance, Business, Art, Tech, etc.)
+            </p>
             <button onClick={() => setShowProjForm(true)} className="btn-soft text-xs py-1.5 px-3">
-              ＋ Créer mon premier projet
+              ＋ Créer un projet universel
             </button>
           </div>
         ) : (
@@ -156,20 +159,20 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
       {/* Form: Add Project */}
       {showProjForm && (
         <form onSubmit={handleCreateProject} className="space-y-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
-          <span className="text-xs font-black uppercase tracking-wider block" style={{ color: 'var(--terra)' }}>Nouveau Projet</span>
+          <span className="text-xs font-black uppercase tracking-wider block" style={{ color: 'var(--terra)' }}>Nouveau Projet Universel</span>
           <div className="grid grid-cols-3 gap-2">
             <input
               type="text"
               value={projName}
               onChange={e => setProjName(e.target.value)}
-              placeholder="Nom (ex: App SaaS v1)"
+              placeholder="ex: Potager Bio, Financement Fusée"
               className="inp col-span-2 text-xs"
             />
             <input
               type="text"
               value={projCode}
               onChange={e => setProjCode(e.target.value)}
-              placeholder="Code (ex: SAAS)"
+              placeholder="ex: AGRI, AERO"
               className="inp text-xs uppercase"
             />
           </div>
@@ -212,7 +215,7 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
             type="text"
             value={msTitle}
             onChange={e => setMsTitle(e.target.value)}
-            placeholder="Titre jalon (ex: API Auth OAuth2)"
+            placeholder="ex: Système d'irrigation, Levée de fonds Série A, Schéma BDD"
             className="inp text-xs"
           />
           <div className="grid grid-cols-3 gap-2">
@@ -232,20 +235,20 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
                 value={msHours}
                 onChange={e => setMsHours(parseInt(e.target.value) || 10)}
                 min="1"
-                max="100"
+                max="200"
                 className="inp text-xs font-bold"
               />
             </div>
             <div>
-              <label className="text-[10px] font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Effort cognitif</label>
+              <label className="text-[10px] font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Effort requis</label>
               <select
                 value={msCognitive}
                 onChange={e => setMsCognitive(e.target.value as CognitiveLoad)}
                 className="inp text-xs font-bold"
               >
-                <option value="high">🧠 Arch / High</option>
-                <option value="medium">⚙️ Dev / Mid</option>
-                <option value="low">📝 Doc / Low</option>
+                <option value="high">🧠 Stratégie / High</option>
+                <option value="medium">⚙️ Exécution / Mid</option>
+                <option value="low">📝 Routine / Low</option>
               </select>
             </div>
           </div>

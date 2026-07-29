@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Project, ChatMessage } from '../../types';
-import { Send, Bot, Sparkles, Sliders } from 'lucide-react';
+import { Send, Bot, Sliders } from 'lucide-react';
 
 interface AICoachTabProps {
   projects: Project[];
@@ -24,8 +24,8 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({ projects, chatHistory, s
     setLoading(true);
 
     try {
-      // Build SaaS Context
-      let context = `=== CONTEXTE SYSTÈME DE GESTION DE PROJETS SAAS ===\n`;
+      // Build Universal Context
+      let context = `=== CONTEXTE SYSTÈME DE GESTION DE PROJETS UNIVERSEL ===\n`;
       context += `PROJETS EN COURS (${projects.length}):\n`;
       projects.forEach(p => {
         context += `- Projet [${p.code}] ${p.name} (Échéance: ${p.deadline || 'N/A'}, ${p.isHardDeadline ? 'Ferme' : 'Filée'})\n`;
@@ -41,7 +41,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({ projects, chatHistory, s
           'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: `Tu es un coach SaaS expert en gestion de projets complexes sous contraintes d'effort cognitif.\n\n${context}` }] },
+          systemInstruction: { parts: [{ text: `Tu es un coach universel expert en gestion de projets tout domaine (agriculture, aérospatial, finance, art, tech, études, business, sciences). Tu réponds avec bienveillance et rigueur méthodologique.\n\n${context}` }] },
           contents: newHistory.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
         })
       });
@@ -54,7 +54,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({ projects, chatHistory, s
         setChatHistory([...newHistory, { role: 'assistant', content: "Option IA disponible lors de la connexion serveur." }]);
       }
     } catch (err) {
-      setChatHistory([...newHistory, { role: 'assistant', content: "Le coach IA est prêt pour l'intégration avec votre API backend." }]);
+      setChatHistory([...newHistory, { role: 'assistant', content: "Le coach IA universel est prêt pour l'intégration avec votre API backend." }]);
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({ projects, chatHistory, s
           </span>
         </div>
         <p className="text-xs font-bold" style={{ color: 'var(--text)' }}>
-          🤖 <strong>Analyse d'étalonnage :</strong> Pour les tâches d'architecture &amp; conception, votre durée réelle moyenne dépasse l'estimation initiale de <strong>25%</strong>. Un coefficient correcteur de <strong>1.25×</strong> a été appliqué automatiquement sur vos futurs jalons.
+          🤖 <strong>Analyse d'étalonnage :</strong> Pour les tâches de stratégie &amp; conception (ex: plans, calculs, architecture), votre durée réelle moyenne dépasse l'estimation initiale de <strong>25%</strong>. Un coefficient correcteur de <strong>1.25×</strong> a été appliqué sur vos futurs jalons.
         </p>
       </div>
 
@@ -83,15 +83,15 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({ projects, chatHistory, s
           <Bot className="w-6 h-6" />
         </div>
         <div>
-          <h2 className="font-extrabold text-lg" style={{ color: 'var(--text)' }}>Coach IA SaaS &amp; Optimisation Temporelle</h2>
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>Analyse tes jalons WBS, ta charge cognitive et tes priorités de livraison.</p>
+          <h2 className="font-extrabold text-lg" style={{ color: 'var(--text)' }}>Coach IA Universel &amp; Optimisation Temporelle</h2>
+          <p className="text-xs" style={{ color: 'var(--muted)' }}>Analyse tes jalons WBS, ta charge cognitive et tes objectifs (Potager, Fusée, Finance, Tech, Art, etc.).</p>
         </div>
       </div>
 
       <div className="h-80 overflow-y-auto space-y-3 p-3 rounded-2xl scr" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
         {chatHistory.length === 0 ? (
           <div className="text-center py-10 text-xs" style={{ color: 'var(--muted)' }}>
-            Pose une question au Coach IA (ex: « Comment optimiser le jalon BDD cette semaine ? »)
+            Pose une question au Coach IA (ex: « Comment planifier le système d'irrigation de mon potager ou la levée de fonds fusée ? »)
           </div>
         ) : (
           chatHistory.map((msg, idx) => (
@@ -122,7 +122,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({ projects, chatHistory, s
           type="text"
           value={input}
           onChange={e => setInput(e.target.value)}
-          placeholder="Pose ta question sur ton projet..."
+          placeholder="Pose ta question sur n'importe quel projet..."
           className="inp text-xs flex-grow"
         />
         <button type="submit" disabled={loading} className="btn-main px-4 text-xs flex items-center gap-1">

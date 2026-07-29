@@ -7,12 +7,15 @@ const COLORS = [
   "#059669", "#E11D48", "#F59E0B", "#8B5CF6", "#14B8A6", "#EC4899"
 ];
 
+// UNIVERSAL MULTI-DOMAIN SKILLS TREE
 const DEFAULT_SKILLS: Record<string, DomainSkill> = {
-  backend: { id: 'backend', name: 'Architecture & Backend', icon: '💻', hoursSpent: 12, level: 2 },
-  devops: { id: 'devops', name: 'DevOps & CI/CD Cloud', icon: '☁️', hoursSpent: 8, level: 1 },
-  frontend: { id: 'frontend', name: 'Frontend & UX Design', icon: '🎨', hoursSpent: 15, level: 2 },
-  algo: { id: 'algo', name: 'Data & Algorithmique', icon: '⚙️', hoursSpent: 5, level: 1 },
-  security: { id: 'security', name: 'Sécurité & Réseaux', icon: '🛡️', hoursSpent: 4, level: 1 }
+  agri: { id: 'agri', name: 'Agriculture & Botanique', icon: '🌿', hoursSpent: 14, level: 2 },
+  aero: { id: 'aero', name: 'Aérospatial & Ingénierie', icon: '🚀', hoursSpent: 10, level: 2 },
+  finance: { id: 'finance', name: 'Finance & Business', icon: '💼', hoursSpent: 18, level: 2 },
+  art: { id: 'art', name: 'Art & Création', icon: '🎨', hoursSpent: 8, level: 1 },
+  tech: { id: 'tech', name: 'Tech & Systèmes', icon: '💻', hoursSpent: 22, level: 3 },
+  science: { id: 'science', name: 'Sciences & Recherche', icon: '🔬', hoursSpent: 6, level: 1 },
+  logistics: { id: 'logistics', name: 'Logistique & Organisation', icon: '📋', hoursSpent: 12, level: 2 }
 };
 
 const DEFAULT_CALIBRATION = {
@@ -25,7 +28,7 @@ const DEFAULT_CALIBRATION = {
 const DEFAULT_GAMIFICATION: Gamification = {
   xp: 0,
   level: 1,
-  velocityIndex: 90,
+  velocityIndex: 92,
   calibration: DEFAULT_CALIBRATION,
   skills: DEFAULT_SKILLS,
   quests: [],
@@ -268,11 +271,15 @@ export function useProjectStore() {
       updatedGamification.sessionsCompleted += 1;
       updatedGamification.xp += 25;
 
-      // Determine Skill Domain based on session text / cognitive load
-      let skillKey = 'devops';
-      if (s.note.includes('Arch') || s.note.includes('Matin')) skillKey = 'backend';
-      else if (s.note.includes('UI') || s.note.includes('Front') || s.note.includes('Après-midi')) skillKey = 'frontend';
-      else if (s.note.includes('Doc') || s.note.includes('Soir')) skillKey = 'docs';
+      // Determine Skill Domain based on project note
+      let skillKey = 'logistics';
+      const noteLower = s.note.toLowerCase();
+      if (noteLower.includes('potager') || noteLower.includes('botanique') || noteLower.includes('agri')) skillKey = 'agri';
+      else if (noteLower.includes('fusée') || noteLower.includes('propulsion') || noteLower.includes('aero')) skillKey = 'aero';
+      else if (noteLower.includes('finance') || noteLower.includes('budget') || noteLower.includes('levée')) skillKey = 'finance';
+      else if (noteLower.includes('art') || noteLower.includes('design') || noteLower.includes('créa')) skillKey = 'art';
+      else if (noteLower.includes('tech') || noteLower.includes('dev') || noteLower.includes('arch') || noteLower.includes('code')) skillKey = 'tech';
+      else if (noteLower.includes('science') || noteLower.includes('recherche') || noteLower.includes('étude')) skillKey = 'science';
 
       const currentSkill = updatedGamification.skills[skillKey] || DEFAULT_SKILLS[skillKey];
       const hoursAdd = Math.round(HPH);
