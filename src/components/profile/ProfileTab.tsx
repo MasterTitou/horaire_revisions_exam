@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Gamification } from '../../types';
-import { Zap, Target, BookOpen, Layers } from 'lucide-react';
+import { Zap, Target, BookOpen, Layers, RotateCcw, AlertTriangle } from 'lucide-react';
 
 interface ProfileTabProps {
   gamification: Gamification;
+  onResetData: () => void;
 }
 
-export const ProfileTab: React.FC<ProfileTabProps> = ({ gamification }) => {
+export const ProfileTab: React.FC<ProfileTabProps> = ({ gamification, onResetData }) => {
+  const [showConfirmReset, setShowConfirmReset] = useState(false);
+
   const velocity = gamification.velocityIndex || 100;
   const velocityLabel = velocity >= 90 ? '⚡ Rythme Optimal' : velocity >= 70 ? '📈 Exécution Régulière' : '⚠️ Réajustement Incurré';
   const velocityColor = velocity >= 85 ? 'var(--sage)' : velocity >= 60 ? 'var(--gold)' : '#E11D48';
@@ -30,9 +33,20 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ gamification }) => {
           </p>
         </div>
 
-        <div className="px-5 py-3 rounded-2xl flex flex-col items-center justify-center shrink-0" style={{ background: 'var(--terra-l)', border: '1px solid var(--border)' }}>
-          <Zap className="w-7 h-7 mb-1" style={{ color: 'var(--terra)' }} />
-          <span className="font-black text-sm" style={{ color: 'var(--terra)' }}>{velocityLabel}</span>
+        <div className="flex items-center gap-3">
+          <div className="px-5 py-3 rounded-2xl flex flex-col items-center justify-center shrink-0" style={{ background: 'var(--terra-l)', border: '1px solid var(--border)' }}>
+            <Zap className="w-7 h-7 mb-1" style={{ color: 'var(--terra)' }} />
+            <span className="font-black text-sm" style={{ color: 'var(--terra)' }}>{velocityLabel}</span>
+          </div>
+
+          <button
+            onClick={() => setShowConfirmReset(true)}
+            className="p-3 rounded-2xl border hover:border-red-500 hover:text-red-500 transition-colors text-gray-500 bg-card shrink-0 flex items-center gap-1.5 text-xs font-extrabold"
+            title="Réinitialiser toutes les données & statistiques"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span className="hidden sm:inline">Réinitialiser Stats</span>
+          </button>
         </div>
       </div>
 
@@ -127,6 +141,38 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ gamification }) => {
           )}
         </div>
       </div>
+
+      {/* Confirmation Reset Modal */}
+      {showConfirmReset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="card p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center gap-2 text-red-500 font-extrabold text-base">
+              <AlertTriangle className="w-5 h-5" />
+              Réinitialiser les Statistiques &amp; Données ?
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Cette action remettra à zéro toutes vos statistiques, projets actuels et heures cumulées pour démarrer avec des données 100% neuves.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setShowConfirmReset(false)}
+                className="btn-ghost text-xs py-2 px-4 font-bold"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  onResetData();
+                  setShowConfirmReset(false);
+                }}
+                className="py-2 px-4 rounded-xl text-xs font-black text-white bg-red-600 hover:bg-red-700 transition-colors"
+              >
+                Confirmer la Réinitialisation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

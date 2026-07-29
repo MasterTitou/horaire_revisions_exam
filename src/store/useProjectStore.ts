@@ -324,6 +324,33 @@ export function useProjectStore() {
     saveAll(projects, scheduleData, streak, gamification, nextDark);
   };
 
+  const resetAllData = () => {
+    localStorage.removeItem('revisionCalendarData');
+    setProjects([]);
+    setScheduleData({});
+    setStreak({ count: 0, lastDate: '' });
+    const freshSkills: Record<string, DomainSkill> = {
+      agri: { id: 'agri', name: 'Agriculture & Botanique', icon: '🌿', hoursSpent: 0, level: 1 },
+      aero: { id: 'aero', name: 'Aérospatial & Ingénierie', icon: '🚀', hoursSpent: 0, level: 1 },
+      finance: { id: 'finance', name: 'Finance & Business', icon: '💼', hoursSpent: 0, level: 1 },
+      art: { id: 'art', name: 'Art & Création', icon: '🎨', hoursSpent: 0, level: 1 },
+      tech: { id: 'tech', name: 'Tech & Systèmes', icon: '💻', hoursSpent: 0, level: 1 },
+      science: { id: 'science', name: 'Sciences & Recherche', icon: '🔬', hoursSpent: 0, level: 1 },
+      logistics: { id: 'logistics', name: 'Logistique & Organisation', icon: '📋', hoursSpent: 0, level: 1 }
+    };
+    const freshGamo: Gamification = {
+      ...DEFAULT_GAMIFICATION,
+      velocityIndex: 100,
+      skills: freshSkills,
+      sessionsCompleted: 0,
+      pomodorosCompleted: 0,
+      xp: 0,
+      level: 1
+    };
+    setGamification(freshGamo);
+    setChatHistory([]);
+  };
+
   return {
     projects,
     scheduleData,
@@ -343,6 +370,7 @@ export function useProjectStore() {
     toggleSession,
     changeWeek,
     toggleTheme,
+    resetAllData,
     setChatHistory
   };
 }

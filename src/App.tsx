@@ -31,6 +31,7 @@ export const App: React.FC = () => {
     toggleSession,
     changeWeek,
     toggleTheme,
+    resetAllData,
     setChatHistory
   } = useProjectStore();
 
@@ -127,7 +128,7 @@ export const App: React.FC = () => {
         {/* TAB: PROFILE */}
         {activeTab === 'profile' && (
           <div className="tab-panel">
-            <ProfileTab gamification={gamification} />
+            <ProfileTab gamification={gamification} onResetData={resetAllData} />
           </div>
         )}
 
