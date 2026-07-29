@@ -9,6 +9,7 @@ import { PlanningCalendar } from './components/planner/PlanningCalendar';
 import { StatWidgets } from './components/planner/StatWidgets';
 import { PomodoroDock } from './components/planner/PomodoroDock';
 import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard';
+import { GanttChartTab } from './components/gantt/GanttChartTab';
 import { AICoachTab } from './components/ai/AICoachTab';
 import { ProfileTab } from './components/profile/ProfileTab';
 
@@ -99,6 +100,13 @@ export const App: React.FC = () => {
                 />
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TAB: GANTT */}
+        {activeTab === 'gantt' && (
+          <div className="tab-panel">
+            <GanttChartTab projects={projects} />
           </div>
         )}
 
