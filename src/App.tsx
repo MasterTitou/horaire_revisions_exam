@@ -58,7 +58,11 @@ export const App: React.FC = () => {
       {!isAuthenticated && <LoginOverlay onLogin={handleLogin} />}
 
       {/* Main SaaS Container */}
-      <div id="appContainer" className="relative z-10 max-w-7xl mx-auto px-3 md:px-6 pt-4 md:pt-8 pb-28 md:pb-10">
+      <div
+        id="appContainer"
+        className="relative z-10 max-w-7xl mx-auto px-3 md:px-6 pb-28 md:pb-10"
+        style={{ paddingTop: 'max(2.2rem, env(safe-area-inset-top))' }}
+      >
         <Header
           streak={streak}
           gamification={gamification}
