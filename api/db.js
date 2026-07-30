@@ -50,6 +50,8 @@ export async function initSchema() {
         milestone_id VARCHAR(255) REFERENCES milestones(id) ON DELETE CASCADE,
         session_date DATE NOT NULL,
         slot_index INT DEFAULT 0,
+        start_time TIMESTAMP WITH TIME ZONE,
+        end_time TIMESTAMP WITH TIME ZONE,
         note TEXT,
         is_completed BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -66,11 +68,51 @@ export async function initSchema() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_settings (
+        user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        timezone VARCHAR(50) DEFAULT 'Europe/Paris',
+        buffer_minutes_before INT DEFAULT 15,
+        buffer_minutes_after INT DEFAULT 15,
+        day_start_hour INT DEFAULT 8,
+        day_end_hour INT DEFAULT 23,
+        slot_duration_minutes INT DEFAULT 60,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS calendar_integrations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        provider VARCHAR(20) NOT NULL,
+        calendar_id VARCHAR(255),
+        ical_url TEXT,
+        access_token TEXT,
+        refresh_token TEXT,
+        webhook_channel_id VARCHAR(255),
+        webhook_resource_id VARCHAR(255),
+        webhook_expiration TIMESTAMP WITH TIME ZONE,
+        last_synced_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS external_events (
+        id VARCHAR(255) PRIMARY KEY,
+        integration_id UUID REFERENCES calendar_integrations(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        is_all_day BOOLEAN DEFAULT FALSE,
+        raw_data JSONB,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `;
     return true;
   } catch (err) {
     console.error('Erreur auto-init schema PostgreSQL:', err.message);
     return false;
   }
 }
+
 
 export { sql };

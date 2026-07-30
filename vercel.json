@@ -1,14 +1,21 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "crons": [
+    {
+      "path": "/api/cron/renew-webhooks",
+      "schedule": "0 3 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
     {
-      "source": "/((?!assets/|icons/|sounds/|manifest.json|sw.js).*)" ,
+      "source": "/((?!assets/|icons/|sounds/|manifest.json|sw.js).*)",
       "destination": "/index.html"
     }
   ]
 }
+

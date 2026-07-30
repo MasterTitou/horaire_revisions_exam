@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Project, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, DynamicQuest } from '../types';
-import { generateSchedule, getStartOfWeek, HPH } from '../engine/scheduler';
+import { Project, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, DynamicQuest, ExternalEvent, UserSettings } from '../types';
+import { generateSchedule, getStartOfWeek, HPH, DEFAULT_USER_SETTINGS, replanifyOnCalendarChange } from '../engine/scheduler';
 
 const COLORS = [
   "#0E8478", "#6B46C1", "#2E7D32", "#FF6B35", "#3B82F6", "#D946EF",
@@ -43,6 +43,8 @@ const DEFAULT_GAMIFICATION: Gamification = {
 export function useProjectStore() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [scheduleData, setScheduleData] = useState<ScheduleData>({});
+  const [externalEvents, setExternalEventsState] = useState<ExternalEvent[]>([]);
+  const [userSettings, setUserSettingsState] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [streak, setStreak] = useState<Streak>({ count: 0, lastDate: '' });
   const [gamification, setGamification] = useState<Gamification>(DEFAULT_GAMIFICATION);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -53,6 +55,7 @@ export function useProjectStore() {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'loading' | 'error'>('synced');
 
   const saveTimerRef = useRef<any>(null);
+
 
   // Compute Velocity Index & Dynamic Quests
   const updateMetricsAndQuests = (currentSchedule: ScheduleData, currentProjects: Project[], currentGamo: Gamification): Gamification => {
@@ -444,9 +447,31 @@ export function useProjectStore() {
     }
   };
 
+  const updateUserSettings = (newSettings: Partial<UserSettings>) => {
+    const updated = { ...userSettings, ...newSettings };
+    setUserSettingsState(updated);
+    const updatedSchedule = replanifyOnCalendarChange(projects, currentWeekStart, scheduleData, externalEvents, updated, gamification.calibration);
+    setScheduleData(updatedSchedule);
+    saveAll(projects, updatedSchedule, streak, gamification, isDarkMode);
+  };
+
+  const setExternalEvents = (events: ExternalEvent[]) => {
+    setExternalEventsState(events);
+    const updatedSchedule = replanifyOnCalendarChange(projects, currentWeekStart, scheduleData, events, userSettings, gamification.calibration);
+    setScheduleData(updatedSchedule);
+    saveAll(projects, updatedSchedule, streak, gamification, isDarkMode);
+  };
+
+  const addExternalEvent = (event: ExternalEvent) => {
+    const updatedEvents = [...externalEvents, event];
+    setExternalEvents(updatedEvents);
+  };
+
   return {
     projects,
     scheduleData,
+    externalEvents,
+    userSettings,
     streak,
     gamification,
     chatHistory,
@@ -466,6 +491,10 @@ export function useProjectStore() {
     resetAllData,
     exportDataJSON,
     importDataJSON,
-    setChatHistory
+    setChatHistory,
+    updateUserSettings,
+    setExternalEvents,
+    addExternalEvent
   };
 }
+

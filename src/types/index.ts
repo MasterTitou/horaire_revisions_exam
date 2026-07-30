@@ -30,7 +30,39 @@ export interface Session {
   subjectId?: string;
   note: string;
   isCompleted: boolean;
+  startTime?: string; // ISO string TIMESTAMPTZ (e.g. 2026-07-30T08:00:00.000Z)
+  endTime?: string;   // ISO string TIMESTAMPTZ (e.g. 2026-07-30T09:00:00.000Z)
+  durationMinutes?: number;
 }
+
+export interface ExternalEvent {
+  id: string;
+  integrationId?: string;
+  title: string;
+  startTime: string; // ISO string TIMESTAMPTZ
+  endTime: string;   // ISO string TIMESTAMPTZ
+  isAllDay?: boolean;
+  source: 'google' | 'ical' | 'manual';
+}
+
+export interface UserSettings {
+  timezone: string; // e.g. 'Europe/Paris'
+  bufferMinutesBefore: number; // Default 15
+  bufferMinutesAfter: number;  // Default 15
+  dayStartHour: number;        // Default 8 (08:00)
+  dayEndHour: number;          // Default 23 (23:00)
+  slotDurationMinutes: number; // Default 60
+}
+
+export interface CalendarIntegration {
+  id: string;
+  provider: 'google' | 'ical';
+  calendarId?: string;
+  icalUrl?: string;
+  lastSyncedAt?: string;
+  webhookExpiration?: string;
+}
+
 
 export type ScheduleData = Record<string, Session[]>;
 

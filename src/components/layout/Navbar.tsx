@@ -15,19 +15,19 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
           className={`tab-btn ${activeTab === 'planner' ? 'active' : ''}`}
           onClick={() => setActiveTab('planner')}
         >
-          📅 Planning
+          📝 Planning
         </button>
         <button
-          className={`tab-btn ${activeTab === 'gantt' ? 'active' : ''}`}
-          onClick={() => setActiveTab('gantt')}
+          className={`tab-btn ${activeTab === 'calendar' ? 'active' : ''}`}
+          onClick={() => setActiveTab('calendar')}
         >
-          📊 Gantt WBS
+          📅 Calendrier &amp; Agendas
         </button>
         <button
           className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
           onClick={() => setActiveTab('analytics')}
         >
-          📈 Analytique
+          📈 Stats &amp; Gantt
         </button>
         <button
           className={`tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
@@ -49,16 +49,16 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
           onClick={() => setActiveTab('planner')}
           className={`bnav-btn ${activeTab === 'planner' ? 'active' : ''}`}
         >
-          <Calendar className="bnav-icon w-5 h-5" />
+          <Layers className="bnav-icon w-5 h-5" />
           <span className="bnav-label">Planning</span>
           <div className="bnav-indicator"></div>
         </button>
         <button
-          onClick={() => setActiveTab('gantt')}
-          className={`bnav-btn ${activeTab === 'gantt' ? 'active' : ''}`}
+          onClick={() => setActiveTab('calendar')}
+          className={`bnav-btn ${activeTab === 'calendar' ? 'active' : ''}`}
         >
-          <Layers className="bnav-icon w-5 h-5" />
-          <span className="bnav-label">Gantt</span>
+          <Calendar className="bnav-icon w-5 h-5" />
+          <span className="bnav-label">Calendrier</span>
           <div className="bnav-indicator"></div>
         </button>
         <button
@@ -86,6 +86,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
           <div className="bnav-indicator"></div>
         </button>
       </nav>
+
     </>
   );
 };

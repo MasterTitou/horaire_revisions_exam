@@ -10,13 +10,17 @@ import { StatWidgets } from './components/planner/StatWidgets';
 import { PomodoroDock } from './components/planner/PomodoroDock';
 import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard';
 import { GanttChartTab } from './components/gantt/GanttChartTab';
+import { CalendarTab } from './components/calendar/CalendarTab';
 import { AICoachTab } from './components/ai/AICoachTab';
 import { ProfileTab } from './components/profile/ProfileTab';
+
 
 export const App: React.FC = () => {
   const {
     projects,
     scheduleData,
+    externalEvents,
+    userSettings,
     streak,
     gamification,
     chatHistory,
@@ -35,7 +39,10 @@ export const App: React.FC = () => {
     resetAllData,
     exportDataJSON,
     importDataJSON,
-    setChatHistory
+    setChatHistory,
+    updateUserSettings,
+    setExternalEvents,
+    addExternalEvent
   } = useProjectStore();
 
   const [activeTab, setActiveTab] = useState('planner');
@@ -93,11 +100,17 @@ export const App: React.FC = () => {
                 <PlanningCalendar
                   projects={projects}
                   scheduleData={scheduleData}
+                  externalEvents={externalEvents}
+                  userSettings={userSettings}
                   currentWeekStart={currentWeekStart}
                   onChangeWeek={changeWeek}
                   onRegenerate={() => changeWeek(0)}
                   onToggleSession={toggleSession}
+                  onUpdateSettings={updateUserSettings}
+                  onAddExternalEvent={addExternalEvent}
+                  onSetExternalEvents={setExternalEvents}
                 />
+
 
                 <StatWidgets
                   projects={projects}
@@ -109,12 +122,25 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* TAB: GANTT */}
-        {activeTab === 'gantt' && (
+        {/* TAB: CALENDAR */}
+        {activeTab === 'calendar' && (
           <div className="tab-panel">
-            <GanttChartTab projects={projects} />
+            <CalendarTab
+              projects={projects}
+              scheduleData={scheduleData}
+              externalEvents={externalEvents}
+              userSettings={userSettings}
+              currentWeekStart={currentWeekStart}
+              onChangeWeek={changeWeek}
+              onRegenerate={() => changeWeek(0)}
+              onToggleSession={toggleSession}
+              onUpdateSettings={updateUserSettings}
+              onAddExternalEvent={addExternalEvent}
+              onSetExternalEvents={setExternalEvents}
+            />
           </div>
         )}
+
 
         {/* TAB: ANALYTICS */}
         {activeTab === 'analytics' && (

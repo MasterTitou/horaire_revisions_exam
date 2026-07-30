@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   milestone_id VARCHAR(255) REFERENCES milestones(id) ON DELETE CASCADE,
   session_date DATE NOT NULL,
   slot_index INT DEFAULT 0,
+  start_time TIMESTAMP WITH TIME ZONE,
+  end_time TIMESTAMP WITH TIME ZONE,
   note TEXT,
   is_completed BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -68,7 +70,51 @@ CREATE TABLE IF NOT EXISTS domain_skills (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 8. Table des Paramètres Utilisateur & Plages d'Heures Creuses
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  timezone VARCHAR(50) DEFAULT 'Europe/Paris',
+  buffer_minutes_before INT DEFAULT 15,
+  buffer_minutes_after INT DEFAULT 15,
+  day_start_hour INT DEFAULT 8,
+  day_end_hour INT DEFAULT 23,
+  slot_duration_minutes INT DEFAULT 60,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 9. Table des Intégrations de Calendriers Externes (Google / iCal)
+CREATE TABLE IF NOT EXISTS calendar_integrations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  provider VARCHAR(20) NOT NULL, -- 'google' | 'ical'
+  calendar_id VARCHAR(255),
+  ical_url TEXT,
+  access_token TEXT,
+  refresh_token TEXT,
+  webhook_channel_id VARCHAR(255),
+  webhook_resource_id VARCHAR(255),
+  webhook_expiration TIMESTAMP WITH TIME ZONE,
+  last_synced_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 10. Table des Événements Indisponibles Personnels / Professionnels
+CREATE TABLE IF NOT EXISTS external_events (
+  id VARCHAR(255) PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  integration_id UUID REFERENCES calendar_integrations(id) ON DELETE CASCADE,
+  title VARCHAR(255) NOT NULL,
+  start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+  end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+  is_all_day BOOLEAN DEFAULT FALSE,
+  raw_data JSONB,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Index d'optimisation
 CREATE INDEX IF NOT EXISTS idx_milestones_project ON milestones(project_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_milestone ON sessions(milestone_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(session_date);
+CREATE INDEX IF NOT EXISTS idx_sessions_time_range ON sessions(start_time, end_time);
+CREATE INDEX IF NOT EXISTS idx_external_events_user_time ON external_events(user_id, start_time, end_time);
+

@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="fr" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planificateur de Révisions Intelligent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        
+        body {
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: auto;
+            height: 250px;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            transition: all 0.3s ease;
+        }
+        
+        .dark .glass-card {
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(51, 65, 85, 0.8);
+        }
+
+        .drag-over {
+            border: 2px dashed #3b82f6 !important;
+            background-color: rgba(59, 130, 246, 0.05) !important;
+        }
+
+        .dark .drag-over {
+            background-color: rgba(59, 130, 246, 0.15) !important;
+        }
+
+        @keyframes pulse-flame {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+        .flame-icon { display: inline-block; animation: pulse-flame 2s infinite; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        
+        <!-- Header & Top Bar -->
+        <header class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="text-center md:text-left">
+                <h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-2">Mon Assistant de Révision</h1>
+                <p class="text-slate-600 dark:text-slate-400">Planifie, concentre-toi, et maintiens ta série !</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <!-- Streak Display -->
+                <div class="glass-card px-4 py-2 rounded-full flex items-center font-bold text-orange-500 shadow-sm" title="Jours consécutifs de révision">
+                    <span class="flame-icon mr-2 text-xl">🔥</span>
+                    <span id="streakCount">0 Jour(s)</span>
+                </div>
+                <!-- Theme Toggle -->
+                <button onclick="toggleTheme()" class="glass-card p-3 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition" title="Changer le thème">
+                    <span id="themeIcon" class="text-xl">🌙</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <div class="lg:col-span-4 space-y-6">
+                
+                <!-- Pomodoro Timer -->
+                <div class="glass-card p-6 rounded-2xl shadow-sm text-center">
+                    <h2 class="text-xl font-semibold mb-2 dark:text-white flex items-center justify-center gap-2">
+                        ⏱️ Pomodoro
+                    </h2>
+                    <p id="pomoStatus" class="text-sm text-slate-500 dark:text-slate-400 mb-4">Prêt à travailler ?</p>
+                    
+                    <div id="pomoTime" class="text-5xl font-bold text-blue-600 dark:text-blue-400 mb-6 font-mono">25:00</div>
+                    
+                    <div class="flex justify-center gap-3">
+                        <button onclick="startPomodoro()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition">Démarrer</button>
+                        <button onclick="pausePomodoro()" class="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white px-4 py-2 rounded-lg font-medium transition">Pause</button>
+                        <button onclick="resetPomodoro()" class="bg-red-100 hover:bg-red-200 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-4 py-2 rounded-lg font-medium transition">Reset</button>
+                    </div>
+                </div>
+
+                <!-- Subject Configuration -->
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-xl font-semibold mb-4 dark:text-white">📚 Matières & Examens</h2>
+                    
+                    <div class="space-y-3 mb-6">
+                        <input type="text" id="subjectInput" placeholder="Nouvelle matière (ex: Droit civil)" class="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-800 dark:text-white outline-none focus:border-blue-500 transition-colors">
+                        
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm dark:text-slate-300 w-1/3 font-medium">Date de l'examen:</span>
+                            <input type="date" id="subjectExamDate" class="w-2/3 p-2 border border-slate-200 dark:border-slate-700 rounded-lg outline-none dark:bg-slate-800 dark:text-white text-sm focus:border-blue-500 transition-colors">
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm dark:text-slate-300 w-1/3 font-medium">Poids (1-5):</span>
+                            <input type="range" id="difficultyInput" min="1" max="5" value="3" class="w-2/3 accent-blue-500">
+                        </div>
+                        <button onclick="addSubject()" class="w-full bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 py-2 rounded-lg font-semibold hover:opacity-90 transition-opacity mt-2">Ajouter à l'algorithme</button>
+                    </div>
+
+                    <!-- Subject List -->
+                    <div id="subjectList" class="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-2">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="glass-card p-6 rounded-2xl shadow-sm">
+                    <h2 class="text-sm uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold mb-4 text-center">Répartition de l'effort</h2>
+                    <div class="chart-container">
+                        <canvas id="distributionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-8 space-y-6">
+                
+                <div class="glass-card p-6 rounded-2xl shadow-sm border-l-4 border-blue-500 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-1 dark:text-white">Ton Planning</h2>
+                        <p class="text-slate-600 dark:text-slate-400 text-sm">Dates réelles ! Navigue entre les semaines pour planifier.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1 items-center">
+                            <button onclick="changeWeek(-1)" class="px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 dark:text-white transition font-bold">&lt;</button>
+                            <span id="weekLabel" class="px-2 py-1 font-semibold text-xs md:text-sm dark:text-white text-center min-w-[130px]">...</span>
+                            <button onclick="changeWeek(1)" class="px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 dark:text-white transition font-bold">&gt;</button>
+                        </div>
+                        <button onclick="regenerateSchedule()" class="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-2 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition font-bold" title="Régénérer cette semaine">
+                            🔄
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Calendar Grid -->
+                <div id="calendarContainer" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <!-- Dynamic content -->
+                </div>
+
+                <!-- Stats Footer -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+                    <div class="glass-card p-4 rounded-xl text-center">
+                        <span class="block text-3xl font-bold text-blue-600 dark:text-blue-400" id="totalHours">0h</span>
+                        <span class="text-xs uppercase tracking-wider text-slate-500">Heures prévues (Cible: 70h)</span>
+                    </div>
+                    <div class="glass-card p-4 rounded-xl text-center">
+                        <span class="block text-3xl font-bold text-green-600 dark:text-green-400" id="completionRate">0%</span>
+                        <span class="text-xs uppercase tracking-wider text-slate-500">Objectif Complété</span>
+                    </div>
+                    <div class="glass-card p-4 rounded-xl text-center">
+                        <span class="block text-3xl font-bold text-purple-600 dark:text-purple-400" id="daysLeft">--</span>
+                        <span class="text-xs uppercase tracking-wider text-slate-500">Prochain Examen</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Note Modal -->
+    <div id="editModal" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm shadow-xl border border-slate-200 dark:border-slate-700 transform transition-all">
+            <h3 class="font-bold text-lg mb-4 dark:text-white">Modifier l'objectif</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-2">Ex: "Relire chapitre 4" ou "Faire 3 annales"</p>
+            <input type="text" id="noteModalInput" class="w-full p-2 mb-6 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-900 dark:text-white outline-none focus:border-blue-500">
+            <div class="flex justify-end gap-2">
+                <button onclick="closeEditModal()" class="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition">Annuler</button>
+                <button onclick="saveSessionNote()" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Simple Notification Modal -->
+    <div id="notifModal" class="hidden fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 transition-opacity">
+        <span class="text-xl" id="notifIcon">✅</span>
+        <span class="font-semibold" id="notifText">Message</span>
+    </div>
+
+    <script>
+        // --- State Management ---
+        window.subjects = [];
+        window.scheduleData = {}; // Format: { "YYYY-MM-DD": [sessions] }
+        window.streak = { count: 0, lastDate: '' };
+        
+        // Initialiser la semaine en cours (Lundi)
+        function getStartOfWeek(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            d.setDate(diff);
+            d.setHours(0,0,0,0);
+            return d;
+        }
+        window.currentWeekStart = getStartOfWeek(new Date());
+        
+        const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+        const MONTHS = ["Janv.", "Févr.", "Mars", "Avril", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
+        
+        // Extension des couleurs pour supporter tes 18 matières sans doublons proches
+        const COLORS = [
+            "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#6366f1",
+            "#eab308", "#84cc16", "#22c55e", "#06b6d4", "#0ea5e9", "#a855f7", "#d946ef", "#f43f5e",
+            "#64748b", "#78716c", "#0f766e", "#1d4ed8", "#be123c", "#4d7c0f"
+        ];
+        
+        let chartInstance = null;
+        let draggedSession = null;
+        let currentEditingSession = null;
+
+        // --- Helpers Dates Locales ---
+        function getLocalDateString(dateObj) {
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        // --- LocalStorage Save mechanism ---
+        window.saveDataToLocal = function() {
+            const data = {
+                subjects: window.subjects,
+                scheduleData: window.scheduleData,
+                streak: window.streak,
+                isDarkMode: document.documentElement.classList.contains('dark')
+            };
+            localStorage.setItem('revisionCalendarData', JSON.stringify(data));
+        }
+
+        function loadDataFromLocal() {
+            const saved = localStorage.getItem('revisionCalendarData');
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    window.subjects = data.subjects || [];
+                    window.streak = data.streak || { count: 0, lastDate: '' };
+                    window.scheduleData = data.scheduleData || {};
+                    
+                    if (data.isDarkMode) {
+                        document.documentElement.classList.add('dark');
+                        document.getElementById('themeIcon').innerText = '☀️';
+                    }
+                } catch(e) { console.error("Erreur de chargement", e); }
+            }
+        }
+
+
+
+        // --- Navigation Semaines ---
+        window.changeWeek = function(offset) {
+            window.currentWeekStart.setDate(window.currentWeekStart.getDate() + (offset * 7));
+            
+            // Générer auto si la nouvelle semaine est vide
+            let hasData = false;
+            for(let i=0; i<7; i++) {
+                let d = new Date(window.currentWeekStart);
+                d.setDate(d.getDate() + i);
+                if (window.scheduleData[getLocalDateString(d)]) hasData = true;
+            }
+            if (!hasData && window.subjects.length > 0) {
+                generateNewSchedule();
+            }
+            
+            updateUI();
+            window.saveDataToLocal();
+        }
+
+        // --- Theme & Notifs ---
+        window.toggleTheme = function() {
+            document.documentElement.classList.toggle('dark');
+            document.getElementById('themeIcon').innerText = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+            renderChart(); window.saveDataToLocal();
+        }
+
+        function showNotification(text, icon = "✅", colorClass = "bg-green-500") {
+            const modal = document.getElementById('notifModal');
+            document.getElementById('notifText').innerText = text;
+            document.getElementById('notifIcon').innerText = icon;
+            modal.className = `fixed top-4 right-4 z-50 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 transition-opacity ${colorClass}`;
+            modal.classList.remove('hidden');
+            setTimeout(() => modal.classList.add('hidden'), 3000);
+        }
+
+        // --- Subjects Logic ---
+        window.addSubject = function() {
+            const name = document.getElementById('subjectInput').value.trim();
+            const diff = parseInt(document.getElementById('difficultyInput').value);
+            const examDate = document.getElementById('subjectExamDate').value;
+
+            if (!name) {
+                showNotification("Nom de matière requis", "⚠️", "bg-orange-500");
+                return;
+            }
+            if (!examDate) {
+                showNotification("Date d'examen requise pour l'algorithme", "⚠️", "bg-orange-500");
+                return;
+            }
+
+            window.subjects.push({ 
+                id: 'sub_' + Date.now(), 
+                name: name, 
+                difficulty: diff, 
+                examDate: examDate,
+                color: COLORS[window.subjects.length % COLORS.length] 
+            });
+            
+            document.getElementById('subjectInput').value = "";
+            document.getElementById('subjectExamDate').value = "";
+            
+            // On vérifie si la semaine courante est vide, si oui on la génère
+            let weekEmpty = true;
+            for(let i=0; i<7; i++) {
+                let d = new Date(window.currentWeekStart); d.setDate(d.getDate() + i);
+                if (window.scheduleData[getLocalDateString(d)]) weekEmpty = false;
+            }
+            if (weekEmpty) generateNewSchedule();
+            
+            updateUI(); window.saveDataToLocal();
+        }
+
+        window.deleteSubject = function(subjectId) {
+            window.subjects = window.subjects.filter(s => s.id !== subjectId);
+            // On le supprime de tout l'historique
+            Object.keys(window.scheduleData).forEach(dateStr => {
+                window.scheduleData[dateStr] = window.scheduleData[dateStr].filter(s => s.subjectId !== subjectId);
+            });
+            updateUI(); window.saveDataToLocal();
+        }
+
+        function renderSubjectList() {
+            const list = document.getElementById('subjectList');
+            list.innerHTML = '';
+            
+            // Tri par date d'examen la plus proche
+            const sortedSubjects = [...window.subjects].sort((a, b) => new Date(a.examDate) - new Date(b.examDate));
+
+            sortedSubjects.forEach(sub => {
+                const examD = new Date(sub.examDate);
+                const dateStrLocal = isNaN(examD.getTime()) ? "Pas de date" : `${String(examD.getDate()).padStart(2, '0')}/${String(examD.getMonth()+1).padStart(2, '0')}`;
+                
+                list.innerHTML += `
+                    <div class="flex justify-between items-center p-2 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+                        <div class="flex items-center gap-2 truncate">
+                            <div class="w-3 h-3 rounded-full shrink-0" style="background-color: ${sub.color}"></div>
+                            <span class="text-sm font-medium dark:text-slate-200 truncate" title="${sub.name}">${sub.name}</span>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <span class="text-xs text-slate-500 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded flex items-center gap-1 font-mono">
+                                📅 ${dateStrLocal}
+                            </span>
+                            <button onclick="deleteSubject('${sub.id}')" class="text-slate-400 hover:text-red-500 transition p-1" title="Supprimer">🗑️</button>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        // --- Schedule Generation (Algorithme Intelligent) ---
+        window.regenerateSchedule = function() {
+            generateNewSchedule(); updateUI(); window.saveDataToLocal();
+            showNotification("Semaine générée par l'IA !", "🧠", "bg-blue-500");
+        }
+
+        function generateNewSchedule() {
+            if (window.subjects.length === 0) return;
+            
+            // L'historique permet d'espacer les révisions (Spaced Repetition)
+            let lastStudied = {}; 
+            const SLOTS = ["Matin (3h20)", "Après-midi (3h20)", "Soir (3h20)"]; // Objectif 10h/jour
+            
+            for(let i=0; i<7; i++) {
+                let d = new Date(window.currentWeekStart);
+                d.setDate(d.getDate() + i);
+                let currentDateMs = d.getTime();
+                let dateStr = getLocalDateString(d);
+                
+                let daySessions = [];
+                
+                // --- Étape 1 : Calculer le score de priorité de CHAQUE matière pour CE jour
+                let scores = window.subjects.map(sub => {
+                    let score = 0;
+                    let daysToExam = Infinity;
+                    
+                    if (sub.examDate) {
+                        let examTime = new Date(sub.examDate).getTime();
+                        daysToExam = Math.ceil((examTime - currentDateMs) / (1000 * 60 * 60 * 24));
+                    }
+                    
+                    if (daysToExam < 0) {
+                        score = -1; // L'examen est passé, on l'ignore définitivement
+                    } else {
+                        // 1. URGENCE : La priorité augmente drastiquement à l'approche de l'examen
+                        let urgencyScore = daysToExam === 0 ? 500 : (100 / daysToExam);
+                        score += urgencyScore;
+                        
+                        // 2. DIFFICULTÉ : Les matières dures (Poids fort) reviennent un peu plus souvent
+                        score += (sub.difficulty * 5);
+                        
+                        // 3. RÉPÉTITION ESPACÉE : Bonus si la matière n'a pas été vue récemment
+                        let lastTime = lastStudied[sub.id];
+                        if (!lastTime) {
+                            score += 20; // Bonus pour les matières jamais vues
+                        } else {
+                            let daysSinceLast = (currentDateMs - lastTime) / (1000 * 60 * 60 * 24);
+                            score += (daysSinceLast * 4); // Plus on attend, plus on doit réviser
+                        }
+                    }
+                    
+                    // Léger facteur aléatoire pour départager les égalités parfaites et créer de la variété
+                    score += Math.random() * 2; 
+                    
+                    return { subject: sub, score: score };
+                });
+                
+                // --- Étape 2 : Trier par score décroissant et exclure les examens passés
+                scores = scores.filter(s => s.score >= 0).sort((a, b) => b.score - a.score);
+                
+                // --- Étape 3 : Garder uniquement les 3 cours les plus importants pour atteindre les 10h
+                let selected = scores.slice(0, 3);
+                
+                selected.forEach((selection, idx) => {
+                    lastStudied[selection.subject.id] = currentDateMs; // Mise à jour de la mémoire d'espacement
+                    daySessions.push({
+                        id: 'sess_' + Math.random().toString(36).substr(2, 9),
+                        subjectId: selection.subject.id,
+                        note: SLOTS[idx], // Le créneau devient la note éditable
+                        isCompleted: false
+                    });
+                });
+                
+                window.scheduleData[dateStr] = daySessions;
+            }
+        }
+
+        // --- Drag and Drop ---
+        window.handleDragStart = function(e, dateStr, sessionIdx) {
+            draggedSession = { dateStr, sessionIdx };
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => e.target.classList.add('opacity-50'), 0);
+        }
+        window.handleDragEnd = function(e) {
+            e.target.classList.remove('opacity-50');
+            draggedSession = null;
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        }
+        window.handleDragOver = function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; e.target.closest('.day-card')?.classList.add('drag-over'); }
+        window.handleDragLeave = function(e) { e.target.closest('.day-card')?.classList.remove('drag-over'); }
+        
+        window.handleDrop = function(e, targetDateStr) {
+            e.preventDefault();
+            const dayCard = e.target.closest('.day-card');
+            if (dayCard) dayCard.classList.remove('drag-over');
+            
+            if (draggedSession && draggedSession.dateStr !== targetDateStr) {
+                // Initialize target array if missing
+                if (!window.scheduleData[targetDateStr]) window.scheduleData[targetDateStr] = [];
+                const session = window.scheduleData[draggedSession.dateStr].splice(draggedSession.sessionIdx, 1)[0];
+                window.scheduleData[targetDateStr].push(session);
+                updateUI(); window.saveDataToLocal();
+            }
+        }
+
+        // --- Notes Edit ---
+        window.openEditModal = function(dateStr, sessionIdx, e) {
+            e.stopPropagation();
+            currentEditingSession = { dateStr, sessionIdx };
+            document.getElementById('noteModalInput').value = window.scheduleData[dateStr][sessionIdx].note || "";
+            document.getElementById('editModal').classList.remove('hidden');
+            document.getElementById('noteModalInput').focus();
+        }
+        window.closeEditModal = function() { document.getElementById('editModal').classList.add('hidden'); currentEditingSession = null; }
+        window.saveSessionNote = function() {
+            if (currentEditingSession) {
+                window.scheduleData[currentEditingSession.dateStr][currentEditingSession.sessionIdx].note = document.getElementById('noteModalInput').value;
+                updateUI(); window.saveDataToLocal();
+            }
+            closeEditModal();
+        }
+
+        // --- Streak & Session Toggle ---
+        window.toggleSession = function(dateStr, sessionIdx) {
+            const session = window.scheduleData[dateStr][sessionIdx];
+            session.isCompleted = !session.isCompleted;
+            if (session.isCompleted) updateStreak();
+            updateUI(); window.saveDataToLocal();
+        }
+
+        function updateStreak() {
+            const now = new Date();
+            const todayStr = getLocalDateString(now);
+            const yesterdayDate = new Date(now); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+            const yesterdayStr = getLocalDateString(yesterdayDate);
+
+            if (window.streak.lastDate === todayStr) return; 
+            if (window.streak.lastDate === yesterdayStr) {
+                window.streak.count += 1;
+                showNotification(`Série maintenue : ${window.streak.count} jours !`, "🔥", "bg-orange-500");
+            } else {
+                window.streak.count = 1;
+                showNotification("Nouvelle série commencée !", "🔥", "bg-orange-500");
+            }
+            window.streak.lastDate = todayStr;
+        }
+
+        // --- Rendering Core ---
+        window.updateUI = function() {
+            renderSubjectList(); renderChart(); renderCalendar(); updateStats();
+            document.getElementById('streakCount').innerText = `${window.streak.count} Jour${window.streak.count > 1 ? 's' : ''}`;
+        }
+
+        function renderCalendar() {
+            const container = document.getElementById('calendarContainer');
+            container.innerHTML = "";
+            
+            // Mise à jour du label de semaine
+            let endOfWeek = new Date(window.currentWeekStart); endOfWeek.setDate(endOfWeek.getDate() + 6);
+            document.getElementById('weekLabel').innerText = `${window.currentWeekStart.getDate()} ${MONTHS[window.currentWeekStart.getMonth()]} - ${endOfWeek.getDate()} ${MONTHS[endOfWeek.getMonth()]}`;
+
+            if (window.subjects.length === 0) {
+                container.innerHTML = `<div class="col-span-full py-12 text-center text-slate-400 dark:text-slate-500 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">Ajoute des matières pour générer ton calendrier.</div>`;
+                return;
+            }
+
+            const todayStr = getLocalDateString(new Date());
+
+            for(let i=0; i<7; i++) {
+                let currentDay = new Date(window.currentWeekStart);
+                currentDay.setDate(currentDay.getDate() + i);
+                let dateStr = getLocalDateString(currentDay);
+                let displayDate = `${DAYS[i]} ${currentDay.getDate()}`;
+                
+                let isToday = dateStr === todayStr;
+                let borderClass = isToday ? "border-blue-500 border-2" : "border-slate-200 dark:border-slate-600 border-t-4";
+
+                const dayCard = document.createElement('div');
+                dayCard.className = `day-card glass-card p-5 rounded-2xl shadow-sm transition-colors ${borderClass}`;
+                dayCard.setAttribute('ondragover', 'handleDragOver(event)');
+                dayCard.setAttribute('ondragleave', 'handleDragLeave(event)');
+                dayCard.setAttribute('ondrop', `handleDrop(event, '${dateStr}')`);
+
+                const sessions = window.scheduleData[dateStr] || [];
+                let html = `<h3 class="font-bold text-lg mb-4 flex justify-between items-center dark:text-white ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}">
+                    ${displayDate} <span class="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-slate-500 dark:text-slate-300 font-normal">${sessions.length} sess.</span></h3><div class="space-y-3 min-h-[50px]">`;
+
+                sessions.forEach((session, sessionIndex) => {
+                    const subject = window.subjects.find(s => s.id === session.subjectId) || { name: "Supprimé", color: "#ccc" };
+                    const isChecked = session.isCompleted;
+                    const bgClass = isChecked ? "bg-blue-50/60 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800" : "border-slate-100 dark:border-slate-700 dark:bg-slate-800/50 hover:bg-white dark:hover:bg-slate-800";
+                    const checkMarkClass = isChecked ? "" : "hidden";
+                    const checkCircleClass = isChecked ? "bg-blue-100 dark:bg-blue-800 border-blue-300 dark:border-blue-600" : "border-slate-200 dark:border-slate-600";
+
+                    html += `
+                        <div draggable="true" ondragstart="handleDragStart(event, '${dateStr}', ${sessionIndex})" ondragend="handleDragEnd(event)"
+                             class="flex items-center p-3 rounded-xl border transition-all cursor-pointer group ${bgClass}" 
+                             onclick="toggleSession('${dateStr}', ${sessionIndex})">
+                            <div class="w-2 h-10 rounded-full mr-3 shrink-0" style="background-color: ${subject.color}"></div>
+                            <div class="flex-grow min-w-0">
+                                <span class="block text-sm font-semibold truncate dark:text-slate-100 ${isChecked ? 'line-through opacity-60' : ''}">${subject.name}</span>
+                                <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                    <span class="truncate">${session.note}</span>
+                                    <button onclick="openEditModal('${dateStr}', ${sessionIndex}, event)" class="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-blue-500">✏️</button>
+                                </div>
+                            </div>
+                            <div class="w-6 h-6 border-2 rounded-full flex items-center justify-center shrink-0 ml-2 transition-colors check-icon ${checkCircleClass}">
+                                <span class="${checkMarkClass} text-blue-600 dark:text-blue-400 text-xs font-bold">✓</span>
+                            </div>
+                        </div>`;
+                });
+                html += `</div>`;
+                dayCard.innerHTML = html;
+                container.appendChild(dayCard);
+            }
+        }
+
+        // --- Stats & Chart ---
+        function updateStats() {
+            let totalSessions = 0; 
+            let completed = 0;
+            
+            // Stats uniquement pour la semaine affichée
+            for(let i=0; i<7; i++) {
+                let d = new Date(window.currentWeekStart); d.setDate(d.getDate() + i);
+                let daySessions = window.scheduleData[getLocalDateString(d)] || [];
+                totalSessions += daySessions.length;
+                completed += daySessions.filter(s => s.isCompleted).length;
+            }
+            
+            // 3 sessions/jour équivalent à 10h (1 session = 3h20 = 10/3 d'heure)
+            const hoursPerSession = 10 / 3;
+            document.getElementById('totalHours').innerText = Math.round(totalSessions * hoursPerSession) + "h";
+            document.getElementById('completionRate').innerText = (totalSessions > 0 ? Math.round((completed / totalSessions) * 100) : 0) + "%";
+
+            // Calcul global du prochain examen le plus imminent
+            if (window.subjects.length > 0) {
+                const today = new Date(); today.setHours(0,0,0,0);
+                let minDays = Infinity;
+                
+                window.subjects.forEach(sub => {
+                    if (sub.examDate) {
+                        const examDate = new Date(sub.examDate); examDate.setHours(0,0,0,0);
+                        const diffDays = Math.ceil((examDate - today) / (1000 * 60 * 60 * 24));
+                        if (diffDays >= 0 && diffDays < minDays) minDays = diffDays;
+                    }
+                });
+                
+                if (minDays === Infinity) {
+                    document.getElementById('daysLeft').innerText = "Terminés";
+                } else if (minDays === 0) {
+                    document.getElementById('daysLeft').innerText = "Aujourd'hui";
+                } else {
+                    document.getElementById('daysLeft').innerText = minDays + " j";
+                }
+            } else { 
+                document.getElementById('daysLeft').innerText = "--"; 
+            }
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById('distributionChart').getContext('2d');
+            const isDark = document.documentElement.classList.contains('dark');
+            if (chartInstance) chartInstance.destroy();
+            if (window.subjects.length === 0) return;
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: window.subjects.map(s => s.name),
+                    datasets: [{ data: window.subjects.map(s => s.difficulty), backgroundColor: window.subjects.map(s => s.color), borderWidth: isDark ? 2 : 1, borderColor: isDark ? '#1e293b' : '#ffffff' }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: isDark ? '#cbd5e1' : '#475569', font: { family: 'Inter', size: 11 } } } } }
+            });
+        }
+
+        // --- Pomodoro ---
+        let pomoInterval = null; let pomoTimeLeft = 25 * 60; let isPomoBreak = false;
+        function updatePomoDisplay() {
+            document.getElementById('pomoTime').innerText = `${String(Math.floor(pomoTimeLeft / 60)).padStart(2, '0')}:${String(pomoTimeLeft % 60).padStart(2, '0')}`;
+        }
+        window.startPomodoro = function() {
+            if (pomoInterval) return;
+            document.getElementById('pomoStatus').innerText = isPomoBreak ? "☕ Pause" : "🧠 Concentration";
+            pomoInterval = setInterval(() => {
+                pomoTimeLeft--; updatePomoDisplay();
+                if (pomoTimeLeft <= 0) {
+                    clearInterval(pomoInterval); pomoInterval = null; isPomoBreak = !isPomoBreak;
+                    pomoTimeLeft = isPomoBreak ? 5 * 60 : 25 * 60;
+                    showNotification(isPomoBreak ? "Pause de 5 min !" : "On s'y remet !", isPomoBreak ? "☕" : "💪", isPomoBreak ? "bg-indigo-500" : "bg-blue-600");
+                    updatePomoDisplay(); document.getElementById('pomoStatus').innerText = "En attente...";
+                }
+            }, 1000);
+        }
+        window.pausePomodoro = function() { clearInterval(pomoInterval); pomoInterval = null; document.getElementById('pomoStatus').innerText = "⏸️ En pause"; }
+        window.resetPomodoro = function() { clearInterval(pomoInterval); pomoInterval = null; isPomoBreak = false; pomoTimeLeft = 25 * 60; updatePomoDisplay(); document.getElementById('pomoStatus').innerText = "Prêt ?"; }
+
+        window.onload = () => { loadDataFromLocal(); updatePomoDisplay(); updateUI(); };
+    </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
-import { Project, Milestone, ScheduleData, CognitiveLoad, CalibrationLoop } from '../types';
+import { Project, Milestone, ScheduleData, CognitiveLoad, CalibrationLoop, ExternalEvent, UserSettings, Session } from '../types';
 
-export const SLOTS = ["Matin (3h20)", "Après-midi (3h20)", "Soir (3h20)"];
+export const SLOTS = ["Matin", "Après-midi", "Soir"];
 export const HPH = 10 / 3;
 
 export const DEFAULT_CALIBRATION: CalibrationLoop = {
@@ -8,6 +8,15 @@ export const DEFAULT_CALIBRATION: CalibrationLoop = {
   mediumFactor: 1.10, // +10% correction sur Dev / Exécution
   lowFactor: 1.00,
   lastCalibrated: 'Aujourd\'hui'
+};
+
+export const DEFAULT_USER_SETTINGS: UserSettings = {
+  timezone: 'Europe/Paris',
+  bufferMinutesBefore: 15,
+  bufferMinutesAfter: 15,
+  dayStartHour: 8,
+  dayEndHour: 23,
+  slotDurationMinutes: 60
 };
 
 export function getLocalDateString(d: Date): string {
@@ -36,7 +45,6 @@ export function computeCriticalPath(projects: Project[]): Record<string, boolean
     const msMap = new Map<string, Milestone>();
     milestones.forEach(m => msMap.set(m.id, m));
 
-    // Calculate depth/duration of dependencies chain for each milestone
     const getChainDuration = (mId: string, visited = new Set<string>()): number => {
       if (visited.has(mId)) return 0;
       visited.add(mId);
@@ -63,7 +71,6 @@ export function computeCriticalPath(projects: Project[]): Record<string, boolean
       maxProjectChain = Math.max(maxProjectChain, dur);
     });
 
-    // Milestones on the longest path are marked as Critical Path (Slack === 0)
     milestones.forEach(m => {
       if (maxProjectChain > 0 && durationsMap[m.id] >= maxProjectChain * 0.85) {
         criticalMap[m.id] = true;
@@ -77,20 +84,47 @@ export function computeCriticalPath(projects: Project[]): Record<string, boolean
   return criticalMap;
 }
 
+/**
+ * Vérifie si un créneau proposé [slotStart, slotEnd] entre en conflit avec un événement externe
+ * en incluant les temps de tampon (Buffer Times) avant et après l'événement.
+ */
+export function isSlotBlockedByExternalEvent(
+  slotStart: Date,
+  slotEnd: Date,
+  externalEvents: ExternalEvent[],
+  bufferBeforeMinutes: number = 15,
+  bufferAfterMinutes: number = 15
+): boolean {
+  const slotStartMs = slotStart.getTime();
+  const slotEndMs = slotEnd.getTime();
+
+  for (const event of externalEvents) {
+    const evStartMs = new Date(event.startTime).getTime() - (bufferBeforeMinutes * 60 * 1000);
+    const evEndMs = new Date(event.endTime).getTime() + (bufferAfterMinutes * 60 * 1000);
+
+    // Chevauchement d'intervalles : (slotStart < evEnd) AND (slotEnd > evStart)
+    if (slotStartMs < evEndMs && slotEndMs > evStartMs) {
+      return true; // En conflit !
+    }
+  }
+
+  return false;
+}
+
 export function generateSchedule(
   projects: Project[],
   currentWeekStart: Date,
   existingSchedule: ScheduleData,
-  calibration: CalibrationLoop = DEFAULT_CALIBRATION
+  calibration: CalibrationLoop = DEFAULT_CALIBRATION,
+  externalEvents: ExternalEvent[] = [],
+  settings: UserSettings = DEFAULT_USER_SETTINGS
 ): ScheduleData {
   if (!projects || projects.length === 0) return {};
 
-  // Compute Critical Path prior to scheduling
   const criticalMap = computeCriticalPath(projects);
-
   const scheduleData: ScheduleData = { ...existingSchedule };
 
-  // Calculate actual completed hours per milestone across existing schedule
+  // Milestone completion tracking
   const milestoneCompletedHours: Record<string, number> = {};
   const completedMilestoneIds = new Set<string>();
 
@@ -103,12 +137,12 @@ export function generateSchedule(
   Object.values(existingSchedule).forEach(sessions => {
     sessions.forEach(sess => {
       if (sess.isCompleted && sess.milestoneId) {
-        milestoneCompletedHours[sess.milestoneId] = (milestoneCompletedHours[sess.milestoneId] || 0) + HPH;
+        const hours = sess.durationMinutes ? (sess.durationMinutes / 60) : HPH;
+        milestoneCompletedHours[sess.milestoneId] = (milestoneCompletedHours[sess.milestoneId] || 0) + hours;
       }
     });
   });
 
-  // Flatten active milestones
   interface FlatMilestone {
     project: Project;
     milestone: Milestone;
@@ -130,7 +164,6 @@ export function generateSchedule(
       if (!ms.isCompleted) {
         const actualDone = Math.max(ms.completedHours || 0, milestoneCompletedHours[ms.id] || 0);
 
-        // RÉTRO-ÉTALONNAGE IA : Application du coefficient correcteur selon l'effort
         const calFactor = ms.cognitiveLoad === 'high' ? calibration.highFactor : (ms.cognitiveLoad === 'medium' ? calibration.mediumFactor : calibration.lowFactor);
         const calibratedEstimate = Math.round(ms.estimatedHours * calFactor);
 
@@ -157,31 +190,44 @@ export function generateSchedule(
   const projectedHours: Record<string, number> = {};
   allMilestones.forEach(m => projectedHours[m.id] = 0);
 
+  const dayStartHour = settings.dayStartHour ?? 8;
+  const dayEndHour = settings.dayEndHour ?? 23;
+  const slotDurationMinutes = settings.slotDurationMinutes ?? 60;
+
   for (let i = 0; i < 7; i++) {
     const d = new Date(currentWeekStart);
     d.setDate(d.getDate() + i);
     const dateStr = getLocalDateString(d);
     scheduleData[dateStr] = [];
 
-    const dayOfWeek = d.getDay(); // 0 is Sunday, 6 is Saturday
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    // Découpage en tranches d'heures réelles de dayStartHour à dayEndHour
+    let currentSlotStartHour = dayStartHour;
 
-    // Plafond strict de capacité quotidienne : Max 2 slots (6h20) en semaine, Max 3 slots (10h) le week-end
-    const maxSlotsForDay = isWeekend ? 3 : 2;
+    while (currentSlotStartHour < dayEndHour) {
+      const slotStart = new Date(d);
+      slotStart.setHours(currentSlotStartHour, 0, 0, 0);
 
-    for (let slotIdx = 0; slotIdx < maxSlotsForDay; slotIdx++) {
-      // Slot 0: Matin (prefers high cog), Slot 1: Après-midi (prefers medium cog), Slot 2: Soir (prefers low cog)
+      const slotEnd = new Date(slotStart.getTime() + slotDurationMinutes * 60 * 1000);
+      if (slotEnd.getHours() > dayEndHour) break;
+
+      // 1. Vérification des conflits d'agendas externes & temps de tampon
+      if (isSlotBlockedByExternalEvent(slotStart, slotEnd, externalEvents, settings.bufferMinutesBefore, settings.bufferMinutesAfter)) {
+        currentSlotStartHour += (slotDurationMinutes / 60);
+        continue;
+      }
+
+      // Slot index: 0 = Matin, 1 = Après-midi, 2 = Soir
+      const hour = slotStart.getHours();
+      const slotIdx = hour < 12 ? 0 : (hour < 18 ? 1 : 2);
       const targetCog: CognitiveLoad = slotIdx === 0 ? 'high' : (slotIdx === 1 ? 'medium' : 'low');
 
       const candidates = allMilestones.filter(m => {
         if (m.dueDate && dateStr > m.dueDate) return false;
-        // Evening slot rule: strictly avoid high cognitive load tasks at night
         if (slotIdx === 2 && m.cognitiveLoad === 'high') return false;
 
-        // DÉPENDANCES DAG STRICTES : Un jalon ne peut être planifié que si tous ses prérequis sont terminés
         if (m.dependsOn && m.dependsOn.length > 0) {
           const allPrereqsDone = m.dependsOn.every(prereqId => {
-            return completedMilestoneIds.has(prereqId) || (milestoneCompletedHours[prereqId] || 0) >= 10;
+            return completedMilestoneIds.has(prereqId) || (milestoneCompletedHours[prereqId] || 0) >= 5;
           });
           if (!allPrereqsDone) return false;
         }
@@ -189,7 +235,10 @@ export function generateSchedule(
         return true;
       });
 
-      if (candidates.length === 0) continue;
+      if (candidates.length === 0) {
+        currentSlotStartHour += (slotDurationMinutes / 60);
+        continue;
+      }
 
       const scored = candidates.map(m => {
         let daysToDeadline = 60;
@@ -202,13 +251,10 @@ export function generateSchedule(
           }
         }
 
-        // MARGE DE SÉCURITÉ INTÉGRÉE (BUFFER ZONE - 15%)
         const bufferedDaysToDeadline = Math.max(1, Math.floor(daysToDeadline * 0.85));
-
         const remainingHours = Math.max(0, m.estimatedHours - m.completedHours - projectedHours[m.id]);
         if (remainingHours <= 0) return { milestone: m, score: -999 };
 
-        // Calcul de pression avec Buffer Zone
         let pressure = 1.0;
         if (m.isHardDeadline) {
           if (bufferedDaysToDeadline <= 1) pressure = 4.5;
@@ -219,14 +265,11 @@ export function generateSchedule(
           pressure = Math.min(1.5, (remainingHours / HPH) / bufferedDaysToDeadline);
         }
 
-        // Alignement d'effort cognitif avec le créneau
         let cogMatchBonus = 0;
         if (m.cognitiveLoad === targetCog) cogMatchBonus = 2.0;
         else if (slotIdx === 0 && m.cognitiveLoad === 'medium') cogMatchBonus = 0.5;
 
-        // CRITICAL PATH BONUS (+3.5) : Priorité absolue aux jalons sur le Chemin Critique (aucun retard toléré)
         const criticalBonus = m.isCriticalPath ? 3.5 : 0;
-
         const score = (pressure * 2.0) + cogMatchBonus + criticalBonus + (remainingHours / 5);
         return { milestone: m, score };
       });
@@ -234,18 +277,57 @@ export function generateSchedule(
       scored.sort((a, b) => b.score - a.score);
       const best = scored[0];
       if (best && best.score > 0) {
-        projectedHours[best.milestone.id] += HPH;
+        const slotHours = slotDurationMinutes / 60;
+        projectedHours[best.milestone.id] += slotHours;
+
+        const formatTime = (date: Date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
         scheduleData[dateStr].push({
           id: 'sess_' + Math.random().toString(36).substr(2, 9),
           projectId: best.milestone.project.id,
           milestoneId: best.milestone.id,
           subjectId: best.milestone.project.id,
-          note: `${SLOTS[slotIdx]} · [${best.milestone.project.code}] ${best.milestone.title}`,
-          isCompleted: false
+          note: `${formatTime(slotStart)}–${formatTime(slotEnd)} · [${best.milestone.project.code}] ${best.milestone.title}`,
+          isCompleted: false,
+          startTime: slotStart.toISOString(),
+          endTime: slotEnd.toISOString(),
+          durationMinutes: slotDurationMinutes
         });
       }
+
+      currentSlotStartHour += (slotDurationMinutes / 60);
     }
   }
 
   return scheduleData;
 }
+
+/**
+ * Replanification dynamique déclenchée lors d'un événement Webhook ou d'une mise à jour d'agenda externe.
+ */
+export function replanifyOnCalendarChange(
+  projects: Project[],
+  currentWeekStart: Date,
+  existingSchedule: ScheduleData,
+  externalEvents: ExternalEvent[],
+  settings: UserSettings = DEFAULT_USER_SETTINGS,
+  calibration: CalibrationLoop = DEFAULT_CALIBRATION
+): ScheduleData {
+  // Conserver uniquement les séances déjà complétées par l'utilisateur
+  const preservedSchedule: ScheduleData = {};
+
+  Object.entries(existingSchedule).forEach(([dateStr, sessions]) => {
+    preservedSchedule[dateStr] = sessions.filter(s => s.isCompleted);
+  });
+
+  // Régénérer les séances non complétées sur les nouvelles heures creuses disponibles
+  return generateSchedule(
+    projects,
+    currentWeekStart,
+    preservedSchedule,
+    calibration,
+    externalEvents,
+    settings
+  );
+}
+

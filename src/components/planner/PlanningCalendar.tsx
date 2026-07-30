@@ -1,7 +1,8 @@
-import React from 'react';
-import { Project, ScheduleData } from '../../types';
+import React, { useState } from 'react';
+import { Project, ScheduleData, ExternalEvent, UserSettings } from '../../types';
 import { getLocalDateString } from '../../engine/scheduler';
-import { ChevronLeft, ChevronRight, RotateCw, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RotateCw, Check, Calendar as CalendarIcon, ShieldAlert } from 'lucide-react';
+import { CalendarIntegrationModal } from './CalendarIntegrationModal';
 
 const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const MONTHS = ["Janv.", "Févr.", "Mars", "Avril", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
@@ -9,20 +10,32 @@ const MONTHS = ["Janv.", "Févr.", "Mars", "Avril", "Mai", "Juin", "Juil.", "Ao�
 interface PlanningCalendarProps {
   projects: Project[];
   scheduleData: ScheduleData;
+  externalEvents?: ExternalEvent[];
+  userSettings?: UserSettings;
   currentWeekStart: Date;
   onChangeWeek: (offset: number) => void;
   onRegenerate: () => void;
   onToggleSession: (dateStr: string, idx: number) => void;
+  onUpdateSettings?: (newSettings: Partial<UserSettings>) => void;
+  onAddExternalEvent?: (event: ExternalEvent) => void;
+  onSetExternalEvents?: (events: ExternalEvent[]) => void;
 }
 
 export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
   projects,
   scheduleData,
+  externalEvents = [],
+  userSettings = { timezone: 'Europe/Paris', bufferMinutesBefore: 15, bufferMinutesAfter: 15, dayStartHour: 8, dayEndHour: 23, slotDurationMinutes: 60 },
   currentWeekStart,
   onChangeWeek,
   onRegenerate,
-  onToggleSession
+  onToggleSession,
+  onUpdateSettings,
+  onAddExternalEvent,
+  onSetExternalEvents
 }) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const endOfWeek = new Date(currentWeekStart);
   endOfWeek.setDate(endOfWeek.getDate() + 6);
   const weekLabel = `${currentWeekStart.getDate()} ${MONTHS[currentWeekStart.getMonth()]} – ${endOfWeek.getDate()} ${MONTHS[endOfWeek.getMonth()]}`;
@@ -34,7 +47,7 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
       <div className="card p-5 space-y-3" style={{ borderLeft: '5px solid var(--terra)' }}>
         <div>
           <h2 className="text-2xl font-black" style={{ color: 'var(--text)' }}>Ton Planning</h2>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--muted)' }}>Optimisé automatiquement selon l'effort cognitif et les contraintes d'échéances.</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--muted)' }}>Optimisé automatiquement avec tampons et intégration bidirectionnelle d'agendas.</p>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           <div className="flex items-center gap-1.5 p-1.5 rounded-2xl card" style={{ borderRadius: '18px' }}>
@@ -46,13 +59,26 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-          <button
-            onClick={onRegenerate}
-            className="w-10 h-10 rounded-2xl card flex items-center justify-center text-lg hover:scale-105 transition-transform"
-            title="Régénérer"
-          >
-            <RotateCw className="w-4 h-4 text-teal-700" />
-          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="px-3 py-2 rounded-xl card flex items-center gap-2 text-xs font-bold hover:scale-105 transition-transform"
+              style={{ border: '1px solid var(--terra)', color: 'var(--terra)' }}
+              title="Configurer l'intégration Google / iCal"
+            >
+              <CalendarIcon className="w-4 h-4" />
+              <span>Intégration Calendrier ({externalEvents.length})</span>
+            </button>
+
+            <button
+              onClick={onRegenerate}
+              className="w-10 h-10 rounded-2xl card flex items-center justify-center text-lg hover:scale-105 transition-transform"
+              title="Régénérer le planning"
+            >
+              <RotateCw className="w-4 h-4 text-teal-700" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -70,9 +96,15 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
             const dateStr = getLocalDateString(d);
             const isToday = dateStr === todayStr;
             const sessions = scheduleData[dateStr] || [];
+
+            // Filtrer les événements externes du jour
+            const dayEvents = externalEvents.filter(ev => {
+              const evDateStr = getLocalDateString(new Date(ev.startTime));
+              return evDateStr === dateStr;
+            });
+
             const completedCount = sessions.filter(s => s.isCompleted).length;
             const isDoneAll = sessions.length > 0 && completedCount === sessions.length;
-            const badgeBg = isDoneAll ? 'background:var(--sage-l);color:var(--sage)' : 'background:var(--bg);color:var(--muted)';
 
             return (
               <div
@@ -90,7 +122,26 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
                 </div>
 
                 <div className="space-y-2 min-h-[30px]">
-                  {sessions.length === 0 ? (
+                  {/* Blocs Indisponibles Externes (RDV / Personnels) */}
+                  {dayEvents.map(ev => {
+                    const startH = new Date(ev.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const endH = new Date(ev.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    return (
+                      <div
+                        key={ev.id}
+                        className="p-2 rounded-xl border border-rose-900/40 bg-rose-950/20 text-rose-300 text-xs flex items-center gap-2"
+                        title={`Événement externe bloqué + ${userSettings.bufferMinutesBefore}m tampon`}
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                        <div className="truncate flex-grow">
+                          <span className="font-bold block truncate">{ev.title}</span>
+                          <span className="text-[10px] text-rose-400 opacity-80">{startH} – {endH} (Occupé)</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {sessions.length === 0 && dayEvents.length === 0 ? (
                     <p className="text-[10px] italic py-2 text-center" style={{ color: 'var(--muted)' }}>Repos / Pas de créneau</p>
                   ) : (
                     sessions.map((session, si) => {
@@ -122,6 +173,18 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
           })
         )}
       </div>
+
+      {/* Modal d'intégration */}
+      <CalendarIntegrationModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        userSettings={userSettings}
+        externalEvents={externalEvents}
+        onUpdateSettings={onUpdateSettings || (() => {})}
+        onAddExternalEvent={onAddExternalEvent || (() => {})}
+        onSetExternalEvents={onSetExternalEvents || (() => {})}
+      />
     </div>
   );
 };
+

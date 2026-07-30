@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Project, ScheduleData } from '../../types';
 import { Doughnut, Line } from 'react-chartjs-2';
 import {
@@ -11,7 +11,8 @@ import {
   PointElement,
   LineElement
 } from 'chart.js';
-import { AlertTriangle, TrendingDown, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, TrendingDown, ShieldCheck, BarChart2, Layers } from 'lucide-react';
+import { GanttChartTab } from '../gantt/GanttChartTab';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement);
 
@@ -22,8 +23,11 @@ interface AnalyticsDashboardProps {
 }
 
 export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ projects, scheduleData, isDarkMode }) => {
+  const [subTab, setSubTab] = useState<'stats' | 'gantt'>('stats');
+
   const chartTextColor = isDarkMode ? '#7B9C97' : '#5C7C77';
   const gridColor = isDarkMode ? 'rgba(20, 184, 166, 0.15)' : 'rgba(14, 132, 120, 0.12)';
+
 
   // Global stats calculation
   let totalSessions = 0;
@@ -126,14 +130,46 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ projects
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Radar d'Analyse de Risque Banner */}
-      <div
-        className="card p-5 flex flex-col sm:flex-row items-center justify-between gap-4"
-        style={{
-          background: hasRisk ? 'rgba(239, 68, 68, 0.08)' : 'var(--sage-l)',
-          border: `1.5px solid ${hasRisk ? 'rgba(239, 68, 68, 0.3)' : 'var(--sage)'}`
-        }}
-      >
+      {/* Sub-navigation bar inside Stats section */}
+      <div className="flex items-center gap-2 p-1.5 rounded-2xl card w-fit" style={{ borderRadius: '20px' }}>
+        <button
+          onClick={() => setSubTab('stats')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+            subTab === 'stats'
+              ? 'bg-teal-700 text-white shadow-md'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <BarChart2 className="w-4 h-4" />
+          <span>Statistiques &amp; Risques</span>
+        </button>
+
+        <button
+          onClick={() => setSubTab('gantt')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+            subTab === 'gantt'
+              ? 'bg-teal-700 text-white shadow-md'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>Diagramme de Gantt WBS</span>
+        </button>
+      </div>
+
+      {subTab === 'gantt' ? (
+        <GanttChartTab projects={projects} />
+      ) : (
+        <>
+          {/* Radar d'Analyse de Risque Banner */}
+          <div
+            className="card p-5 flex flex-col sm:flex-row items-center justify-between gap-4"
+            style={{
+              background: hasRisk ? 'rgba(239, 68, 68, 0.08)' : 'var(--sage-l)',
+              border: `1.5px solid ${hasRisk ? 'rgba(239, 68, 68, 0.3)' : 'var(--sage)'}`
+            }}
+          >
+
         <div className="flex items-center gap-3">
           <div
             className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
@@ -210,6 +246,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ projects
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };
+
