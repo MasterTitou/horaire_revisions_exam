@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
 import { Gamification } from '../../types';
-import { Zap, Target, BookOpen, Layers, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Zap, Target, BookOpen, Layers, RotateCcw, AlertTriangle, Download, Upload } from 'lucide-react';
 
 interface ProfileTabProps {
   gamification: Gamification;
   onResetData: () => void;
+  onExportData?: () => void;
+  onImportData?: (json: string) => boolean;
 }
 
-export const ProfileTab: React.FC<ProfileTabProps> = ({ gamification, onResetData }) => {
+export const ProfileTab: React.FC<ProfileTabProps> = ({
+  gamification,
+  onResetData,
+  onExportData,
+  onImportData
+}) => {
   const [showConfirmReset, setShowConfirmReset] = useState(false);
 
   const velocity = gamification.velocityIndex || 100;
@@ -16,6 +23,21 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ gamification, onResetDat
 
   const skillsList = Object.values(gamification.skills || {});
   const questsList = gamification.quests || [];
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onImportData) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        if (text) {
+          const ok = onImportData(text);
+          if (ok) alert("Sauvegarde importée avec succès !");
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -33,19 +55,41 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ gamification, onResetDat
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="px-5 py-3 rounded-2xl flex flex-col items-center justify-center shrink-0" style={{ background: 'var(--terra-l)', border: '1px solid var(--border)' }}>
-            <Zap className="w-7 h-7 mb-1" style={{ color: 'var(--terra)' }} />
-            <span className="font-black text-sm" style={{ color: 'var(--terra)' }}>{velocityLabel}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="px-4 py-2.5 rounded-2xl flex items-center gap-2 shrink-0" style={{ background: 'var(--terra-l)', border: '1px solid var(--border)' }}>
+            <Zap className="w-5 h-5" style={{ color: 'var(--terra)' }} />
+            <span className="font-black text-xs" style={{ color: 'var(--terra)' }}>{velocityLabel}</span>
           </div>
+
+          {onExportData && (
+            <button
+              onClick={onExportData}
+              className="p-2.5 rounded-2xl border hover:border-teal-500 hover:text-teal-600 transition-colors text-gray-600 bg-card shrink-0 flex items-center gap-1.5 text-xs font-extrabold"
+              title="Exporter une sauvegarde JSON"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Exporter JSON</span>
+            </button>
+          )}
+
+          {onImportData && (
+            <label
+              className="p-2.5 rounded-2xl border hover:border-teal-500 hover:text-teal-600 transition-colors text-gray-600 bg-card shrink-0 flex items-center gap-1.5 text-xs font-extrabold cursor-pointer"
+              title="Importer une sauvegarde JSON"
+            >
+              <Upload className="w-4 h-4" />
+              <span className="hidden sm:inline">Importer JSON</span>
+              <input type="file" accept=".json" onChange={handleFileUpload} className="hidden" />
+            </label>
+          )}
 
           <button
             onClick={() => setShowConfirmReset(true)}
-            className="p-3 rounded-2xl border hover:border-red-500 hover:text-red-500 transition-colors text-gray-500 bg-card shrink-0 flex items-center gap-1.5 text-xs font-extrabold"
+            className="p-2.5 rounded-2xl border hover:border-red-500 hover:text-red-500 transition-colors text-gray-500 bg-card shrink-0 flex items-center gap-1.5 text-xs font-extrabold"
             title="Réinitialiser toutes les données & statistiques"
           >
             <RotateCcw className="w-4 h-4" />
-            <span className="hidden sm:inline">Réinitialiser Stats</span>
+            <span className="hidden sm:inline">Réinitialiser</span>
           </button>
         </div>
       </div>
@@ -64,7 +108,6 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ gamification, onResetDat
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {skillsList.map(skill => {
-            const levelXp = skill.level * 10;
             const pct = Math.min(100, Math.round(((skill.hoursSpent % 10) / 10) * 100));
 
             return (

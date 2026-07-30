@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Project, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, DynamicQuest } from '../types';
 import { generateSchedule, getStartOfWeek, HPH } from '../engine/scheduler';
 
@@ -52,6 +52,8 @@ export function useProjectStore() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!localStorage.getItem('authToken'));
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'loading' | 'error'>('synced');
 
+  const saveTimerRef = useRef<any>(null);
+
   // Compute Velocity Index & Dynamic Quests
   const updateMetricsAndQuests = (currentSchedule: ScheduleData, currentProjects: Project[], currentGamo: Gamification): Gamification => {
     let totalPlanned = 0;
@@ -64,7 +66,6 @@ export function useProjectStore() {
 
     const velocityIndex = totalPlanned > 0 ? Math.min(100, Math.round((totalDone / totalPlanned) * 100)) : 100;
 
-    // Generate Quests from urgent WBS milestones
     const quests: DynamicQuest[] = [];
     currentProjects.forEach(p => {
       p.milestones.forEach(ms => {
@@ -91,62 +92,96 @@ export function useProjectStore() {
     };
   };
 
-  // Local storage loading & auto-migration
+  // Process and apply state payload
+  const applyStatePayload = useCallback((d: any) => {
+    if (!d) return;
+    let projs: Project[] = d.projects || [];
+    const subjs = d.subjects || [];
+
+    if (projs.length === 0 && subjs.length > 0) {
+      projs = subjs.map((sub: any, idx: number) => ({
+        id: sub.id || `prj_${Date.now()}_${idx}`,
+        name: sub.name,
+        code: `PRJ-${idx + 1}`,
+        color: sub.color || COLORS[idx % COLORS.length],
+        isHardDeadline: true,
+        deadline: sub.examDate || '',
+        milestones: [
+          {
+            id: `ms_${sub.id || idx}`,
+            title: `Jalon principal — ${sub.name}`,
+            estimatedHours: (sub.difficulty || 3) * 10,
+            completedHours: 0,
+            dueDate: sub.examDate || '',
+            cognitiveLoad: (sub.difficulty || 3) >= 4 ? 'high' : ((sub.difficulty || 3) >= 2 ? 'medium' : 'low'),
+            isHardDeadline: true,
+            isCompleted: false
+          }
+        ]
+      }));
+    }
+
+    const rawGamo = d.gamification || DEFAULT_GAMIFICATION;
+    const initialGamo = {
+      ...DEFAULT_GAMIFICATION,
+      ...rawGamo,
+      skills: { ...DEFAULT_SKILLS, ...(rawGamo.skills || {}) }
+    };
+
+    const updatedGamo = updateMetricsAndQuests(d.scheduleData || {}, projs, initialGamo);
+
+    setProjects(projs);
+    setScheduleData(d.scheduleData || {});
+    setStreak(d.streak || { count: 0, lastDate: '' });
+    setGamification(updatedGamo);
+    setChatHistory(d.chatHistory || []);
+    setIsDarkMode(!!d.isDarkMode);
+    if (d.isDarkMode) {
+      document.documentElement.classList.add('dark');
+    }
+  }, []);
+
+  // Dual Load: 1. LocalStorage Cache, 2. Cloud Redis API (/api/load)
   useEffect(() => {
+    // 1. LocalStorage Initial Load
     const saved = localStorage.getItem('revisionCalendarData');
     if (saved) {
       try {
         const d = JSON.parse(saved);
-        let projs: Project[] = d.projects || [];
-        const subjs = d.subjects || [];
-
-        if (projs.length === 0 && subjs.length > 0) {
-          projs = subjs.map((sub: any, idx: number) => ({
-            id: sub.id || `prj_${Date.now()}_${idx}`,
-            name: sub.name,
-            code: `PRJ-${idx + 1}`,
-            color: sub.color || COLORS[idx % COLORS.length],
-            isHardDeadline: true,
-            deadline: sub.examDate || '',
-            milestones: [
-              {
-                id: `ms_${sub.id || idx}`,
-                title: `Jalon principal — ${sub.name}`,
-                estimatedHours: (sub.difficulty || 3) * 10,
-                completedHours: 0,
-                dueDate: sub.examDate || '',
-                cognitiveLoad: (sub.difficulty || 3) >= 4 ? 'high' : ((sub.difficulty || 3) >= 2 ? 'medium' : 'low'),
-                isHardDeadline: true,
-                isCompleted: false
-              }
-            ]
-          }));
-        }
-
-        const rawGamo = d.gamification || DEFAULT_GAMIFICATION;
-        const initialGamo = {
-          ...DEFAULT_GAMIFICATION,
-          ...rawGamo,
-          skills: { ...DEFAULT_SKILLS, ...(rawGamo.skills || {}) }
-        };
-
-        const updatedGamo = updateMetricsAndQuests(d.scheduleData || {}, projs, initialGamo);
-
-        setProjects(projs);
-        setScheduleData(d.scheduleData || {});
-        setStreak(d.streak || { count: 0, lastDate: '' });
-        setGamification(updatedGamo);
-        setChatHistory(d.chatHistory || []);
-        setIsDarkMode(!!d.isDarkMode);
-        if (d.isDarkMode) {
-          document.documentElement.classList.add('dark');
-        }
+        applyStatePayload(d);
       } catch (e) {
         console.error('Failed to parse revisionCalendarData:', e);
       }
     }
-  }, []);
 
+    // 2. Fetch from Cloud Redis API if authenticated
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      setSyncStatus('loading');
+      fetch('/api/load', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+        .then(res => {
+          if (res.ok) return res.json();
+          throw new Error('No Cloud Redis data');
+        })
+        .then(cloudData => {
+          if (cloudData && (cloudData.projects || cloudData.scheduleData)) {
+            applyStatePayload(cloudData);
+            localStorage.setItem('revisionCalendarData', JSON.stringify(cloudData));
+          }
+          setSyncStatus('synced');
+        })
+        .catch(err => {
+          console.log('Redis load skipped or offline:', err.message);
+          setSyncStatus('synced');
+        });
+    }
+  }, [applyStatePayload]);
+
+  // Dual Save: 1. LocalStorage, 2. Cloud Redis API (/api/save)
   const saveAll = useCallback((
     newProjects: Project[],
     newSchedule: ScheduleData,
@@ -162,7 +197,33 @@ export function useProjectStore() {
       chatHistory,
       isDarkMode: newDark
     };
+
+    // Save to LocalStorage immediately
     localStorage.setItem('revisionCalendarData', JSON.stringify(payload));
+    localStorage.setItem('horaire_revisions_backup', JSON.stringify(payload));
+
+    // Sync to Cloud Redis (/api/save)
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      setSyncStatus('saving');
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+
+      saveTimerRef.current = setTimeout(() => {
+        fetch('/api/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        })
+          .then(res => {
+            if (res.ok) setSyncStatus('synced');
+            else setSyncStatus('error');
+          })
+          .catch(() => setSyncStatus('error'));
+      }, 600);
+    }
   }, [chatHistory]);
 
   const addProject = (name: string, code: string, deadline: string, isHardDeadline: boolean) => {
@@ -273,7 +334,6 @@ export function useProjectStore() {
       updatedGamification.sessionsCompleted += 1;
       updatedGamification.xp += 25;
 
-      // Determine Skill Domain based on project note
       let skillKey = 'logistics';
       const noteLower = s.note.toLowerCase();
       if (noteLower.includes('potager') || noteLower.includes('botanique') || noteLower.includes('agri')) skillKey = 'agri';
@@ -326,6 +386,7 @@ export function useProjectStore() {
 
   const resetAllData = () => {
     localStorage.removeItem('revisionCalendarData');
+    localStorage.removeItem('horaire_revisions_backup');
     setProjects([]);
     setScheduleData({});
     setStreak({ count: 0, lastDate: '' });
@@ -349,6 +410,38 @@ export function useProjectStore() {
     };
     setGamification(freshGamo);
     setChatHistory([]);
+    saveAll([], {}, { count: 0, lastDate: '' }, freshGamo, isDarkMode);
+  };
+
+  const exportDataJSON = () => {
+    const payload = {
+      projects,
+      scheduleData,
+      streak,
+      gamification,
+      chatHistory,
+      isDarkMode,
+      exportedAt: new Date().toISOString()
+    };
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `horaire_projects_backup_${Date.now()}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const importDataJSON = (jsonString: string) => {
+    try {
+      const parsed = JSON.parse(jsonString);
+      applyStatePayload(parsed);
+      saveAll(parsed.projects || [], parsed.scheduleData || {}, parsed.streak || { count: 0, lastDate: '' }, parsed.gamification || DEFAULT_GAMIFICATION, !!parsed.isDarkMode);
+      return true;
+    } catch (e) {
+      alert("Erreur lors de l'importation du fichier JSON.");
+      return false;
+    }
   };
 
   return {
@@ -371,6 +464,8 @@ export function useProjectStore() {
     changeWeek,
     toggleTheme,
     resetAllData,
+    exportDataJSON,
+    importDataJSON,
     setChatHistory
   };
 }

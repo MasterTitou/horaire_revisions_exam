@@ -33,6 +33,8 @@ export const App: React.FC = () => {
     changeWeek,
     toggleTheme,
     resetAllData,
+    exportDataJSON,
+    importDataJSON,
     setChatHistory
   } = useProjectStore();
 
@@ -136,7 +138,12 @@ export const App: React.FC = () => {
         {/* TAB: PROFILE */}
         {activeTab === 'profile' && (
           <div className="tab-panel">
-            <ProfileTab gamification={gamification} onResetData={resetAllData} />
+            <ProfileTab
+              gamification={gamification}
+              onResetData={resetAllData}
+              onExportData={exportDataJSON}
+              onImportData={importDataJSON}
+            />
           </div>
         )}
 
