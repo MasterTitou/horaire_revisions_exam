@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { sql } from '@vercel/postgres';
+import { sql, initSchema } from './db.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || 'revision-planner-default-secret';
 
@@ -9,7 +9,7 @@ function generateToken(password) {
 
 function verifyToken(token) {
   const appPassword = process.env.APP_PASSWORD;
-  if (!appPassword) return true; // Auth optionnelle si non configuré
+  if (!appPassword) return true;
   const expected = generateToken(appPassword);
   return token === expected;
 }
@@ -31,11 +31,12 @@ export default async function handler(req, res) {
   // 1. Essai de chargement depuis PostgreSQL si POSTGRES_URL est présent
   if (process.env.POSTGRES_URL) {
     try {
+      await initSchema(); // Auto-création automatique si absente
+
       const projectsRes = await sql`SELECT * FROM projects ORDER BY created_at ASC`;
       const milestonesRes = await sql`SELECT * FROM milestones ORDER BY created_at ASC`;
       const depsRes = await sql`SELECT * FROM milestone_dependencies`;
       const sessionsRes = await sql`SELECT * FROM sessions ORDER BY session_date ASC`;
-      const skillsRes = await sql`SELECT * FROM domain_skills`;
 
       const milestonesMap = new Map();
       milestonesRes.rows.forEach(m => {
@@ -52,7 +53,6 @@ export default async function handler(req, res) {
         });
       });
 
-      // Attacher les dépendances DAG
       depsRes.rows.forEach(d => {
         const child = milestonesMap.get(d.child_milestone_id);
         if (child) {
@@ -60,7 +60,6 @@ export default async function handler(req, res) {
         }
       });
 
-      // Assembler les projets avec jalons WBS
       const projects = projectsRes.rows.map(p => ({
         id: p.id,
         name: p.name,
@@ -71,7 +70,6 @@ export default async function handler(req, res) {
         milestones: Array.from(milestonesMap.values()).filter(m => milestonesRes.rows.find(row => row.id === m.id && row.project_id === p.id))
       }));
 
-      // Groupement des séances par date
       const scheduleData = {};
       sessionsRes.rows.forEach(s => {
         const dateStr = new Date(s.session_date).toISOString().split('T')[0];

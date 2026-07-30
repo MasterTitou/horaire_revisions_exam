@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { sql } from '@vercel/postgres';
+import { sql, initSchema } from './db.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || 'revision-planner-default-secret';
 
@@ -19,7 +19,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // Vérification Auth
   const authHeader = req.headers['authorization'];
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
@@ -36,6 +35,8 @@ export default async function handler(req, res) {
   // 1. Sauvegarde dans PostgreSQL si POSTGRES_URL est configuré
   if (process.env.POSTGRES_URL) {
     try {
+      await initSchema(); // Auto-création des tables SQL
+
       const { projects = [], scheduleData = {} } = payload;
 
       for (const p of projects) {
@@ -64,7 +65,6 @@ export default async function handler(req, res) {
               is_completed = EXCLUDED.is_completed;
           `;
 
-          // Sauvegarde des dépendances DAG
           for (const parentId of m.dependsOn || []) {
             await sql`
               INSERT INTO milestone_dependencies (parent_milestone_id, child_milestone_id)
@@ -75,7 +75,6 @@ export default async function handler(req, res) {
         }
       }
 
-      // Sauvegarde des Séances du calendrier
       for (const [dateStr, sessions] of Object.entries(scheduleData)) {
         for (const s of (sessions || [])) {
           if (s.milestoneId) {
@@ -94,7 +93,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // 2. Sauvegarde miroir dans Redis KV (Vercel KV / Upstash)
+  // 2. Sauvegarde miroir dans Redis KV
   const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
   const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
