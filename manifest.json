@@ -1,11 +1,11 @@
 {
-  "name": "Mon Assistant de Révision",
-  "short_name": "Révisions",
-  "description": "Planificateur de révisions intelligent avec coach IA",
+  "name": "Horaires SaaS Project Engine",
+  "short_name": "Horaires SaaS",
+  "description": "Plateforme universelle de gestion de projets, jalons WBS, dépendances DAG et optimisation sous contraintes",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#6366f1",
+  "background_color": "#0D131A",
+  "theme_color": "#0E8478",
   "orientation": "any",
   "icons": [
     {
