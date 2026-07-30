@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { Project, CognitiveLoad } from '../../types';
 import { Layers, Trash2, X, Link, Flame } from 'lucide-react';
 
+const todayISO = new Date().toISOString().split('T')[0];
+
 interface ProjectWBSCardProps {
   projects: Project[];
-  onAddProject: (name: string, code: string, deadline: string, isHardDeadline: boolean) => void;
-  onAddMilestone: (projId: string, title: string, dueDate: string, estimatedHours: number, cognitiveLoad: CognitiveLoad, dependsOn?: string[]) => void;
+  onAddProject: (name: string, code: string, deadline: string, isHardDeadline: boolean, startDate?: string) => void;
+  onAddMilestone: (projId: string, title: string, dueDate: string, estimatedHours: number, cognitiveLoad: CognitiveLoad, dependsOn?: string[], startDate?: string) => void;
   onDeleteProject: (projId: string) => void;
   onDeleteMilestone: (projId: string, msId: string) => void;
 }
@@ -23,11 +25,13 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
   // New Project State
   const [projName, setProjName] = useState('');
   const [projCode, setProjCode] = useState('');
+  const [projStartDate, setProjStartDate] = useState(todayISO);
   const [projDeadline, setProjDeadline] = useState('');
   const [projType, setProjType] = useState<'hard' | 'soft'>('hard');
 
   // New Milestone State
   const [msTitle, setMsTitle] = useState('');
+  const [msStartDate, setMsStartDate] = useState(todayISO);
   const [msDate, setMsDate] = useState('');
   const [msHours, setMsHours] = useState(10);
   const [msCognitive, setMsCognitive] = useState<CognitiveLoad>('medium');
@@ -36,9 +40,10 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
     if (!projName.trim()) return;
-    onAddProject(projName.trim(), projCode.trim() || 'PRJ', projDeadline, projType === 'hard');
+    onAddProject(projName.trim(), projCode.trim() || 'PRJ', projDeadline, projType === 'hard', projStartDate);
     setProjName('');
     setProjCode('');
+    setProjStartDate(todayISO);
     setProjDeadline('');
     setShowProjForm(false);
   };
@@ -47,12 +52,14 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
     e.preventDefault();
     if (!activeProjForMs || !msTitle.trim()) return;
     const dependsOn = selectedParentId ? [selectedParentId] : [];
-    onAddMilestone(activeProjForMs.id, msTitle.trim(), msDate, msHours, msCognitive, dependsOn);
+    onAddMilestone(activeProjForMs.id, msTitle.trim(), msDate, msHours, msCognitive, dependsOn, msStartDate);
     setMsTitle('');
+    setMsStartDate(todayISO);
     setMsDate('');
     setSelectedParentId('');
     setActiveProjForMs(null);
   };
+
 
   // Universal Effort Badges
   const cogBadges: Record<CognitiveLoad, React.ReactNode> = {
@@ -197,7 +204,16 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
               className="inp text-xs uppercase"
             />
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-[11px] font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Date début</label>
+              <input
+                type="date"
+                value={projStartDate}
+                onChange={e => setProjStartDate(e.target.value)}
+                className="inp text-xs"
+              />
+            </div>
             <div>
               <label className="text-[11px] font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Échéance globale</label>
               <input
@@ -214,8 +230,8 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
                 onChange={e => setProjType(e.target.value as 'hard' | 'soft')}
                 className="inp text-xs font-bold"
               >
-                <option value="hard">🔴 Ferme (Livraison)</option>
-                <option value="soft">🔵 Filée (Volume)</option>
+                <option value="hard">🔴 Ferme</option>
+                <option value="soft">🔵 Filée</option>
               </select>
             </div>
           </div>
@@ -239,7 +255,16 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
             placeholder="ex: Système d'irrigation, Levée de fonds Série A, Schéma BDD"
             className="inp text-xs"
           />
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div>
+              <label className="text-[10px] font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Date début</label>
+              <input
+                type="date"
+                value={msStartDate}
+                onChange={e => setMsStartDate(e.target.value)}
+                className="inp text-xs"
+              />
+            </div>
             <div>
               <label className="text-[10px] font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Date jalon</label>
               <input
@@ -267,12 +292,13 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
                 onChange={e => setMsCognitive(e.target.value as CognitiveLoad)}
                 className="inp text-xs font-bold"
               >
-                <option value="high">🧠 Stratégie / High</option>
-                <option value="medium">⚙️ Exécution / Mid</option>
-                <option value="low">📝 Logistique / Low</option>
+                <option value="high">🧠 Stratégie</option>
+                <option value="medium">⚙️ Exécution</option>
+                <option value="low">📝 Logistique</option>
               </select>
             </div>
           </div>
+
 
           {/* Dépendance obligatoire (Séquençage Logique DAG) */}
           {activeProjForMs.milestones.length > 0 && (

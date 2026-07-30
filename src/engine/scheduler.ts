@@ -149,6 +149,7 @@ export function generateSchedule(
     id: string;
     title: string;
     color: string;
+    startDate: string;
     dueDate: string;
     isHardDeadline: boolean;
     isCriticalPath: boolean;
@@ -173,6 +174,7 @@ export function generateSchedule(
           id: ms.id,
           title: ms.title,
           color: proj.color,
+          startDate: ms.startDate || proj.startDate || '',
           dueDate: ms.dueDate || proj.deadline || '',
           isHardDeadline: ms.isHardDeadline || proj.isHardDeadline,
           isCriticalPath: !!criticalMap[ms.id],
@@ -194,10 +196,21 @@ export function generateSchedule(
   const dayEndHour = settings.dayEndHour ?? 23;
   const slotDurationMinutes = settings.slotDurationMinutes ?? 60;
 
+  const todayStr = getLocalDateString(new Date());
+
   for (let i = 0; i < 7; i++) {
     const d = new Date(currentWeekStart);
     d.setDate(d.getDate() + i);
     const dateStr = getLocalDateString(d);
+    
+    // RÈGLE STRICTE : Ne jamais planifier de nouvelles séances dans le passé (avant aujourd'hui)
+    if (dateStr < todayStr) {
+      if (!scheduleData[dateStr]) {
+        scheduleData[dateStr] = existingSchedule[dateStr] || [];
+      }
+      continue;
+    }
+
     scheduleData[dateStr] = [];
 
     // Découpage en tranches d'heures réelles de dayStartHour à dayEndHour
@@ -222,6 +235,8 @@ export function generateSchedule(
       const targetCog: CognitiveLoad = slotIdx === 0 ? 'high' : (slotIdx === 1 ? 'medium' : 'low');
 
       const candidates = allMilestones.filter(m => {
+        // Ne pas planifier avant la date de début définie du projet ou du jalon
+        if (m.startDate && dateStr < m.startDate) return false;
         if (m.dueDate && dateStr > m.dueDate) return false;
         if (slotIdx === 2 && m.cognitiveLoad === 'high') return false;
 
@@ -234,6 +249,7 @@ export function generateSchedule(
 
         return true;
       });
+
 
       if (candidates.length === 0) {
         currentSlotStartHour += (slotDurationMinutes / 60);

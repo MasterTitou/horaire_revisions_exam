@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS projects (
   name VARCHAR(255) NOT NULL,
   code VARCHAR(50) NOT NULL,
   color VARCHAR(50) DEFAULT '#0E8478',
+  start_date DATE,
   deadline DATE,
   is_hard_deadline BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -32,12 +33,14 @@ CREATE TABLE IF NOT EXISTS milestones (
   title VARCHAR(255) NOT NULL,
   estimated_hours NUMERIC(5,2) DEFAULT 10.00,
   completed_hours NUMERIC(5,2) DEFAULT 0.00,
+  start_date DATE,
   due_date DATE,
   cognitive_load VARCHAR(20) DEFAULT 'medium',
   is_hard_deadline BOOLEAN DEFAULT TRUE,
   is_completed BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
 
 -- 5. Table Relationnelle des Dépendances DAG (n-à-n)
 CREATE TABLE IF NOT EXISTS milestone_dependencies (

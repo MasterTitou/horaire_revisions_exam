@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Project, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, DynamicQuest, ExternalEvent, UserSettings } from '../types';
-import { generateSchedule, getStartOfWeek, HPH, DEFAULT_USER_SETTINGS, replanifyOnCalendarChange } from '../engine/scheduler';
+import { generateSchedule, getStartOfWeek, HPH, DEFAULT_USER_SETTINGS, replanifyOnCalendarChange, getLocalDateString } from '../engine/scheduler';
+
 
 const COLORS = [
   "#0E8478", "#6B46C1", "#2E7D32", "#FF6B35", "#3B82F6", "#D946EF",
@@ -229,18 +230,20 @@ export function useProjectStore() {
     }
   }, [chatHistory]);
 
-  const addProject = (name: string, code: string, deadline: string, isHardDeadline: boolean) => {
+  const addProject = (name: string, code: string, deadline: string, isHardDeadline: boolean, startDate?: string) => {
+    const todayStr = getLocalDateString(new Date());
     const newProj: Project = {
       id: `prj_${Date.now()}`,
       name,
       code: code.toUpperCase() || 'PRJ',
       color: COLORS[projects.length % COLORS.length],
+      startDate: startDate || todayStr,
       deadline,
       isHardDeadline,
       milestones: []
     };
     const updatedProjects = [...projects, newProj];
-    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData);
+    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData, gamification.calibration, externalEvents, userSettings);
     const updatedGamo = updateMetricsAndQuests(updatedSchedule, updatedProjects, gamification);
 
     setProjects(updatedProjects);
@@ -255,8 +258,10 @@ export function useProjectStore() {
     dueDate: string,
     estimatedHours: number,
     cognitiveLoad: 'high' | 'medium' | 'low',
-    dependsOn?: string[]
+    dependsOn?: string[],
+    startDate?: string
   ) => {
+    const todayStr = getLocalDateString(new Date());
     const updatedProjects = projects.map(p => {
       if (p.id === projId) {
         return {
@@ -268,6 +273,7 @@ export function useProjectStore() {
               title,
               estimatedHours,
               completedHours: 0,
+              startDate: startDate || p.startDate || todayStr,
               dueDate: dueDate || p.deadline,
               cognitiveLoad,
               isHardDeadline: p.isHardDeadline,
@@ -279,7 +285,8 @@ export function useProjectStore() {
       }
       return p;
     });
-    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData);
+
+    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData, gamification.calibration, externalEvents, userSettings);
     const updatedGamo = updateMetricsAndQuests(updatedSchedule, updatedProjects, gamification);
 
     setProjects(updatedProjects);

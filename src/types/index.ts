@@ -5,6 +5,7 @@ export interface Milestone {
   title: string;
   estimatedHours: number;
   completedHours: number;
+  startDate?: string; // Date de début minimale (YYYY-MM-DD)
   dueDate: string;
   cognitiveLoad: CognitiveLoad;
   isHardDeadline: boolean;
@@ -18,10 +19,12 @@ export interface Project {
   name: string;
   code: string;
   color: string;
+  startDate?: string; // Date de début du projet (YYYY-MM-DD)
   deadline: string;
   isHardDeadline: boolean;
   milestones: Milestone[];
 }
+
 
 export interface Session {
   id: string;
