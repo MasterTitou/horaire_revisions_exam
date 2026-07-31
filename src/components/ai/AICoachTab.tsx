@@ -233,6 +233,26 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
         });
       });
 
+      // Filtrage des messages système/erreur pour ne garder que le vrai dialogue valide
+      const validHistory = updatedMessages.filter(m => !m.content.startsWith('⚠️') && !m.content.startsWith('⚡'));
+      
+      // Construction d'une alternance stricte user/model requise par l'API Gemini
+      const formattedContents: { role: string; parts: { text: string }[] }[] = [];
+      validHistory.forEach(m => {
+        const geminiRole = m.role === 'assistant' ? 'model' : 'user';
+        if (formattedContents.length > 0 && formattedContents[formattedContents.length - 1].role === geminiRole) {
+          // Fusionner avec le message précédent pour éviter l'erreur de rôles consécutifs
+          formattedContents[formattedContents.length - 1].parts[0].text += `\n\n${m.content}`;
+        } else {
+          formattedContents.push({ role: geminiRole, parts: [{ text: m.content }] });
+        }
+      });
+
+      // S'assurer que la conversation commence toujours par 'user'
+      if (formattedContents.length > 0 && formattedContents[0].role !== 'user') {
+        formattedContents.shift();
+      }
+
       const res = await fetch('/api/ai?action=chat', {
         method: 'POST',
         headers: {
@@ -241,25 +261,28 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
         },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: `Tu es un coach universel expert en gestion de projets tout domaine. Tu réponds avec bienveillance et rigueur.\n\n${context}` }] },
-          contents: updatedMessages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
+          contents: formattedContents
         })
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(resText); } catch (e) {}
+
       let replyMsg: ChatMessage;
 
-      if (res.ok) {
-        const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Réponse non disponible.";
+      if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        const replyText = data.candidates[0].content.parts[0].text;
         replyMsg = {
           role: 'assistant',
           content: replyText,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
       } else {
-        const errMsg = data.error?.message || data.error || "Erreur de connexion au serveur IA.";
+        const errMsg = data.error?.message || data.error || (typeof data.details === 'string' ? data.details : null) || resText.slice(0, 150) || `Erreur serveur (${res.status})`;
         replyMsg = {
           role: 'assistant',
-          content: `⚠️ ${errMsg}`,
+          content: `⚠️ Erreur API [${res.status}] : ${errMsg}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
       }
@@ -275,10 +298,11 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
         return t;
       }));
 
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Erreur communication IA:', err);
       const errorMsg: ChatMessage = {
         role: 'assistant',
-        content: "⚠️ Erreur réseau : Impossible de contacter l'API du Coach IA.",
+        content: `⚠️ Erreur de connexion au serveur : ${err.message || 'Problème de communication réseau.'}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setThreads(prev => prev.map(t => {
@@ -291,7 +315,8 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
         }
         return t;
       }));
-    } finally {
+    }
+ finally {
       setLoading(false);
       fetchQuotas();
     }

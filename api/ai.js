@@ -202,13 +202,38 @@ export default async function handler(req, res) {
   }
 
   const { contents, systemInstruction, generationConfig } = req.body || {};
+  
+  // Nettoyage et alternance des rôles
+  let sanitizedContents = [];
+  if (Array.isArray(contents)) {
+    contents.forEach(c => {
+      const role = c.role === 'assistant' ? 'model' : (c.role === 'model' ? 'model' : 'user');
+      const text = c.parts?.[0]?.text || '';
+      if (!text || text.startsWith('⚠️') || text.startsWith('⚡')) return;
+
+      if (sanitizedContents.length > 0 && sanitizedContents[sanitizedContents.length - 1].role === role) {
+        sanitizedContents[sanitizedContents.length - 1].parts[0].text += `\n\n${text}`;
+      } else {
+        sanitizedContents.push({ role, parts: [{ text }] });
+      }
+    });
+  }
+
+  if (sanitizedContents.length === 0) {
+    return res.status(400).json({ error: 'Contenu de message vide ou invalide.' });
+  }
+
+  if (sanitizedContents[0].role !== 'user') {
+    sanitizedContents.shift();
+  }
+
   const modelName = AI_MODELS.FAST_LITE;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents, systemInstruction, generationConfig })
+    body: JSON.stringify({ contents: sanitizedContents, systemInstruction, generationConfig })
   });
 
   const data = await response.json().catch(() => ({}));
@@ -218,9 +243,13 @@ export default async function handler(req, res) {
 
   if (!response.ok) {
     console.error('Erreur API Chat Gemini 3.5 Flash-Lite:', data);
-    return res.status(response.status || 500).json(data);
+    return res.status(response.status || 500).json({
+      error: data.error?.message || data.error || 'Erreur API Google Gemini',
+      details: data
+    });
   }
 
   return res.status(200).json(data);
 }
+
 
