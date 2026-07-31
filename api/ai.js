@@ -3,12 +3,10 @@ import { getQuotaUsage, incrementQuotaUsage } from './db.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || 'revision-planner-default-secret';
 
-// Identifiants exacts validés auprès de l'API Google Gemini
+// Modèles d'IA stricts à 2 niveaux (Sans aucun fallback vers 2.5-flash ou 3.5-flash)
 export const AI_MODELS = {
-  FAST_PARSER: process.env.GEMINI_FAST_MODEL || process.env.GEMINI_FLASH_LITE_MODEL || 'gemini-3.5-flash-lite',
-  HEAVY_STRATEGIST: process.env.GEMINI_HEAVY_MODEL || process.env.GEMINI_3_6_FLASH_MODEL || 'gemini-3.6-flash',
-  FAST_FALLBACK: 'gemini-2.5-flash-lite',
-  STABLE_FALLBACK: 'gemini-2.5-flash'
+  FAST_LITE: process.env.GEMINI_FLASH_LITE_MODEL || 'gemini-3.5-flash-lite',
+  HEAVY_STRATEGIST: process.env.GEMINI_3_6_FLASH_MODEL || 'gemini-3.6-flash'
 };
 
 function generateToken(password) {
@@ -88,7 +86,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Méthode non autorisée' });
   }
 
-  // ROUTE 2: POST / Parse (Flash-Lite)
+  // ROUTE 2: POST / Parse (Strictement Gemini 3.5 Flash-Lite)
   if (action === 'parse') {
     const quotaResult = await incrementQuotaUsage(userKey, todayStr, 'lite', 500);
     if (!quotaResult.allowed) {
@@ -102,10 +100,10 @@ export default async function handler(req, res) {
 
     let parsedRaw = {};
     if (apiKey) {
-      let modelName = AI_MODELS.FAST_PARSER;
-      let url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const modelName = AI_MODELS.FAST_LITE; // Strictement gemini-3.5-flash-lite
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
-      let response = await fetch(url, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -115,27 +113,15 @@ export default async function handler(req, res) {
         })
       });
 
-      // Fallback vers gemini-2.5-flash-lite si le modèle 3.5 échoue
-      if (!response.ok && modelName !== AI_MODELS.FAST_FALLBACK) {
-        console.warn(`Fallback parsing vers ${AI_MODELS.FAST_FALLBACK}...`);
-        url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.FAST_FALLBACK}:generateContent?key=${apiKey}`;
-        response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: "Tu es un assistant de parsing de projet. Extrais un objet JSON strict avec : title, project_name, category, difficulty_score (1-5), estimated_hours, cognitive_load ('low','medium','high'), deadline (YYYY-MM-DD), is_hard_deadline (boolean), subtasks (array of string)." }] },
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
-          })
-        });
-      }
-
       if (response.ok) {
         const data = await response.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (text) {
           try { parsedRaw = JSON.parse(text); } catch (e) {}
         }
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        console.error('Erreur API Gemini 3.5 Flash-Lite:', errData);
       }
     }
 
@@ -143,11 +129,11 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, data: finalData, quotaUsage: { used: quotaResult.current, limit: quotaResult.maxLimit } });
   }
 
-  // ROUTE 3: POST / Arbitrate (Haute Stratégie)
+  // ROUTE 3: POST / Arbitrate (Strictement Gemini 3.6 Flash)
   if (action === 'arbitrate') {
     const quotaResult = await incrementQuotaUsage(userKey, todayStr, 'heavy', 20);
     if (!quotaResult.allowed) {
-      return res.status(429).json({ error: 'Quota IA stratégique (20/j) atteint.', quotaExhausted: true, fallbackRequested: true, quotaUsage: quotaResult });
+      return res.status(429).json({ error: 'Quota Gemini 3.6 Flash (20/j) atteint.', quotaExhausted: true, fallbackRequested: true, quotaUsage: quotaResult });
     }
 
     const { conflictSummary, scheduleState, userGoal } = req.body || {};
@@ -163,10 +149,10 @@ export default async function handler(req, res) {
       });
     }
 
-    let modelName = AI_MODELS.HEAVY_STRATEGIST;
-    let url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    const modelName = AI_MODELS.HEAVY_STRATEGIST; // Strictement gemini-3.6-flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
-    let response = await fetch(url, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -176,24 +162,10 @@ export default async function handler(req, res) {
       })
     });
 
-    // Fallback vers gemini-2.5-flash
-    if (!response.ok && modelName !== AI_MODELS.STABLE_FALLBACK) {
-      console.warn(`Fallback arbitrage vers ${AI_MODELS.STABLE_FALLBACK}...`);
-      url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.STABLE_FALLBACK}:generateContent?key=${apiKey}`;
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0.3 }
-        })
-      });
-    }
-
     if (!response.ok) {
-      const errData = await response.json();
-      return res.status(500).json({ error: 'Erreur arbitrage IA', details: errData });
+      const errData = await response.json().catch(() => ({}));
+      console.error('Erreur API Gemini 3.6 Flash:', errData);
+      return res.status(500).json({ error: 'Erreur d\'arbitrage Gemini 3.6 Flash', details: errData });
     }
 
     const data = await response.json();
@@ -201,33 +173,30 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, source: modelName, strategicAdvice: replyText, quotaUsage: { used: quotaResult.current, limit: quotaResult.maxLimit } });
   }
 
-  // ROUTE 4: POST / Chat (Défaut)
+  // ROUTE 4: POST / Chat (Strictement Gemini 3.5 Flash-Lite)
   if (!apiKey) {
     return res.status(400).json({ error: 'Clé GEMINI_API_KEY non configurée sur Vercel.' });
   }
 
-  const { contents, systemInstruction, generationConfig } = req.body || {};
-  let modelName = AI_MODELS.HEAVY_STRATEGIST;
-  let url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  // Les conversations interactives de chat utilisent le modèle Lite (500 req/j)
+  const quotaResult = await incrementQuotaUsage(userKey, todayStr, 'lite', 500);
+  if (!quotaResult.allowed) {
+    return res.status(429).json({ error: 'Quota quotidien de requêtes rapides Flash-Lite (500/j) atteint.', quotaUsage: quotaResult });
+  }
 
-  let response = await fetch(url, {
+  const { contents, systemInstruction, generationConfig } = req.body || {};
+  const modelName = AI_MODELS.FAST_LITE; // Strictement gemini-3.5-flash-lite
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents, systemInstruction, generationConfig })
   });
 
-  if (!response.ok && modelName !== AI_MODELS.STABLE_FALLBACK) {
-    console.warn(`Fallback chat vers ${AI_MODELS.STABLE_FALLBACK}...`);
-    url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.STABLE_FALLBACK}:generateContent?key=${apiKey}`;
-    response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents, systemInstruction, generationConfig })
-    });
-  }
-
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    console.error('Erreur API Chat Gemini 3.5 Flash-Lite:', data);
     return res.status(response.status || 500).json(data);
   }
 
