@@ -80,8 +80,8 @@ export default async function handler(req, res) {
 
     try {
       const now = new Date();
-      const timeMin = new Date(now.setDate(now.getDate() - 7)).toISOString();
-      const timeMax = new Date(now.setDate(now.getDate() + 30)).toISOString();
+      const timeMin = new Date(now.getTime() - 7 * 86400000).toISOString();
+      const timeMax = new Date(now.getTime() + 30 * 86400000).toISOString();
 
       // 1. Lister tous les agendas liés au compte Google (Principal + École + Secondaires)
       const calListRes = await fetch(

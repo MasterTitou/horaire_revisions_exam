@@ -47,6 +47,11 @@ function parseICalDate(dateStr) {
     const min = clean.substring(11, 13);
     const sec = clean.substring(13, 15);
     return `${year}-${month}-${day}T${hour}:${min}:${sec}.000Z`;
+  } else if (clean.length >= 8) {
+    const year = clean.substring(0, 4);
+    const month = clean.substring(4, 6);
+    const day = clean.substring(6, 8);
+    return `${year}-${month}-${day}T00:00:00.000Z`;
   }
   return new Date().toISOString();
 }
