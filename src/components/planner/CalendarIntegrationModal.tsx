@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { ExternalEvent, UserSettings } from '../../types';
-import { CheckCircle2, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, ShieldCheck, Trash2, RefreshCw, Calendar as CalendarIcon, Plus } from 'lucide-react';
+
+interface ICalFeed {
+  id: string;
+  name: string;
+  url: string;
+  eventCount: number;
+  addedAt: string;
+}
 
 interface CalendarIntegrationModalProps {
   isOpen: boolean;
@@ -21,8 +29,16 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
   onAddExternalEvent,
   onSetExternalEvents
 }) => {
+  const [icalName, setIcalName] = useState('');
   const [icalUrl, setIcalUrl] = useState('');
   const [isLoadingICal, setIsLoadingICal] = useState(false);
+
+  // Agendas iCal Importés conservés en mémoire
+  const [importedFeeds, setImportedFeeds] = useState<ICalFeed[]>(() => {
+    const saved = localStorage.getItem('imported_ical_feeds');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(() => {
     return !!localStorage.getItem('google_access_token');
   });
@@ -32,6 +48,11 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
   const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
   const [manualStartTime, setManualStartTime] = useState('14:00');
   const [manualEndTime, setManualEndTime] = useState('15:00');
+
+  // Sauvegarde de la liste des flux iCal importés
+  useEffect(() => {
+    localStorage.setItem('imported_ical_feeds', JSON.stringify(importedFeeds));
+  }, [importedFeeds]);
 
   // Écoute de l'événement OAuth Google Success envoyé par la fenêtre popup
   useEffect(() => {
@@ -65,6 +86,7 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
 
   const handleFetchICal = async () => {
     if (!icalUrl.trim()) return;
+    const feedName = icalName.trim() || '🏫 Agenda iCal';
     setIsLoadingICal(true);
 
     try {
@@ -75,9 +97,27 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
       });
       const data = await res.json();
       if (data.success && data.events) {
-        onSetExternalEvents([...externalEvents, ...data.events]);
-        alert(`Succès : ${data.events.length} événements indisponibles importés !`);
+        const feedId = 'feed_' + Date.now();
+        const taggedEvents: ExternalEvent[] = data.events.map((ev: any) => ({
+          ...ev,
+          integrationId: feedId,
+          title: `[${feedName}] ${ev.title}`
+        }));
+
+        const newFeed: ICalFeed = {
+          id: feedId,
+          name: feedName,
+          url: icalUrl.trim(),
+          eventCount: taggedEvents.length,
+          addedAt: new Date().toLocaleDateString()
+        };
+
+        setImportedFeeds(prev => [...prev.filter(f => f.url !== icalUrl.trim()), newFeed]);
+        onSetExternalEvents([...externalEvents, ...taggedEvents]);
+
+        alert(`Succès : Agenda "${feedName}" importé avec ${taggedEvents.length} événements !`);
         setIcalUrl('');
+        setIcalName('');
       } else {
         alert(data.error || 'Erreur lors de l\'import iCal');
       }
@@ -86,6 +126,11 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
     } finally {
       setIsLoadingICal(false);
     }
+  };
+
+  const handleDeleteFeed = (feedId: string) => {
+    setImportedFeeds(prev => prev.filter(f => f.id !== feedId));
+    onSetExternalEvents(externalEvents.filter(ev => ev.integrationId !== feedId));
   };
 
   const handleConnectGoogle = async () => {
@@ -162,7 +207,7 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
                   <h4 className="font-semibold text-sm flex items-center gap-2">
                     <span>🔴</span> Google Calendar API
                   </h4>
-                  <p className="text-xs text-slate-400 mt-1">Sync bidirectionnelle réactive par Webhooks Push</p>
+                  <p className="text-xs text-slate-400 mt-1">Sync bidirectionnelle réactive pour vos créneaux persos</p>
                 </div>
 
                 {isGoogleConnected ? (
@@ -188,18 +233,25 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
                 )}
               </div>
 
-              {/* iCal Feed */}
+              {/* iCal Feed Form */}
               <div className="p-4 bg-slate-800/60 rounded-xl border border-slate-700/60 flex flex-col justify-between">
                 <div>
                   <h4 className="font-semibold text-sm flex items-center gap-2">
-                    <span>📅</span> Flux iCal / Apple / Outlook
+                    <span>📅</span> Flux iCal / École / Apple / Outlook
                   </h4>
-                  <p className="text-xs text-slate-400 mt-1">Importez vos événements via lien d'agenda `.ics`</p>
+                  <p className="text-xs text-slate-400 mt-1">Importez l'agenda de votre école ou emploi du temps (`.ics`)</p>
                 </div>
                 <div className="mt-3 space-y-2">
                   <input
                     type="text"
-                    placeholder="https://.../calendar.ics"
+                    placeholder="Nom (Ex: 🏫 Agenda École, 💼 Travail)"
+                    value={icalName}
+                    onChange={e => setIcalName(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-md text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="URL du flux (https://.../calendar.ics)"
                     value={icalUrl}
                     onChange={e => setIcalUrl(e.target.value)}
                     className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-md text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
@@ -207,13 +259,50 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
                   <button
                     onClick={handleFetchICal}
                     disabled={isLoadingICal}
-                    className="w-full py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50"
+                    className="w-full py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
-                    {isLoadingICal ? 'Importation...' : 'Importer Flux iCal'}
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{isLoadingICal ? 'Importation...' : 'Ajouter cet Agenda iCal'}</span>
                   </button>
                 </div>
               </div>
             </div>
+
+            {/* Liste des Agendas iCal Importés */}
+            {importedFeeds.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <CalendarIcon className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Agendas iCal Importés ({importedFeeds.length}) :</span>
+                </h4>
+                <div className="space-y-2">
+                  {importedFeeds.map(feed => (
+                    <div
+                      key={feed.id}
+                      className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0 flex-grow">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-teal-300 truncate">{feed.name}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-teal-500/20 text-teal-300 border border-teal-500/30 shrink-0">
+                            {feed.eventCount} événements
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 block truncate mt-0.5">Ajouté le {feed.addedAt} • {feed.url}</span>
+                      </div>
+
+                      <button
+                        onClick={() => handleDeleteFeed(feed.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition shrink-0"
+                        title="Supprimer cet agenda iCal"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Section 2: Réglages des Tampons & Plages d'Heures Creuses */}
