@@ -5,12 +5,19 @@ export default async function handler(req, res) {
   const { action } = req.query;
 
   if (req.method === 'GET' && action === 'auth_url') {
-    const clientId = process.env.GOOGLE_CLIENT_ID || 'DEMO_CLIENT_ID';
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5173/api/calendar/google?action=callback';
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      return res.status(400).json({
+        error: 'GOOGLE_CLIENT_ID non configuré',
+        message: 'Veuillez ajouter la variable GOOGLE_CLIENT_ID dans Vercel ou utiliser le bouton 📅 1-clic direct sur les créneaux.'
+      });
+    }
+
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://horaire-revisions-exam.vercel.app/api/calendar/google?action=callback';
     const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly');
-    
+
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&access_type=offline&prompt=consent`;
-    
+
     return res.status(200).json({ url: authUrl });
   }
 
