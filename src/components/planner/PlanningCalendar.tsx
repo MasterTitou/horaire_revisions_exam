@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Project, ScheduleData, ExternalEvent, UserSettings } from '../../types';
 import { getLocalDateString } from '../../engine/scheduler';
-import { ChevronLeft, ChevronRight, RotateCw, Check, Calendar as CalendarIcon, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RotateCw, Check, Calendar as CalendarIcon, ShieldAlert, ExternalLink } from 'lucide-react';
 import { CalendarIntegrationModal } from './CalendarIntegrationModal';
 
 const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
@@ -41,6 +41,23 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
   const weekLabel = `${currentWeekStart.getDate()} ${MONTHS[currentWeekStart.getMonth()]} – ${endOfWeek.getDate()} ${MONTHS[endOfWeek.getMonth()]}`;
   const todayStr = getLocalDateString(new Date());
 
+  // Google Calendar 1-Click Export Link Generator
+  const openGoogleCalendarTemplate = (e: React.MouseEvent, sessionNote: string, dateStr: string, slotIdx: number) => {
+    e.stopPropagation();
+
+    // Estimate start & end times based on slotIdx (0: 08h-11h20, 1: 14h-17h20, 2: 20h-23h20)
+    const startHour = slotIdx === 0 ? '080000' : (slotIdx === 1 ? '140000' : '200000');
+    const endHour = slotIdx === 0 ? '112000' : (slotIdx === 1 ? '172000' : '232000');
+
+    const cleanDate = dateStr.replace(/-/g, '');
+    const startISO = `${cleanDate}T${startHour}`;
+    const endISO = `${cleanDate}T${endHour}`;
+
+    const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(sessionNote)}&dates=${startISO}/${endISO}&details=${encodeURIComponent('Créneau de travail planifié par votre SaaS Project Engine.')}`;
+
+    window.open(gcalUrl, '_blank');
+  };
+
   return (
     <div className="space-y-5">
       {/* Ton Planning Card Header */}
@@ -68,7 +85,7 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
               title="Configurer l'intégration Google / iCal"
             >
               <CalendarIcon className="w-4 h-4" />
-              <span>Intégration Calendrier ({externalEvents.length})</span>
+              <span>Intégration Google / iCal</span>
             </button>
 
             <button
@@ -152,16 +169,29 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
                         <div
                           key={session.id || si}
                           onClick={() => onToggleSession(dateStr, si)}
-                          className={`sess flex items-center p-2.5 cursor-pointer group ${checked ? 'done' : ''}`}
+                          className={`sess flex items-center justify-between p-2.5 cursor-pointer group ${checked ? 'done' : ''}`}
                         >
-                          <div className="w-1.5 h-8 rounded-full mr-2.5 shrink-0" style={{ background: proj.color }}></div>
-                          <div className="flex-grow min-w-0">
+                          <div className="flex items-center min-w-0 flex-grow mr-2">
+                            <div className="w-1.5 h-8 rounded-full mr-2.5 shrink-0" style={{ background: proj.color }}></div>
                             <span className={`block text-xs md:text-sm font-bold truncate ${checked ? 'line-through opacity-60' : ''}`}>
                               {session.note}
                             </span>
                           </div>
-                          <div className={`check-dot shrink-0 ml-2 ${checked ? 'on' : ''}`}>
-                            {checked && <Check className="w-3 h-3 text-white stroke-[3]" />}
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {/* 1-Click Export to Google Calendar Button */}
+                            <button
+                              onClick={(e) => openGoogleCalendarTemplate(e, session.note, dateStr, si)}
+                              className="p-1 rounded bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 text-[10px] font-extrabold flex items-center gap-1 transition-colors"
+                              title="Ajouter ce créneau dans Google Calendar"
+                            >
+                              <span>📅</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </button>
+
+                            <div className={`check-dot shrink-0 ${checked ? 'on' : ''}`}>
+                              {checked && <Check className="w-3 h-3 text-white stroke-[3]" />}
+                            </div>
                           </div>
                         </div>
                       );
@@ -187,4 +217,3 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
     </div>
   );
 };
-
