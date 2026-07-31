@@ -35,6 +35,7 @@ export const App: React.FC = () => {
     deleteMilestone,
     toggleSession,
     changeWeek,
+    regenerateSchedule,
     toggleTheme,
     resetAllData,
     exportDataJSON,
@@ -104,7 +105,7 @@ export const App: React.FC = () => {
                   userSettings={userSettings}
                   currentWeekStart={currentWeekStart}
                   onChangeWeek={changeWeek}
-                  onRegenerate={() => changeWeek(0)}
+                  onRegenerate={regenerateSchedule}
                   onToggleSession={toggleSession}
                   onUpdateSettings={updateUserSettings}
                   onAddExternalEvent={addExternalEvent}
@@ -132,7 +133,7 @@ export const App: React.FC = () => {
               userSettings={userSettings}
               currentWeekStart={currentWeekStart}
               onChangeWeek={changeWeek}
-              onRegenerate={() => changeWeek(0)}
+              onRegenerate={regenerateSchedule}
               onToggleSession={toggleSession}
               onUpdateSettings={updateUserSettings}
               onAddExternalEvent={addExternalEvent}

@@ -132,7 +132,8 @@ export function useProjectStore() {
       skills: { ...DEFAULT_SKILLS, ...(rawGamo.skills || {}) }
     };
 
-    const updatedGamo = updateMetricsAndQuests(d.scheduleData || {}, projs, initialGamo);
+    const extEvts = (d.externalEvents && Array.isArray(d.externalEvents)) ? d.externalEvents : [];
+    const settings = d.userSettings || DEFAULT_USER_SETTINGS;
 
     if (d.externalEvents && Array.isArray(d.externalEvents)) {
       setExternalEventsState(d.externalEvents);
@@ -141,8 +142,14 @@ export function useProjectStore() {
       setUserSettingsState(d.userSettings);
     }
 
+    // Régénérer dynamiquement les créneaux futurs pour appliquer les pauses de tampon 15 min
+    const weekStart = getStartOfWeek(new Date());
+    const freshSchedule = replanifyOnCalendarChange(projs, weekStart, d.scheduleData || {}, extEvts, settings, initialGamo.calibration);
+
+    const updatedGamo = updateMetricsAndQuests(freshSchedule, projs, initialGamo);
+
     setProjects(projs);
-    setScheduleData(d.scheduleData || {});
+    setScheduleData(freshSchedule);
     setStreak(d.streak || { count: 0, lastDate: '' });
     setGamification(updatedGamo);
     setChatHistory(d.chatHistory || []);
@@ -435,6 +442,12 @@ export function useProjectStore() {
     saveAll(projects, updatedSchedule, streak, updatedGamo, isDarkMode);
   };
 
+  const regenerateSchedule = () => {
+    const updatedSchedule = replanifyOnCalendarChange(projects, currentWeekStart, scheduleData, externalEvents, userSettings, gamification.calibration);
+    setScheduleData(updatedSchedule);
+    saveAll(projects, updatedSchedule, streak, gamification, isDarkMode);
+  };
+
   const toggleTheme = () => {
     const nextDark = !isDarkMode;
     setIsDarkMode(nextDark);
@@ -544,6 +557,7 @@ export function useProjectStore() {
     deleteMilestone,
     toggleSession,
     changeWeek,
+    regenerateSchedule,
     toggleTheme,
     resetAllData,
     exportDataJSON,
