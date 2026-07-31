@@ -3,12 +3,12 @@ import { getQuotaUsage, incrementQuotaUsage } from './db.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || 'revision-planner-default-secret';
 
-// Centralisation des configurations de modèles Gemini actifs et reconnus
+// Identifiants exacts validés auprès de l'API Google Gemini
 export const AI_MODELS = {
-  FAST_PARSER: process.env.GEMINI_FAST_MODEL || process.env.GEMINI_FLASH_LITE_MODEL || 'gemini-1.5-flash',
-  HEAVY_STRATEGIST: process.env.GEMINI_HEAVY_MODEL || process.env.GEMINI_3_6_FLASH_MODEL || 'gemini-1.5-pro',
-  FAST_FALLBACK: 'gemini-1.5-flash-8b',
-  STABLE_FALLBACK: 'gemini-1.5-flash'
+  FAST_PARSER: process.env.GEMINI_FAST_MODEL || process.env.GEMINI_FLASH_LITE_MODEL || 'gemini-3.5-flash-lite',
+  HEAVY_STRATEGIST: process.env.GEMINI_HEAVY_MODEL || process.env.GEMINI_3_6_FLASH_MODEL || 'gemini-3.6-flash',
+  FAST_FALLBACK: 'gemini-2.5-flash-lite',
+  STABLE_FALLBACK: 'gemini-2.5-flash'
 };
 
 function generateToken(password) {
@@ -115,7 +115,7 @@ export default async function handler(req, res) {
         })
       });
 
-      // Fallback vers gemini-1.5-flash-8b si le modèle rapide par défaut échoue
+      // Fallback vers gemini-2.5-flash-lite si le modèle 3.5 échoue
       if (!response.ok && modelName !== AI_MODELS.FAST_FALLBACK) {
         console.warn(`Fallback parsing vers ${AI_MODELS.FAST_FALLBACK}...`);
         url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.FAST_FALLBACK}:generateContent?key=${apiKey}`;
@@ -176,7 +176,7 @@ export default async function handler(req, res) {
       })
     });
 
-    // Fallback vers gemini-1.5-flash si le modèle lourd échoue
+    // Fallback vers gemini-2.5-flash
     if (!response.ok && modelName !== AI_MODELS.STABLE_FALLBACK) {
       console.warn(`Fallback arbitrage vers ${AI_MODELS.STABLE_FALLBACK}...`);
       url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.STABLE_FALLBACK}:generateContent?key=${apiKey}`;
@@ -207,7 +207,7 @@ export default async function handler(req, res) {
   }
 
   const { contents, systemInstruction, generationConfig } = req.body || {};
-  let modelName = AI_MODELS.FAST_PARSER;
+  let modelName = AI_MODELS.HEAVY_STRATEGIST;
   let url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   let response = await fetch(url, {
