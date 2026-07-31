@@ -36,8 +36,11 @@ function sanitizeParsedOutput(raw, promptText) {
     else cognitiveLoad = 'medium';
   }
 
+  const todayStr = new Date().toISOString().split('T')[0];
   let deadline = raw.deadline || raw.dueDate || null;
-  if (!deadline) {
+  
+  // Correction automatique si l'IA renvoie une date invalide, vide ou antérieure à aujourd'hui
+  if (!deadline || typeof deadline !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(deadline) || deadline < todayStr) {
     const d = new Date();
     d.setDate(d.getDate() + 7);
     deadline = d.toISOString().split('T')[0];
@@ -70,7 +73,10 @@ export default async function handler(req, res) {
 
     const urlPath = req.url || '';
     const action = req.query.action || (urlPath.includes('quota') ? 'quota' : (urlPath.includes('parse') ? 'parse' : (urlPath.includes('arbitrate') ? 'arbitrate' : 'chat')));
-    const todayStr = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const dayName = now.toLocaleDateString('fr-FR', { weekday: 'long' });
+    const defaultFutureDate = new Date(now.getTime() + 7 * 86400000).toISOString().split('T')[0];
     const apiKey = process.env.GEMINI_3_6_FLASH_API_KEY || process.env.GEMINI_FLASH_LITE_API_KEY || process.env.GEMINI_API_KEY || req.headers['x-gemini-api-key'];
 
     // ROUTE 1: GET / Quota (Précision Requêtes + Tokens par Modèle)
@@ -116,15 +122,38 @@ export default async function handler(req, res) {
         const modelName = AI_MODELS.FAST_LITE;
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
+        const parseSystemInstruction = `Tu es un assistant expert en parsing sémantique de projets et révisions.
+CONTEXTE TEMPOREL OBLIGATOIRE : Nous sommes le ${dayName} ${todayStr} (Année ${now.getFullYear()}).
+
+REGLES STRICTES POUR L'ECHEANCE (deadline) :
+- Calcule la date exacte (format YYYY-MM-DD) à partir de la date courante : ${todayStr}.
+- Pour "demain", utilise la date d'aujourd'hui + 1 jour.
+- Pour "dans X jours", ajoute X jours à ${todayStr}.
+- Pour "vendredi prochain", calcule le vendredi à venir après le ${todayStr}.
+- Ne renvoie JAMAIS une date antérieure à aujourd'hui (${todayStr}).
+- Si aucune date n'est précisée, renvoie ${defaultFutureDate}.
+
+Extrais un objet JSON strict avec :
+- title (string)
+- project_name (string)
+- category (string)
+- difficulty_score (integer 1 à 5)
+- estimated_hours (number)
+- cognitive_load ('low','medium','high')
+- deadline (string format YYYY-MM-DD, supérieure ou égale à ${todayStr})
+- is_hard_deadline (boolean)
+- subtasks (array of string)`;
+
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            systemInstruction: { parts: [{ text: "Tu es un assistant de parsing de projet. Extrais un objet JSON strict avec : title, project_name, category, difficulty_score (1-5), estimated_hours, cognitive_load ('low','medium','high'), deadline (YYYY-MM-DD), is_hard_deadline (boolean), subtasks (array of string)." }] },
+            systemInstruction: { parts: [{ text: parseSystemInstruction }] },
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
           })
         });
+
 
         if (response.ok) {
           const data = await response.json().catch(() => ({}));
