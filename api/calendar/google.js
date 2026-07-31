@@ -1,5 +1,5 @@
 // api/calendar/google.js
-// Gestion de la synchronisation bidirectionnelle Google Calendar API v3
+// Gestion de la synchronisation bidirectionnelle Google Calendar API v3 Multi-Agendas (École, Travail, Secondaires)
 
 export default async function handler(req, res) {
   const { action } = req.query;
@@ -52,8 +52,8 @@ export default async function handler(req, res) {
           <html>
             <head><title>Google Auth Success</title></head>
             <body style="font-family: sans-serif; text-align: center; padding: 40px; background: #0F172A; color: white;">
-              <h2>✅ Synchronisation Google Calendar Réussie !</h2>
-              <p>Vous pouvez fermer cette fenêtre pour retourner à l'application.</p>
+              <h2>✅ Synchronisation Multi-Agendas Google Réussie !</h2>
+              <p>Tous vos agendas liés (École, Travail, Personnel) sont connectés.</p>
               <script>
                 if (window.opener) {
                   window.opener.postMessage({ type: 'GOOGLE_AUTH_SUCCESS', token: '${tokenData.access_token}' }, '*');
@@ -71,6 +71,7 @@ export default async function handler(req, res) {
     }
   }
 
+  // Récupération Multi-Agendas (Primary + Agendas Secondaires / École / Travail)
   if (req.method === 'POST' && action === 'fetch_events') {
     const { accessToken } = req.body;
     if (!accessToken) {
@@ -82,32 +83,46 @@ export default async function handler(req, res) {
       const timeMin = new Date(now.setDate(now.getDate() - 7)).toISOString();
       const timeMax = new Date(now.setDate(now.getDate() + 30)).toISOString();
 
-      const gRes = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        }
+      // 1. Lister tous les agendas liés au compte Google (Principal + École + Secondaires)
+      const calListRes = await fetch(
+        'https://www.googleapis.com/calendar/v3/users/me/calendarList',
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
 
-      const data = await gRes.json();
-      if (data.error) {
-        return res.status(400).json({ error: data.error.message });
+      const calListData = await calListRes.json();
+      const calendars = calListData.items || [{ id: 'primary' }];
+
+      let allEvents = [];
+
+      // 2. Parcourir chaque agenda (École, Travail, Personnel) pour extraire les événements
+      for (const cal of calendars) {
+        try {
+          const gRes = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`,
+            { headers: { 'Authorization': `Bearer ${accessToken}` } }
+          );
+
+          const data = await gRes.json();
+          if (data.items) {
+            const calName = cal.summary || 'Agenda';
+            const mapped = data.items.map(item => ({
+              id: `gcal_${item.id}`,
+              title: item.summary ? `[${calName}] ${item.summary}` : `[${calName}] Événement Occupé`,
+              startTime: item.start?.dateTime || item.start?.date || new Date().toISOString(),
+              endTime: item.end?.dateTime || item.end?.date || new Date().toISOString(),
+              isAllDay: !item.start?.dateTime,
+              source: 'google'
+            }));
+            allEvents = allEvents.concat(mapped);
+          }
+        } catch (calErr) {
+          console.error(`Erreur fetch agenda ${cal.id}:`, calErr.message);
+        }
       }
 
-      const events = (data.items || []).map(item => ({
-        id: `gcal_${item.id}`,
-        title: item.summary || 'Événement Externe',
-        startTime: item.start?.dateTime || item.start?.date || new Date().toISOString(),
-        endTime: item.end?.dateTime || item.end?.date || new Date().toISOString(),
-        isAllDay: !item.start?.dateTime,
-        source: 'google'
-      }));
-
-      return res.status(200).json({ success: true, events });
+      return res.status(200).json({ success: true, events: allEvents });
     } catch (err) {
-      return res.status(500).json({ error: 'Erreur lors de la récupération des événements Google Calendar' });
+      return res.status(500).json({ error: 'Erreur lors de la récupération des événements multi-agendas Google Calendar' });
     }
   }
 
