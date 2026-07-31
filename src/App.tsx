@@ -13,6 +13,7 @@ import { GanttChartTab } from './components/gantt/GanttChartTab';
 import { CalendarTab } from './components/calendar/CalendarTab';
 import { AICoachTab } from './components/ai/AICoachTab';
 import { ProfileTab } from './components/profile/ProfileTab';
+import { QuickTaskParserModal } from './components/ai/QuickTaskParserModal';
 
 
 export const App: React.FC = () => {
@@ -47,6 +48,7 @@ export const App: React.FC = () => {
   } = useProjectStore();
 
   const [activeTab, setActiveTab] = useState('planner');
+  const [isQuickParserOpen, setIsQuickParserOpen] = useState(false);
 
   const handleLogin = (pwd: string) => {
     if (pwd === 'canard3434' || pwd.length >= 4) {
@@ -56,6 +58,48 @@ export const App: React.FC = () => {
     }
     return false;
   };
+
+  const handleAddParsedTask = (parsed: {
+    projectId?: string;
+    projectName: string;
+    title: string;
+    category: string;
+    difficultyScore: number;
+    estimatedHours: number;
+    cognitiveLoad: 'low' | 'medium' | 'high';
+    deadline: string;
+    isHardDeadline: boolean;
+    subtasks: string[];
+  }) => {
+    let targetProjectId = parsed.projectId;
+
+    if (!targetProjectId) {
+      const newProjCode = parsed.projectName.slice(0, 4).toUpperCase() || 'PRJ';
+      addProject(
+        parsed.projectName,
+        newProjCode,
+        parsed.deadline,
+        parsed.isHardDeadline
+      );
+      if (projects.length > 0) {
+        targetProjectId = projects[projects.length - 1].id;
+      }
+    }
+
+    if (targetProjectId) {
+      addMilestone(
+        targetProjectId,
+        parsed.title,
+        parsed.deadline,
+        parsed.estimatedHours,
+        parsed.cognitiveLoad
+      );
+    } else {
+      regenerateSchedule();
+    }
+  };
+
+
 
   return (
     <div className="min-h-screen relative">
@@ -77,6 +121,7 @@ export const App: React.FC = () => {
           isDarkMode={isDarkMode}
           toggleTheme={toggleTheme}
           syncStatus={syncStatus}
+          onOpenQuickParser={() => setIsQuickParserOpen(true)}
         />
 
         <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -178,6 +223,15 @@ export const App: React.FC = () => {
           </div>
         )}
 
+        {/* Modal de Saisie Rapide IA Flash-Lite */}
+        <QuickTaskParserModal
+          isOpen={isQuickParserOpen}
+          onClose={() => setIsQuickParserOpen(false)}
+          authToken="auth_active"
+          projects={projects}
+          onAddParsedTask={handleAddParsedTask}
+        />
+
         {/* Floating Pomodoro Dock */}
         <PomodoroDock />
       </div>
@@ -186,3 +240,4 @@ export const App: React.FC = () => {
 };
 
 export default App;
+

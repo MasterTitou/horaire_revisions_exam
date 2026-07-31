@@ -9,13 +9,15 @@ interface HeaderProps {
   isDarkMode: boolean;
   toggleTheme: () => void;
   syncStatus: string;
+  onOpenQuickParser?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   gamification,
   isDarkMode,
   toggleTheme,
-  syncStatus
+  syncStatus,
+  onOpenQuickParser
 }) => {
   const velocity = gamification.velocityIndex || 100;
   const velocityColor = velocity >= 85 ? '#2E7D32' : velocity >= 60 ? '#FF8C42' : '#E11D48';
@@ -36,6 +38,14 @@ export const Header: React.FC<HeaderProps> = ({
             Mes Révisions <span className="flame text-2xl">🔥</span>
           </h1>
           <div className="flex items-center gap-2 md:hidden">
+            {onOpenQuickParser && (
+              <button
+                onClick={onOpenQuickParser}
+                className="btn-main px-3 py-1.5 text-xs flex items-center gap-1"
+              >
+                <span>⚡ IA</span>
+              </button>
+            )}
             <button
               onClick={handleToggleNotifications}
               className="w-10 h-10 rounded-full card flex items-center justify-center shadow-xs"
@@ -59,6 +69,15 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-2.5 w-full md:w-auto justify-end">
+        {onOpenQuickParser && (
+          <button
+            onClick={onOpenQuickParser}
+            className="btn-main hidden md:flex px-3.5 py-2 text-xs items-center gap-1.5 shadow-sm hover:scale-105 transition-all"
+          >
+            <span>⚡ Saisie Rapide IA</span>
+          </button>
+        )}
+
         {/* Indice de Vélocité Performance Pill */}
         <div
           className="px-3.5 py-2 flex items-center gap-1.5 font-black text-xs rounded-full shadow-xs transition-all"
@@ -97,3 +116,4 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+

@@ -107,6 +107,16 @@ export async function initSchema() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS ai_daily_quotas (
+        user_key VARCHAR(255) NOT NULL,
+        usage_date DATE NOT NULL,
+        lite_count INT DEFAULT 0,
+        heavy_count INT DEFAULT 0,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        PRIMARY KEY (user_key, usage_date)
+      );
+    `;
     return true;
   } catch (err) {
     console.error('Erreur auto-init schema PostgreSQL:', err.message);
@@ -114,5 +124,58 @@ export async function initSchema() {
   }
 }
 
+// In-memory fallback if postgres is not connected or in local development
+const localQuotaStore = new Map();
+
+export async function getQuotaUsage(userKey, dateStr) {
+  const key = `${userKey}:${dateStr}`;
+  try {
+    const result = await sql`
+      SELECT lite_count, heavy_count FROM ai_daily_quotas
+      WHERE user_key = ${userKey} AND usage_date = ${dateStr}::date;
+    `;
+    if (result.rows && result.rows.length > 0) {
+      return {
+        lite: parseInt(result.rows[0].lite_count || 0, 10),
+        heavy: parseInt(result.rows[0].heavy_count || 0, 10)
+      };
+    }
+  } catch (err) {
+    // Fallback in-memory
+  }
+  const entry = localQuotaStore.get(key) || { lite: 0, heavy: 0 };
+  return entry;
+}
+
+export async function incrementQuotaUsage(userKey, dateStr, type = 'lite', maxLimit = 500) {
+  const key = `${userKey}:${dateStr}`;
+  const current = await getQuotaUsage(userKey, dateStr);
+  const currentCount = type === 'heavy' ? current.heavy : current.lite;
+
+  if (currentCount >= maxLimit) {
+    return { allowed: false, current: currentCount, maxLimit };
+  }
+
+  const newLite = type === 'lite' ? current.lite + 1 : current.lite;
+  const newHeavy = type === 'heavy' ? current.heavy + 1 : current.heavy;
+
+  try {
+    await sql`
+      INSERT INTO ai_daily_quotas (user_key, usage_date, lite_count, heavy_count, updated_at)
+      VALUES (${userKey}, ${dateStr}::date, ${newLite}, ${newHeavy}, NOW())
+      ON CONFLICT (user_key, usage_date)
+      DO UPDATE SET
+        lite_count = EXCLUDED.lite_count,
+        heavy_count = EXCLUDED.heavy_count,
+        updated_at = NOW();
+    `;
+  } catch (err) {
+    // In-memory fallback update
+  }
+
+  localQuotaStore.set(key, { lite: newLite, heavy: newHeavy });
+  return { allowed: true, current: type === 'heavy' ? newHeavy : newLite, maxLimit };
+}
 
 export { sql };
+
