@@ -21,6 +21,56 @@ export default async function handler(req, res) {
     return res.status(200).json({ url: authUrl });
   }
 
+  // Callback OAuth2 d'échange de code contre Access Token
+  if (req.method === 'GET' && action === 'callback') {
+    const { code } = req.query;
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://horaire-revisions-exam.vercel.app/api/calendar/google?action=callback';
+
+    if (!code || !clientId || !clientSecret) {
+      return res.status(400).send('Variables GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET requises dans Vercel.');
+    }
+
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+          grant_type: 'authorization_code'
+        })
+      });
+
+      const tokenData = await tokenRes.json();
+      if (tokenData.access_token) {
+        return res.send(`
+          <!DOCTYPE html>
+          <html>
+            <head><title>Google Auth Success</title></head>
+            <body style="font-family: sans-serif; text-align: center; padding: 40px; background: #0F172A; color: white;">
+              <h2>✅ Synchronisation Google Calendar Réussie !</h2>
+              <p>Vous pouvez fermer cette fenêtre pour retourner à l'application.</p>
+              <script>
+                if (window.opener) {
+                  window.opener.postMessage({ type: 'GOOGLE_AUTH_SUCCESS', token: '${tokenData.access_token}' }, '*');
+                  setTimeout(() => window.close(), 1500);
+                }
+              </script>
+            </body>
+          </html>
+        `);
+      } else {
+        return res.status(400).send(`Erreur échange OAuth: ${tokenData.error_description || tokenData.error}`);
+      }
+    } catch (e) {
+      return res.status(500).send('Erreur serveur lors de l\'échange de jeton Google');
+    }
+  }
+
   if (req.method === 'POST' && action === 'fetch_events') {
     const { accessToken } = req.body;
     if (!accessToken) {
