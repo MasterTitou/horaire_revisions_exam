@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ExternalEvent, UserSettings } from '../../types';
+import { CheckCircle2, ShieldCheck } from 'lucide-react';
 
 interface CalendarIntegrationModalProps {
   isOpen: boolean;
@@ -22,12 +23,43 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
 }) => {
   const [icalUrl, setIcalUrl] = useState('');
   const [isLoadingICal, setIsLoadingICal] = useState(false);
+  const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(() => {
+    return !!localStorage.getItem('google_access_token');
+  });
 
   // Formulaire d'événement manuel indisponible
   const [manualTitle, setManualTitle] = useState('');
   const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
   const [manualStartTime, setManualStartTime] = useState('14:00');
   const [manualEndTime, setManualEndTime] = useState('15:00');
+
+  // Écoute de l'événement OAuth Google Success envoyé par la fenêtre popup
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'GOOGLE_AUTH_SUCCESS' && event.data.token) {
+        const token = event.data.token;
+        localStorage.setItem('google_access_token', token);
+        setIsGoogleConnected(true);
+
+        // Récupérer automatiquement les événements Google Calendar
+        fetch('/api/calendar/google?action=fetch_events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: token })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.events) {
+              onSetExternalEvents([...externalEvents, ...data.events]);
+            }
+          })
+          .catch(err => console.error('Erreur GCal fetch:', err));
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [externalEvents, onSetExternalEvents]);
 
   if (!isOpen) return null;
 
@@ -68,6 +100,11 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
     } catch (e) {
       alert('Utilisez le bouton 📅 1-clic direct sur chaque créneau du planning pour exporter vers Google Calendar sans configuration.');
     }
+  };
+
+  const handleDisconnectGoogle = () => {
+    localStorage.removeItem('google_access_token');
+    setIsGoogleConnected(false);
   };
 
   const handleAddManualEvent = (e: React.FormEvent) => {
@@ -127,12 +164,28 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
                   </h4>
                   <p className="text-xs text-slate-400 mt-1">Sync bidirectionnelle réactive par Webhooks Push</p>
                 </div>
-                <button
-                  onClick={handleConnectGoogle}
-                  className="mt-4 w-full py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg transition"
-                >
-                  Connecter Google Calendar
-                </button>
+
+                {isGoogleConnected ? (
+                  <div className="mt-4 space-y-2">
+                    <div className="px-3 py-2 bg-emerald-500/20 border border-emerald-500/40 rounded-lg text-emerald-300 text-xs font-bold flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <span>✅ Google Calendar Connecté &amp; Synchro</span>
+                    </div>
+                    <button
+                      onClick={handleDisconnectGoogle}
+                      className="w-full py-1 text-[11px] text-slate-400 hover:text-red-400 transition"
+                    >
+                      Déconnecter
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleConnectGoogle}
+                    className="mt-4 w-full py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg transition"
+                  >
+                    Connecter Google Calendar
+                  </button>
+                )}
               </div>
 
               {/* iCal Feed */}
@@ -272,5 +325,4 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
       </div>
     </div>
   );
-
 };
