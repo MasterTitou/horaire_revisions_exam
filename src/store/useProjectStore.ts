@@ -134,6 +134,13 @@ export function useProjectStore() {
 
     const updatedGamo = updateMetricsAndQuests(d.scheduleData || {}, projs, initialGamo);
 
+    if (d.externalEvents && Array.isArray(d.externalEvents)) {
+      setExternalEventsState(d.externalEvents);
+    }
+    if (d.userSettings) {
+      setUserSettingsState(d.userSettings);
+    }
+
     setProjects(projs);
     setScheduleData(d.scheduleData || {});
     setStreak(d.streak || { count: 0, lastDate: '' });
@@ -184,6 +191,42 @@ export function useProjectStore() {
           setSyncStatus('synced');
         });
     }
+
+    // 3. Rafraîchissement automatique en arrière-plan de tous les flux iCal importés (ex: École)
+    const savedFeeds = localStorage.getItem('imported_ical_feeds');
+    if (savedFeeds) {
+      try {
+        const feeds = JSON.parse(savedFeeds);
+        if (Array.isArray(feeds) && feeds.length > 0) {
+          feeds.forEach((feed: any) => {
+            if (feed.url) {
+              fetch('/api/calendar/ical', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ icalUrl: feed.url })
+              })
+                .then(r => r.json())
+                .then(data => {
+                  if (data.success && data.events) {
+                    const tagged = data.events.map((ev: any) => ({
+                      ...ev,
+                      integrationId: feed.id,
+                      title: `[${feed.name}] ${ev.title}`
+                    }));
+                    setExternalEventsState(prev => [
+                      ...prev.filter(e => e.integrationId !== feed.id),
+                      ...tagged
+                    ]);
+                  }
+                })
+                .catch(e => console.error(`iCal auto-refresh err (${feed.name}):`, e.message));
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Error parsing iCal feeds for auto-refresh:', err);
+      }
+    }
   }, [applyStatePayload]);
 
   // Dual Save: 1. LocalStorage, 2. Cloud Redis API (/api/save)
@@ -192,7 +235,9 @@ export function useProjectStore() {
     newSchedule: ScheduleData,
     newStreak: Streak,
     newGamification: Gamification,
-    newDark: boolean
+    newDark: boolean,
+    newEvents?: ExternalEvent[],
+    newSettings?: UserSettings
   ) => {
     const payload = {
       projects: newProjects,
@@ -200,7 +245,9 @@ export function useProjectStore() {
       streak: newStreak,
       gamification: newGamification,
       chatHistory,
-      isDarkMode: newDark
+      isDarkMode: newDark,
+      externalEvents: newEvents !== undefined ? newEvents : externalEvents,
+      userSettings: newSettings !== undefined ? newSettings : userSettings
     };
 
     // Save to LocalStorage immediately
@@ -460,14 +507,14 @@ export function useProjectStore() {
     setUserSettingsState(updated);
     const updatedSchedule = replanifyOnCalendarChange(projects, currentWeekStart, scheduleData, externalEvents, updated, gamification.calibration);
     setScheduleData(updatedSchedule);
-    saveAll(projects, updatedSchedule, streak, gamification, isDarkMode);
+    saveAll(projects, updatedSchedule, streak, gamification, isDarkMode, externalEvents, updated);
   };
 
   const setExternalEvents = (events: ExternalEvent[]) => {
     setExternalEventsState(events);
     const updatedSchedule = replanifyOnCalendarChange(projects, currentWeekStart, scheduleData, events, userSettings, gamification.calibration);
     setScheduleData(updatedSchedule);
-    saveAll(projects, updatedSchedule, streak, gamification, isDarkMode);
+    saveAll(projects, updatedSchedule, streak, gamification, isDarkMode, events, userSettings);
   };
 
   const addExternalEvent = (event: ExternalEvent) => {
