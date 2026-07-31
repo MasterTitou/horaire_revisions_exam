@@ -42,6 +42,7 @@ export default async function handler(req, res) {
       milestonesRes.rows.forEach(m => {
         milestonesMap.set(m.id, {
           id: m.id,
+          project_id: m.project_id,
           title: m.title,
           estimatedHours: parseFloat(m.estimated_hours),
           completedHours: parseFloat(m.completed_hours),
@@ -67,7 +68,9 @@ export default async function handler(req, res) {
         color: p.color,
         deadline: p.deadline ? new Date(p.deadline).toISOString().split('T')[0] : '',
         isHardDeadline: p.is_hard_deadline,
-        milestones: Array.from(milestonesMap.values()).filter(m => milestonesRes.rows.find(row => row.id === m.id && row.project_id === p.id))
+        milestones: Array.from(milestonesMap.values())
+          .filter(m => m.project_id === p.id)
+          .map(({ project_id, ...rest }) => rest)
       }));
 
       const scheduleData = {};

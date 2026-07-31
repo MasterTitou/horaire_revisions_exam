@@ -276,7 +276,7 @@ export function useProjectStore() {
           .catch(() => setSyncStatus('error'));
       }, 600);
     }
-  }, [chatHistory]);
+  }, [chatHistory, externalEvents, userSettings]);
 
   const addProject = (name: string, code: string, deadline: string, isHardDeadline: boolean, startDate?: string) => {
     const todayStr = getLocalDateString(new Date());
@@ -475,6 +475,8 @@ export function useProjectStore() {
     const payload = {
       projects,
       scheduleData,
+      externalEvents,
+      userSettings,
       streak,
       gamification,
       chatHistory,
@@ -494,7 +496,7 @@ export function useProjectStore() {
     try {
       const parsed = JSON.parse(jsonString);
       applyStatePayload(parsed);
-      saveAll(parsed.projects || [], parsed.scheduleData || {}, parsed.streak || { count: 0, lastDate: '' }, parsed.gamification || DEFAULT_GAMIFICATION, !!parsed.isDarkMode);
+      saveAll(parsed.projects || [], parsed.scheduleData || {}, parsed.streak || { count: 0, lastDate: '' }, parsed.gamification || DEFAULT_GAMIFICATION, !!parsed.isDarkMode, parsed.externalEvents, parsed.userSettings);
       return true;
     } catch (e) {
       alert("Erreur lors de l'importation du fichier JSON.");

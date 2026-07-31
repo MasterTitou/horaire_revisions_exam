@@ -45,13 +45,7 @@ export default async function handler(req, res) {
       const activeMilestoneIds = [];
       const activeSessionIds = [];
 
-      // Purger les projets supprimés de PostgreSQL
-      if (activeProjIds.length > 0) {
-        await sql.query(`DELETE FROM projects WHERE id NOT IN (${activeProjIds.map((_, i) => `$${i + 1}`).join(',')})`, activeProjIds);
-      } else {
-        await sql`DELETE FROM projects`;
-      }
-
+      // Upsert all projects first
       for (const p of projects) {
         await sql`
           INSERT INTO projects (id, name, code, color, deadline, is_hard_deadline)
@@ -92,14 +86,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // Purger les jalons supprimés de PostgreSQL
-      if (activeMilestoneIds.length > 0) {
-        await sql.query(`DELETE FROM milestones WHERE id NOT IN (${activeMilestoneIds.map((_, i) => `$${i + 1}`).join(',')})`, activeMilestoneIds);
-      } else {
-        await sql`DELETE FROM milestones`;
-      }
-
-      // Sauvegarde des Séances du calendrier
+      // Purge des sessions d'abord (dépend de milestones via FK)
       for (const [dateStr, sessions] of Object.entries(scheduleData)) {
         for (const s of (sessions || [])) {
           if (s.milestoneId) {
@@ -115,11 +102,26 @@ export default async function handler(req, res) {
         }
       }
 
-      // Purger les séances supprimées de PostgreSQL
+      // Purger les séances supprimées (AVANT milestones à cause de la FK)
       if (activeSessionIds.length > 0) {
-        await sql.query(`DELETE FROM sessions WHERE id NOT IN (${activeSessionIds.map((_, i) => `$${i + 1}`).join(',')})`, activeSessionIds);
+        // @vercel/postgres tagged templates: utilise ANY() pour le IN dynamique
+        await sql`DELETE FROM sessions WHERE id != ALL(${activeSessionIds})`;
       } else {
         await sql`DELETE FROM sessions`;
+      }
+
+      // Purger les jalons supprimés (AVANT projets à cause de la FK)
+      if (activeMilestoneIds.length > 0) {
+        await sql`DELETE FROM milestones WHERE id != ALL(${activeMilestoneIds})`;
+      } else {
+        await sql`DELETE FROM milestones`;
+      }
+
+      // Purger les projets supprimés
+      if (activeProjIds.length > 0) {
+        await sql`DELETE FROM projects WHERE id != ALL(${activeProjIds})`;
+      } else {
+        await sql`DELETE FROM projects`;
       }
     } catch (pgError) {
       console.error('Erreur Save PostgreSQL:', pgError.message);
