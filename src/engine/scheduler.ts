@@ -230,22 +230,27 @@ export function generateSchedule(
     // Compteur de sessions créées ce jour
     let sessionsCreatedToday = 0;
 
-    // Découpage en tranches d'heures réelles de dayStartHour à dayEndHour
-    let currentSlotStartHour = dayStartHour;
+    // Découpage en minutes avec prise en compte du temps de tampon (Buffer) entre chaque séance
+    const dayStartMinute = dayStartHour * 60;
+    const dayEndMinute = dayEndHour * 60;
+    const bufferAfter = settings.bufferMinutesAfter ?? 15;
 
-    while (currentSlotStartHour < dayEndHour) {
+    let currentSlotStartMinute = dayStartMinute;
+
+    while (currentSlotStartMinute + slotDurationMinutes <= dayEndMinute) {
       // Vérifier le plafond quotidien
       if (sessionsCreatedToday >= maxSessionsPerDay) break;
 
       const slotStart = new Date(d);
-      slotStart.setHours(currentSlotStartHour, 0, 0, 0);
+      const startH = Math.floor(currentSlotStartMinute / 60);
+      const startM = currentSlotStartMinute % 60;
+      slotStart.setHours(startH, startM, 0, 0);
 
       const slotEnd = new Date(slotStart.getTime() + slotDurationMinutes * 60 * 1000);
-      if (slotEnd.getHours() > dayEndHour) break;
 
       // 1. Vérification des conflits d'agendas externes & temps de tampon
       if (isSlotBlockedByExternalEvent(slotStart, slotEnd, dayEvents, settings.bufferMinutesBefore, settings.bufferMinutesAfter)) {
-        currentSlotStartHour += (slotDurationMinutes / 60);
+        currentSlotStartMinute += 30;
         continue;
       }
 
@@ -272,7 +277,7 @@ export function generateSchedule(
 
 
       if (candidates.length === 0) {
-        currentSlotStartHour += (slotDurationMinutes / 60);
+        currentSlotStartMinute += 30;
         continue;
       }
 
@@ -330,9 +335,12 @@ export function generateSchedule(
           durationMinutes: slotDurationMinutes
         });
         sessionsCreatedToday++;
-      }
 
-      currentSlotStartHour += (slotDurationMinutes / 60);
+        // Avancer au prochain créneau en incluant le temps de tampon (Buffer)
+        currentSlotStartMinute += (slotDurationMinutes + bufferAfter);
+      } else {
+        currentSlotStartMinute += 30;
+      }
     }
   }
 
