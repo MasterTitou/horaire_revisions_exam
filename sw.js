@@ -1,4 +1,5 @@
-const CACHE_NAME = 'revision-planner-v6';
+const CACHE_NAME = 'revision-planner-v7';
+
 
 
 const ASSETS_TO_CACHE = [

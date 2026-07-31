@@ -3,6 +3,14 @@ import { getQuotaUsage, incrementQuotaUsage } from './db.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || 'revision-planner-default-secret';
 
+// Centralisation des configurations de modèles Gemini actifs et reconnus
+export const AI_MODELS = {
+  FAST_PARSER: process.env.GEMINI_FAST_MODEL || process.env.GEMINI_FLASH_LITE_MODEL || 'gemini-1.5-flash',
+  HEAVY_STRATEGIST: process.env.GEMINI_HEAVY_MODEL || process.env.GEMINI_3_6_FLASH_MODEL || 'gemini-1.5-pro',
+  FAST_FALLBACK: 'gemini-1.5-flash-8b',
+  STABLE_FALLBACK: 'gemini-1.5-flash'
+};
+
 function generateToken(password) {
   return crypto.createHmac('sha256', AUTH_SECRET).update(password).digest('hex');
 }
@@ -80,7 +88,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Méthode non autorisée' });
   }
 
-  // ROUTE 2: POST / Parse (Flash-Lite 3.5)
+  // ROUTE 2: POST / Parse (Flash-Lite)
   if (action === 'parse') {
     const quotaResult = await incrementQuotaUsage(userKey, todayStr, 'lite', 500);
     if (!quotaResult.allowed) {
@@ -94,7 +102,7 @@ export default async function handler(req, res) {
 
     let parsedRaw = {};
     if (apiKey) {
-      let modelName = process.env.GEMINI_LITE_MODEL || 'gemini-3.5-flash-lite';
+      let modelName = AI_MODELS.FAST_PARSER;
       let url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
       let response = await fetch(url, {
@@ -107,8 +115,10 @@ export default async function handler(req, res) {
         })
       });
 
-      if (!response.ok && modelName !== 'gemini-2.5-flash') {
-        url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      // Fallback vers gemini-1.5-flash-8b si le modèle rapide par défaut échoue
+      if (!response.ok && modelName !== AI_MODELS.FAST_FALLBACK) {
+        console.warn(`Fallback parsing vers ${AI_MODELS.FAST_FALLBACK}...`);
+        url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.FAST_FALLBACK}:generateContent?key=${apiKey}`;
         response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -133,11 +143,11 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, data: finalData, quotaUsage: { used: quotaResult.current, limit: quotaResult.maxLimit } });
   }
 
-  // ROUTE 3: POST / Arbitrate (Gemini 3.6 Flash)
+  // ROUTE 3: POST / Arbitrate (Haute Stratégie)
   if (action === 'arbitrate') {
     const quotaResult = await incrementQuotaUsage(userKey, todayStr, 'heavy', 20);
     if (!quotaResult.allowed) {
-      return res.status(429).json({ error: 'Quota Gemini 3.6 Flash (20/j) atteint.', quotaExhausted: true, fallbackRequested: true, quotaUsage: quotaResult });
+      return res.status(429).json({ error: 'Quota IA stratégique (20/j) atteint.', quotaExhausted: true, fallbackRequested: true, quotaUsage: quotaResult });
     }
 
     const { conflictSummary, scheduleState, userGoal } = req.body || {};
@@ -153,7 +163,7 @@ export default async function handler(req, res) {
       });
     }
 
-    let modelName = process.env.GEMINI_MODEL || process.env.GEMINI_3_6_FLASH_MODEL || 'gemini-3.6-flash';
+    let modelName = AI_MODELS.HEAVY_STRATEGIST;
     let url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
     let response = await fetch(url, {
@@ -166,8 +176,10 @@ export default async function handler(req, res) {
       })
     });
 
-    if (!response.ok && modelName !== 'gemini-2.5-flash') {
-      url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    // Fallback vers gemini-1.5-flash si le modèle lourd échoue
+    if (!response.ok && modelName !== AI_MODELS.STABLE_FALLBACK) {
+      console.warn(`Fallback arbitrage vers ${AI_MODELS.STABLE_FALLBACK}...`);
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.STABLE_FALLBACK}:generateContent?key=${apiKey}`;
       response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -186,7 +198,7 @@ export default async function handler(req, res) {
 
     const data = await response.json();
     const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Aucune recommandation générée.";
-    return res.status(200).json({ success: true, source: 'gemini-3.6-flash', strategicAdvice: replyText, quotaUsage: { used: quotaResult.current, limit: quotaResult.maxLimit } });
+    return res.status(200).json({ success: true, source: modelName, strategicAdvice: replyText, quotaUsage: { used: quotaResult.current, limit: quotaResult.maxLimit } });
   }
 
   // ROUTE 4: POST / Chat (Défaut)
@@ -195,7 +207,7 @@ export default async function handler(req, res) {
   }
 
   const { contents, systemInstruction, generationConfig } = req.body || {};
-  let modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  let modelName = AI_MODELS.FAST_PARSER;
   let url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   let response = await fetch(url, {
@@ -204,8 +216,9 @@ export default async function handler(req, res) {
     body: JSON.stringify({ contents, systemInstruction, generationConfig })
   });
 
-  if (!response.ok && modelName !== 'gemini-2.5-flash') {
-    url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  if (!response.ok && modelName !== AI_MODELS.STABLE_FALLBACK) {
+    console.warn(`Fallback chat vers ${AI_MODELS.STABLE_FALLBACK}...`);
+    url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.STABLE_FALLBACK}:generateContent?key=${apiKey}`;
     response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
