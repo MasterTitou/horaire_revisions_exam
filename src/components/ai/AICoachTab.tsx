@@ -86,16 +86,18 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
         })
       });
 
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Réponse non disponible.";
         setChatHistory([...newHistory, { role: 'assistant', content: reply }]);
       } else {
-        setChatHistory([...newHistory, { role: 'assistant', content: "Coach IA disponible lors de la connexion serveur." }]);
+        const errMsg = data.error?.message || data.error || "Erreur de connexion au serveur IA.";
+        setChatHistory([...newHistory, { role: 'assistant', content: `⚠️ ${errMsg}` }]);
       }
     } catch (err) {
-      setChatHistory([...newHistory, { role: 'assistant', content: "Coach IA universel prêt." }]);
+      setChatHistory([...newHistory, { role: 'assistant', content: "⚠️ Erreur réseau : Impossible de contacter l'API du Coach IA." }]);
     } finally {
+
       setLoading(false);
       fetchQuotas();
     }
