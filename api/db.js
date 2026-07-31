@@ -124,16 +124,29 @@ export async function initSchema() {
   }
 }
 
-// In-memory fallback if postgres is not connected or in local development
-const localQuotaStore = new Map();
+// Helper pour exécuter une requête SQL avec timeout strict de 500ms (Évite tout blocage au démarrage)
+async function queryWithTimeout(promise, timeoutMs = 500) {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('PostgreSQL Timeout')), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
 
 export async function getQuotaUsage(userKey, dateStr) {
   const key = `${userKey}:${dateStr}`;
+  
+  // Fast path : Si aucune base de données PostgreSQL n'est configurée, retour mémoire instantané (0ms)
+  if (!process.env.POSTGRES_URL && !process.env.VERCEL_POSTGRES_URL && !process.env.POSTGRES_PRISMA_URL) {
+    return localQuotaStore.get(key) || { lite: 0, heavy: 0, liteTokens: 0, heavyTokens: 0 };
+  }
+
   try {
-    const result = await sql`
+    const result = await queryWithTimeout(sql`
       SELECT lite_count, heavy_count, lite_tokens, heavy_tokens FROM ai_daily_quotas
       WHERE user_key = ${userKey} AND usage_date = ${dateStr}::date;
-    `;
+    `, 500);
+
     if (result.rows && result.rows.length > 0) {
       return {
         lite: parseInt(result.rows[0].lite_count || 0, 10),
@@ -143,10 +156,10 @@ export async function getQuotaUsage(userKey, dateStr) {
       };
     }
   } catch (err) {
-    // Fallback in-memory
+    // Fallback mémoire instantané si DB inaccessible ou trop lente
   }
-  const entry = localQuotaStore.get(key) || { lite: 0, heavy: 0, liteTokens: 0, heavyTokens: 0 };
-  return entry;
+
+  return localQuotaStore.get(key) || { lite: 0, heavy: 0, liteTokens: 0, heavyTokens: 0 };
 }
 
 export async function incrementQuotaUsage(userKey, dateStr, type = 'lite', maxLimit = 500) {
@@ -163,8 +176,12 @@ export async function incrementQuotaUsage(userKey, dateStr, type = 'lite', maxLi
   const liteTokens = current.liteTokens || 0;
   const heavyTokens = current.heavyTokens || 0;
 
-  try {
-    await sql`
+  // Mise à jour immédiate en mémoire
+  localQuotaStore.set(key, { lite: newLite, heavy: newHeavy, liteTokens, heavyTokens });
+
+  // Sync PostgreSQL asynchrone (Non bloquante)
+  if (process.env.POSTGRES_URL || process.env.VERCEL_POSTGRES_URL || process.env.POSTGRES_PRISMA_URL) {
+    queryWithTimeout(sql`
       INSERT INTO ai_daily_quotas (user_key, usage_date, lite_count, heavy_count, lite_tokens, heavy_tokens, updated_at)
       VALUES (${userKey}, ${dateStr}::date, ${newLite}, ${newHeavy}, ${liteTokens}, ${heavyTokens}, NOW())
       ON CONFLICT (user_key, usage_date)
@@ -172,12 +189,9 @@ export async function incrementQuotaUsage(userKey, dateStr, type = 'lite', maxLi
         lite_count = EXCLUDED.lite_count,
         heavy_count = EXCLUDED.heavy_count,
         updated_at = NOW();
-    `;
-  } catch (err) {
-    // In-memory fallback update
+    `, 500).catch(() => {});
   }
 
-  localQuotaStore.set(key, { lite: newLite, heavy: newHeavy, liteTokens, heavyTokens });
   return { allowed: true, current: type === 'heavy' ? newHeavy : newLite, maxLimit };
 }
 
@@ -189,8 +203,12 @@ export async function recordTokensUsage(userKey, dateStr, type = 'lite', tokensC
   const newLiteTokens = type === 'lite' ? (current.liteTokens || 0) + tokensCount : (current.liteTokens || 0);
   const newHeavyTokens = type === 'heavy' ? (current.heavyTokens || 0) + tokensCount : (current.heavyTokens || 0);
 
-  try {
-    await sql`
+  // Mise à jour mémoire instantanée
+  localQuotaStore.set(key, { lite: current.lite, heavy: current.heavy, liteTokens: newLiteTokens, heavyTokens: newHeavyTokens });
+
+  // Sync PostgreSQL asynchrone (Non bloquante)
+  if (process.env.POSTGRES_URL || process.env.VERCEL_POSTGRES_URL || process.env.POSTGRES_PRISMA_URL) {
+    queryWithTimeout(sql`
       INSERT INTO ai_daily_quotas (user_key, usage_date, lite_count, heavy_count, lite_tokens, heavy_tokens, updated_at)
       VALUES (${userKey}, ${dateStr}::date, ${current.lite}, ${current.heavy}, ${newLiteTokens}, ${newHeavyTokens}, NOW())
       ON CONFLICT (user_key, usage_date)
@@ -198,14 +216,11 @@ export async function recordTokensUsage(userKey, dateStr, type = 'lite', tokensC
         lite_tokens = EXCLUDED.lite_tokens,
         heavy_tokens = EXCLUDED.heavy_tokens,
         updated_at = NOW();
-    `;
-  } catch (err) {
-    // In-memory fallback update
+    `, 500).catch(() => {});
   }
-
-  localQuotaStore.set(key, { lite: current.lite, heavy: current.heavy, liteTokens: newLiteTokens, heavyTokens: newHeavyTokens });
 }
 
 export { sql };
+
 
 

@@ -1,4 +1,5 @@
-const CACHE_NAME = 'revision-planner-v9';
+const CACHE_NAME = 'revision-planner-v10';
+
 
 const ASSETS_TO_CACHE = [
   '/',
