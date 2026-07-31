@@ -172,9 +172,10 @@ export function useProjectStore() {
           throw new Error('No Cloud Redis data');
         })
         .then(cloudData => {
-          if (cloudData && (cloudData.projects || cloudData.scheduleData)) {
+          if (cloudData && typeof cloudData === 'object') {
             applyStatePayload(cloudData);
             localStorage.setItem('revisionCalendarData', JSON.stringify(cloudData));
+            localStorage.setItem('horaire_revisions_backup', JSON.stringify(cloudData));
           }
           setSyncStatus('synced');
         })

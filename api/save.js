@@ -32,12 +32,25 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Payload manquant' });
   }
 
+  // Stamp current save time
+  payload.updatedAt = new Date().toISOString();
+
   // 1. Sauvegarde dans PostgreSQL si POSTGRES_URL est configuré
   if (process.env.POSTGRES_URL) {
     try {
-      await initSchema(); // Auto-création des tables SQL
+      await initSchema();
 
       const { projects = [], scheduleData = {} } = payload;
+      const activeProjIds = projects.map(p => p.id);
+      const activeMilestoneIds = [];
+      const activeSessionIds = [];
+
+      // Purger les projets supprimés de PostgreSQL
+      if (activeProjIds.length > 0) {
+        await sql.query(`DELETE FROM projects WHERE id NOT IN (${activeProjIds.map((_, i) => `$${i + 1}`).join(',')})`, activeProjIds);
+      } else {
+        await sql`DELETE FROM projects`;
+      }
 
       for (const p of projects) {
         await sql`
@@ -52,6 +65,7 @@ export default async function handler(req, res) {
         `;
 
         for (const m of p.milestones || []) {
+          activeMilestoneIds.push(m.id);
           await sql`
             INSERT INTO milestones (id, project_id, title, estimated_hours, completed_hours, due_date, cognitive_load, is_hard_deadline, is_completed)
             VALUES (${m.id}, ${p.id}, ${m.title}, ${m.estimatedHours}, ${m.completedHours}, ${m.dueDate || null}, ${m.cognitiveLoad}, ${m.isHardDeadline}, ${m.isCompleted})
@@ -65,6 +79,9 @@ export default async function handler(req, res) {
               is_completed = EXCLUDED.is_completed;
           `;
 
+          // Clean old dependencies for this milestone before re-inserting
+          await sql`DELETE FROM milestone_dependencies WHERE child_milestone_id = ${m.id}`;
+
           for (const parentId of m.dependsOn || []) {
             await sql`
               INSERT INTO milestone_dependencies (parent_milestone_id, child_milestone_id)
@@ -75,9 +92,18 @@ export default async function handler(req, res) {
         }
       }
 
+      // Purger les jalons supprimés de PostgreSQL
+      if (activeMilestoneIds.length > 0) {
+        await sql.query(`DELETE FROM milestones WHERE id NOT IN (${activeMilestoneIds.map((_, i) => `$${i + 1}`).join(',')})`, activeMilestoneIds);
+      } else {
+        await sql`DELETE FROM milestones`;
+      }
+
+      // Sauvegarde des Séances du calendrier
       for (const [dateStr, sessions] of Object.entries(scheduleData)) {
         for (const s of (sessions || [])) {
           if (s.milestoneId) {
+            activeSessionIds.push(s.id);
             await sql`
               INSERT INTO sessions (id, milestone_id, session_date, slot_index, note, is_completed)
               VALUES (${s.id}, ${s.milestoneId}, ${dateStr}, 0, ${s.note}, ${s.isCompleted})
@@ -87,6 +113,13 @@ export default async function handler(req, res) {
             `;
           }
         }
+      }
+
+      // Purger les séances supprimées de PostgreSQL
+      if (activeSessionIds.length > 0) {
+        await sql.query(`DELETE FROM sessions WHERE id NOT IN (${activeSessionIds.map((_, i) => `$${i + 1}`).join(',')})`, activeSessionIds);
+      } else {
+        await sql`DELETE FROM sessions`;
       }
     } catch (pgError) {
       console.error('Erreur Save PostgreSQL:', pgError.message);
@@ -109,5 +142,5 @@ export default async function handler(req, res) {
     }
   }
 
-  return res.status(200).json({ success: true });
+  return res.status(200).json({ success: true, updatedAt: payload.updatedAt });
 }
