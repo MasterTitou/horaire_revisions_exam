@@ -345,7 +345,7 @@ export function useProjectStore() {
 
   const deleteProject = (projId: string) => {
     const updatedProjects = projects.filter(p => p.id !== projId);
-    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData);
+    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData, gamification.calibration, externalEvents, userSettings);
     const updatedGamo = updateMetricsAndQuests(updatedSchedule, updatedProjects, gamification);
 
     setProjects(updatedProjects);
@@ -364,7 +364,7 @@ export function useProjectStore() {
       }
       return p;
     });
-    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData);
+    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData, gamification.calibration, externalEvents, userSettings);
     const updatedGamo = updateMetricsAndQuests(updatedSchedule, updatedProjects, gamification);
 
     setProjects(updatedProjects);
@@ -427,7 +427,7 @@ export function useProjectStore() {
     const nextWeek = new Date(currentWeekStart);
     nextWeek.setDate(nextWeek.getDate() + offset * 7);
     setCurrentWeekStart(nextWeek);
-    const updatedSchedule = generateSchedule(projects, nextWeek, scheduleData);
+    const updatedSchedule = generateSchedule(projects, nextWeek, scheduleData, gamification.calibration, externalEvents, userSettings);
     const updatedGamo = updateMetricsAndQuests(updatedSchedule, projects, gamification);
 
     setScheduleData(updatedSchedule);

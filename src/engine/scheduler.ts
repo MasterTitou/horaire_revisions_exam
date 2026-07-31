@@ -196,6 +196,11 @@ export function generateSchedule(
   const dayEndHour = settings.dayEndHour ?? 23;
   const slotDurationMinutes = settings.slotDurationMinutes ?? 60;
 
+  // Plafond quotidien : max 6 heures de sessions de révision par jour
+  // Cela évite d'empiler 11+ sessions sur un seul jour et force la distribution
+  const MAX_STUDY_HOURS_PER_DAY = 6;
+  const maxSessionsPerDay = Math.floor(MAX_STUDY_HOURS_PER_DAY / (slotDurationMinutes / 60));
+
   const todayStr = getLocalDateString(new Date());
 
   for (let i = 0; i < 7; i++) {
@@ -213,10 +218,25 @@ export function generateSchedule(
 
     scheduleData[dateStr] = [];
 
+    // Filtrer les événements externes du jour uniquement (optimisation + exactitude)
+    const dayStartMs = new Date(d).setHours(0, 0, 0, 0);
+    const dayEndMs = new Date(d).setHours(23, 59, 59, 999);
+    const dayEvents = externalEvents.filter(ev => {
+      const evStart = new Date(ev.startTime).getTime();
+      const evEnd = new Date(ev.endTime).getTime();
+      return evStart < dayEndMs && evEnd > dayStartMs;
+    });
+
+    // Compteur de sessions créées ce jour
+    let sessionsCreatedToday = 0;
+
     // Découpage en tranches d'heures réelles de dayStartHour à dayEndHour
     let currentSlotStartHour = dayStartHour;
 
     while (currentSlotStartHour < dayEndHour) {
+      // Vérifier le plafond quotidien
+      if (sessionsCreatedToday >= maxSessionsPerDay) break;
+
       const slotStart = new Date(d);
       slotStart.setHours(currentSlotStartHour, 0, 0, 0);
 
@@ -224,7 +244,7 @@ export function generateSchedule(
       if (slotEnd.getHours() > dayEndHour) break;
 
       // 1. Vérification des conflits d'agendas externes & temps de tampon
-      if (isSlotBlockedByExternalEvent(slotStart, slotEnd, externalEvents, settings.bufferMinutesBefore, settings.bufferMinutesAfter)) {
+      if (isSlotBlockedByExternalEvent(slotStart, slotEnd, dayEvents, settings.bufferMinutesBefore, settings.bufferMinutesAfter)) {
         currentSlotStartHour += (slotDurationMinutes / 60);
         continue;
       }
@@ -309,6 +329,7 @@ export function generateSchedule(
           endTime: slotEnd.toISOString(),
           durationMinutes: slotDurationMinutes
         });
+        sessionsCreatedToday++;
       }
 
       currentSlotStartHour += (slotDurationMinutes / 60);

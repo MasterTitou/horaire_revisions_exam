@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Project, ScheduleData, ExternalEvent, UserSettings } from '../../types';
 import { PlanningCalendar } from '../planner/PlanningCalendar';
 import { CalendarIntegrationModal } from '../planner/CalendarIntegrationModal';
@@ -33,6 +33,19 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
 }) => {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
+  // Compter uniquement les événements de cette semaine
+  const weekEventsCount = useMemo(() => {
+    const weekStart = currentWeekStart.getTime();
+    const weekEnd = new Date(currentWeekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    const weekEndMs = weekEnd.getTime();
+    return externalEvents.filter(ev => {
+      const evStart = new Date(ev.startTime).getTime();
+      const evEnd = new Date(ev.endTime).getTime();
+      return evStart < weekEndMs && evEnd > weekStart;
+    }).length;
+  }, [externalEvents, currentWeekStart]);
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Header Banner */}
@@ -43,7 +56,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
             Agenda &amp; Intégrations Calendrier
           </h2>
           <p className="text-xs font-bold mt-1" style={{ color: 'var(--muted)' }}>
-            Gestion de vos agendas externes (Google / iCal), masques de temps de tampon (15 min) et découpage 08h00–23h00.
+            Gestion de vos agendas externes (Google / iCal), masques de temps de tampon ({userSettings.bufferMinutesBefore} min) et découpage {String(userSettings.dayStartHour).padStart(2, '0')}h00–{String(userSettings.dayEndHour).padStart(2, '0')}h00.
           </p>
         </div>
 
@@ -65,8 +78,9 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({
             🔒
           </div>
           <div>
-            <span className="text-[11px] font-black uppercase text-muted block">Événements Bloquants</span>
-            <span className="text-lg font-black text-teal-700">{externalEvents.length} créneaux indisponibles</span>
+            <span className="text-[11px] font-black uppercase text-muted block">Cette semaine</span>
+            <span className="text-lg font-black text-teal-700">{weekEventsCount} événements bloquants</span>
+            <span className="text-[10px] text-muted block">{externalEvents.length} au total (tous agendas)</span>
           </div>
         </div>
 
