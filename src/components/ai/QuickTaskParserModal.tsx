@@ -44,7 +44,7 @@ export const QuickTaskParserModal: React.FC<QuickTaskParserModalProps> = ({
 
   const fetchQuota = async () => {
     try {
-      const res = await fetch('/api/ai/quota', {
+      const res = await fetch('/api/ai?action=quota', {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
       if (res.ok) {
@@ -67,7 +67,7 @@ export const QuickTaskParserModal: React.FC<QuickTaskParserModalProps> = ({
     setParsedResult(null);
 
     try {
-      const res = await fetch('/api/ai/parse', {
+      const res = await fetch('/api/ai?action=parse', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -75,6 +75,7 @@ export const QuickTaskParserModal: React.FC<QuickTaskParserModalProps> = ({
         },
         body: JSON.stringify({ prompt: prompt.trim() })
       });
+
 
       const data = await res.json();
 

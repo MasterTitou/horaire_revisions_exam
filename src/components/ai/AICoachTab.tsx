@@ -39,7 +39,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
 
   const fetchQuotas = async () => {
     try {
-      const res = await fetch('/api/ai/quota', {
+      const res = await fetch('/api/ai?action=quota', {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
       if (res.ok) {
@@ -74,7 +74,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
         });
       });
 
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/api/ai?action=chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -112,7 +112,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
     const report = evaluatePlanningConflicts(projects, {});
     
     try {
-      const res = await fetch('/api/ai/arbitrate', {
+      const res = await fetch('/api/ai?action=arbitrate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,6 +124,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
           userGoal: "Résoudre la surcharge et optimiser l'agenda"
         })
       });
+
 
       const data = await res.json();
 

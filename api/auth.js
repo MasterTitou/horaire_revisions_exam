@@ -9,20 +9,25 @@ function generateToken(password) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Méthode non autorisée' });
+    return res.status(404).end();
   }
 
-  const appPassword = process.env.APP_PASSWORD || 'canard3434';
+  const appPassword = process.env.APP_PASSWORD;
+
+  if (!appPassword) {
+    console.error('APP_PASSWORD non configuré.');
+    return res.status(404).end();
+  }
 
   try {
-    const { password } = req.body || {};
+    const { password } = req.body;
 
     if (!password) {
-      return res.status(400).json({ error: 'Mot de passe requis' });
+      return res.status(404).end();
     }
 
-    if (password !== appPassword && password !== 'canard3434') {
-      return res.status(401).json({ error: 'Mot de passe incorrect' });
+    if (password !== appPassword) {
+      return res.status(404).end();
     }
 
     // Générer un token signé
@@ -31,10 +36,9 @@ export default async function handler(req, res) {
     return res.status(200).json({ authenticated: true, token });
   } catch (error) {
     console.error('Erreur auth:', error);
-    return res.status(500).json({ error: 'Erreur serveur d\'authentification' });
+    return res.status(404).end();
   }
 }
-
 
 // Export pour réutilisation dans chat.js
 export { generateToken };
