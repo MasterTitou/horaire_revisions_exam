@@ -114,15 +114,18 @@ CREATE TABLE IF NOT EXISTS external_events (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 11. Table des Quotas Quotidiens d'IA (Flash-Lite: 500/j, 3.6 Flash: 20/j)
+-- 11. Table des Quotas Quotidiens d'IA (Flash-Lite: 500/j, 3.6 Flash: 20/j + Tokens)
 CREATE TABLE IF NOT EXISTS ai_daily_quotas (
   user_key VARCHAR(255) NOT NULL,
   usage_date DATE NOT NULL,
   lite_count INT DEFAULT 0,
   heavy_count INT DEFAULT 0,
+  lite_tokens INT DEFAULT 0,
+  heavy_tokens INT DEFAULT 0,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   PRIMARY KEY (user_key, usage_date)
 );
+
 
 -- Index d'optimisation
 CREATE INDEX IF NOT EXISTS idx_milestones_project ON milestones(project_id);

@@ -131,19 +131,21 @@ export async function getQuotaUsage(userKey, dateStr) {
   const key = `${userKey}:${dateStr}`;
   try {
     const result = await sql`
-      SELECT lite_count, heavy_count FROM ai_daily_quotas
+      SELECT lite_count, heavy_count, lite_tokens, heavy_tokens FROM ai_daily_quotas
       WHERE user_key = ${userKey} AND usage_date = ${dateStr}::date;
     `;
     if (result.rows && result.rows.length > 0) {
       return {
         lite: parseInt(result.rows[0].lite_count || 0, 10),
-        heavy: parseInt(result.rows[0].heavy_count || 0, 10)
+        heavy: parseInt(result.rows[0].heavy_count || 0, 10),
+        liteTokens: parseInt(result.rows[0].lite_tokens || 0, 10),
+        heavyTokens: parseInt(result.rows[0].heavy_tokens || 0, 10)
       };
     }
   } catch (err) {
     // Fallback in-memory
   }
-  const entry = localQuotaStore.get(key) || { lite: 0, heavy: 0 };
+  const entry = localQuotaStore.get(key) || { lite: 0, heavy: 0, liteTokens: 0, heavyTokens: 0 };
   return entry;
 }
 
@@ -158,11 +160,13 @@ export async function incrementQuotaUsage(userKey, dateStr, type = 'lite', maxLi
 
   const newLite = type === 'lite' ? current.lite + 1 : current.lite;
   const newHeavy = type === 'heavy' ? current.heavy + 1 : current.heavy;
+  const liteTokens = current.liteTokens || 0;
+  const heavyTokens = current.heavyTokens || 0;
 
   try {
     await sql`
-      INSERT INTO ai_daily_quotas (user_key, usage_date, lite_count, heavy_count, updated_at)
-      VALUES (${userKey}, ${dateStr}::date, ${newLite}, ${newHeavy}, NOW())
+      INSERT INTO ai_daily_quotas (user_key, usage_date, lite_count, heavy_count, lite_tokens, heavy_tokens, updated_at)
+      VALUES (${userKey}, ${dateStr}::date, ${newLite}, ${newHeavy}, ${liteTokens}, ${heavyTokens}, NOW())
       ON CONFLICT (user_key, usage_date)
       DO UPDATE SET
         lite_count = EXCLUDED.lite_count,
@@ -173,9 +177,35 @@ export async function incrementQuotaUsage(userKey, dateStr, type = 'lite', maxLi
     // In-memory fallback update
   }
 
-  localQuotaStore.set(key, { lite: newLite, heavy: newHeavy });
+  localQuotaStore.set(key, { lite: newLite, heavy: newHeavy, liteTokens, heavyTokens });
   return { allowed: true, current: type === 'heavy' ? newHeavy : newLite, maxLimit };
 }
 
+export async function recordTokensUsage(userKey, dateStr, type = 'lite', tokensCount = 0) {
+  if (!tokensCount || tokensCount <= 0) return;
+  const key = `${userKey}:${dateStr}`;
+  const current = await getQuotaUsage(userKey, dateStr);
+
+  const newLiteTokens = type === 'lite' ? (current.liteTokens || 0) + tokensCount : (current.liteTokens || 0);
+  const newHeavyTokens = type === 'heavy' ? (current.heavyTokens || 0) + tokensCount : (current.heavyTokens || 0);
+
+  try {
+    await sql`
+      INSERT INTO ai_daily_quotas (user_key, usage_date, lite_count, heavy_count, lite_tokens, heavy_tokens, updated_at)
+      VALUES (${userKey}, ${dateStr}::date, ${current.lite}, ${current.heavy}, ${newLiteTokens}, ${newHeavyTokens}, NOW())
+      ON CONFLICT (user_key, usage_date)
+      DO UPDATE SET
+        lite_tokens = EXCLUDED.lite_tokens,
+        heavy_tokens = EXCLUDED.heavy_tokens,
+        updated_at = NOW();
+    `;
+  } catch (err) {
+    // In-memory fallback update
+  }
+
+  localQuotaStore.set(key, { lite: current.lite, heavy: current.heavy, liteTokens: newLiteTokens, heavyTokens: newHeavyTokens });
+}
+
 export { sql };
+
 

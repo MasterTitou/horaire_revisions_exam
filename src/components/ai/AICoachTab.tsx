@@ -185,25 +185,39 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
   return (
     <div className="card p-5 md:p-6 space-y-4 max-w-3xl mx-auto">
       
-      {/* Barre des Quotas Serveur IA en Temps Réel */}
+      {/* Barre des Quotas & Métriques IA en Temps Réel */}
       {quotas && (
-        <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl border" style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}>
-          <div className="flex items-center gap-2 text-xs">
-            <Cpu className="w-4 h-4 text-teal-600" />
-            <div>
-              <span className="font-bold block">3.5 Flash-Lite (Parsing)</span>
-              <span className="text-gray-500">{quotas.lite.used} / {quotas.lite.limit} req / jour</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3.5 rounded-2xl border shadow-xs" style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-2.5 text-xs p-2 rounded-xl" style={{ background: 'var(--bg, #f8fafc)' }}>
+            <Cpu className="w-5 h-5 text-teal-600 shrink-0" />
+            <div className="w-full">
+              <div className="flex justify-between items-center font-bold">
+                <span>Gemini 3.5 Flash-Lite</span>
+                <span className="text-[11px] font-mono text-teal-700">{quotas.lite.used} / {quotas.lite.limit} req</span>
+              </div>
+              <div className="flex justify-between items-center text-[10px] text-gray-500 mt-0.5">
+                <span>Parsing &amp; Chat</span>
+                <span className="font-semibold text-gray-600">{(quotas.lite as any).tokens || 0} tokens</span>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs">
-            <Zap className="w-4 h-4 text-amber-500" />
-            <div>
-              <span className="font-bold block">Gemini 3.6 Flash (Arbitrage)</span>
-              <span className="text-gray-500">{quotas.heavy.used} / {quotas.heavy.limit} req / jour</span>
+          
+          <div className="flex items-center gap-2.5 text-xs p-2 rounded-xl" style={{ background: 'var(--bg, #f8fafc)' }}>
+            <Zap className="w-5 h-5 text-amber-500 shrink-0" />
+            <div className="w-full">
+              <div className="flex justify-between items-center font-bold">
+                <span>Gemini 3.6 Flash</span>
+                <span className="text-[11px] font-mono text-amber-700">{quotas.heavy.used} / {quotas.heavy.limit} req</span>
+              </div>
+              <div className="flex justify-between items-center text-[10px] text-gray-500 mt-0.5">
+                <span>Haute Stratégie</span>
+                <span className="font-semibold text-gray-600">{(quotas.heavy as any).tokens || 0} tokens</span>
+              </div>
             </div>
           </div>
         </div>
       )}
+
 
       {/* Rétro-étalonnage IA Calibration Banner */}
       <div className="p-4 rounded-2xl space-y-2" style={{ background: 'var(--terra-l)', border: '1px solid var(--border)' }}>

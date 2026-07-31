@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { getQuotaUsage, incrementQuotaUsage } from './db.js';
+import { getQuotaUsage, incrementQuotaUsage, recordTokensUsage } from './db.js';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || 'revision-planner-default-secret';
 
@@ -72,13 +72,25 @@ export default async function handler(req, res) {
   const todayStr = new Date().toISOString().split('T')[0];
   const apiKey = process.env.GEMINI_3_6_FLASH_API_KEY || process.env.GEMINI_FLASH_LITE_API_KEY || process.env.GEMINI_API_KEY || req.headers['x-gemini-api-key'];
 
-  // ROUTE 1: GET / Quota
+  // ROUTE 1: GET / Quota (Précision Requêtes + Tokens par Modèle)
   if (req.method === 'GET' || action === 'quota') {
     const usage = await getQuotaUsage(userKey, todayStr);
     return res.status(200).json({
       date: todayStr,
-      lite: { used: usage.lite, limit: 500, remaining: Math.max(0, 500 - usage.lite) },
-      heavy: { used: usage.heavy, limit: 20, remaining: Math.max(0, 20 - usage.heavy) }
+      lite: {
+        model: AI_MODELS.FAST_LITE,
+        used: usage.lite,
+        limit: 500,
+        remaining: Math.max(0, 500 - usage.lite),
+        tokens: usage.liteTokens || 0
+      },
+      heavy: {
+        model: AI_MODELS.HEAVY_STRATEGIST,
+        used: usage.heavy,
+        limit: 20,
+        remaining: Math.max(0, 20 - usage.heavy),
+        tokens: usage.heavyTokens || 0
+      }
     });
   }
 
@@ -100,7 +112,7 @@ export default async function handler(req, res) {
 
     let parsedRaw = {};
     if (apiKey) {
-      const modelName = AI_MODELS.FAST_LITE; // Strictement gemini-3.5-flash-lite
+      const modelName = AI_MODELS.FAST_LITE;
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
       const response = await fetch(url, {
@@ -116,6 +128,9 @@ export default async function handler(req, res) {
       if (response.ok) {
         const data = await response.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (data.usageMetadata?.totalTokenCount) {
+          await recordTokensUsage(userKey, todayStr, 'lite', data.usageMetadata.totalTokenCount);
+        }
         if (text) {
           try { parsedRaw = JSON.parse(text); } catch (e) {}
         }
@@ -149,7 +164,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const modelName = AI_MODELS.HEAVY_STRATEGIST; // Strictement gemini-3.6-flash
+    const modelName = AI_MODELS.HEAVY_STRATEGIST;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
@@ -169,6 +184,9 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
+    if (data.usageMetadata?.totalTokenCount) {
+      await recordTokensUsage(userKey, todayStr, 'heavy', data.usageMetadata.totalTokenCount);
+    }
     const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Aucune recommandation générée.";
     return res.status(200).json({ success: true, source: modelName, strategicAdvice: replyText, quotaUsage: { used: quotaResult.current, limit: quotaResult.maxLimit } });
   }
@@ -178,14 +196,13 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Clé GEMINI_API_KEY non configurée sur Vercel.' });
   }
 
-  // Les conversations interactives de chat utilisent le modèle Lite (500 req/j)
   const quotaResult = await incrementQuotaUsage(userKey, todayStr, 'lite', 500);
   if (!quotaResult.allowed) {
     return res.status(429).json({ error: 'Quota quotidien de requêtes rapides Flash-Lite (500/j) atteint.', quotaUsage: quotaResult });
   }
 
   const { contents, systemInstruction, generationConfig } = req.body || {};
-  const modelName = AI_MODELS.FAST_LITE; // Strictement gemini-3.5-flash-lite
+  const modelName = AI_MODELS.FAST_LITE;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
@@ -195,6 +212,10 @@ export default async function handler(req, res) {
   });
 
   const data = await response.json().catch(() => ({}));
+  if (data.usageMetadata?.totalTokenCount) {
+    await recordTokensUsage(userKey, todayStr, 'lite', data.usageMetadata.totalTokenCount);
+  }
+
   if (!response.ok) {
     console.error('Erreur API Chat Gemini 3.5 Flash-Lite:', data);
     return res.status(response.status || 500).json(data);
@@ -202,3 +223,4 @@ export default async function handler(req, res) {
 
   return res.status(200).json(data);
 }
+
