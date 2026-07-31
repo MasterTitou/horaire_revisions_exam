@@ -126,4 +126,14 @@ export interface Gamification {
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  timestamp?: string;
 }
+
+export interface ChatThread {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+}
+
