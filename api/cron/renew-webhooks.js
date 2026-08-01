@@ -2,17 +2,16 @@
 // Tâche planifiée quotidienne (Vercel Cron) pour renouveler les abonnements Push Google Watch avant leur expiration.
 
 export default async function handler(req, res) {
-  // Vérification de la clé d'autorisation Cron Vercel
+  // Vérification stricte de la clé d'autorisation Cron Vercel
   const authHeader = req.headers.authorization;
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Non autorisé' });
+  const cronSecret = process.env.CRON_SECRET || 'revision-planner-cron-secret';
+  
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ error: 'Non autorisé : Clé Cron invalide ou manquante' });
   }
 
   try {
     console.log('[Vercel Cron] Vérification et renouvellement des canaux Webhook Google Calendar...');
-    
-    // Dans une implémentation complète avec PostgreSQL connecté, on récupère ici
-    // les canaux d'intégration dont webhook_expiration est < NOW() + 24 heures.
     
     return res.status(200).json({
       success: true,

@@ -448,10 +448,32 @@ export function useProjectStore() {
     };
 
     let updatedGamification = { ...gamification };
+    let updatedStreak = { ...streak };
 
     if (s.isCompleted) {
+      // 0. Mise à jour déterministe du Streak (Évaluation de l'écart avant réécriture)
+      const userTz = userSettings.timezone || 'Europe/Paris';
+      const todayStr = getLocalDateString(new Date(), userTz);
+
+      if (!streak.lastDate) {
+        updatedStreak = { count: 1, lastDate: todayStr };
+      } else if (streak.lastDate !== todayStr) {
+        const parts = streak.lastDate.split('-').map(Number);
+        const lastD = new Date(parts[0], parts[1] - 1, parts[2]);
+        const tParts = todayStr.split('-').map(Number);
+        const currD = new Date(tParts[0], tParts[1] - 1, tParts[2]);
+        const diffDays = Math.round((currD.getTime() - lastD.getTime()) / 86400000);
+
+        if (diffDays === 1) {
+          updatedStreak = { count: streak.count + 1, lastDate: todayStr };
+        } else if (diffDays > 1) {
+          updatedStreak = { count: 1, lastDate: todayStr };
+        }
+      }
+
       // Trouver la charge cognitive du jalon parent
       let cognitiveLoad: CognitiveLoad = 'medium';
+
       let plannedMinutes = 60;
       const targetProj = projects.find(p => p.id === s.projectId);
       if (targetProj) {
@@ -609,9 +631,11 @@ export function useProjectStore() {
     updatedGamification = updateMetricsAndQuests(updatedSchedule, projects, updatedGamification);
 
     setScheduleData(updatedSchedule);
+    setStreak(updatedStreak);
     setGamification(updatedGamification);
-    saveAll(projects, updatedSchedule, streak, updatedGamification, isDarkMode);
+    saveAll(projects, updatedSchedule, updatedStreak, updatedGamification, isDarkMode);
   };
+
 
 
   const changeWeek = (offset: number) => {

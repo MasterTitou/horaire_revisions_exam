@@ -162,8 +162,17 @@ Extrais un objet JSON strict avec :
             await recordTokensUsage(userKey, todayStr, 'lite', data.usageMetadata.totalTokenCount);
           }
           if (text) {
-            try { parsedRaw = JSON.parse(text); } catch (e) {}
+            try {
+              const cleanedText = text.replace(/```json|```/gi, '').trim();
+              parsedRaw = JSON.parse(cleanedText);
+            } catch (e) {
+              try {
+                const match = text.match(/\{[\s\S]*\}/);
+                if (match) parsedRaw = JSON.parse(match[0]);
+              } catch (e2) {}
+            }
           }
+
         } else {
           const errData = await response.json().catch(() => ({}));
           console.error('Erreur API Gemini 3.5 Flash-Lite:', errData);

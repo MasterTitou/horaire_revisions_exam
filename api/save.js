@@ -134,13 +134,16 @@ export default async function handler(req, res) {
         isDarkMode: !!payload.isDarkMode
       });
 
+      const incomingUpdatedAt = payload.updatedAt || new Date().toISOString();
+
       await sql`
         INSERT INTO app_metadata (id, payload, updated_at)
-        VALUES ('global_state', ${metaPayload}::jsonb, NOW())
+        VALUES ('global_state', ${metaPayload}::jsonb, ${incomingUpdatedAt}::timestamptz)
         ON CONFLICT (id) DO UPDATE SET
-          payload = EXCLUDED.payload,
-          updated_at = NOW();
+          payload = CASE WHEN EXCLUDED.updated_at >= app_metadata.updated_at THEN EXCLUDED.payload ELSE app_metadata.payload END,
+          updated_at = CASE WHEN EXCLUDED.updated_at >= app_metadata.updated_at THEN EXCLUDED.updated_at ELSE app_metadata.updated_at END;
       `;
+
     } catch (pgError) {
       console.error('Erreur Save PostgreSQL:', pgError.message);
     }
