@@ -34,6 +34,38 @@ export function getLocalDateString(d: Date, timezone: string = 'Europe/Paris'): 
   }
 }
 
+/**
+ * Construit un objet Date JS dont l'instant (timestamp UTC) correspond exactement
+ * à l'heure locale (HH:mm) spécifiée dans le fuseau horaire donné (ex: 'Europe/Paris').
+ */
+export function createTZDate(dateStr: string, hour: number = 0, minute: number = 0, timezone: string = 'Europe/Paris'): Date {
+  const cleanDate = dateStr.split('T')[0];
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const targetIso = `${cleanDate}T${pad(hour)}:${pad(minute)}:00`;
+
+  try {
+    const dummyUtc = new Date(`${targetIso}Z`);
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    });
+
+    const parts = formatter.formatToParts(dummyUtc);
+    const obj: Record<string, string> = {};
+    parts.forEach(p => { if (p.type !== 'literal') obj[p.type] = p.value; });
+
+    const formattedHour = obj.hour === '24' ? '00' : obj.hour;
+    const tzAsUtc = new Date(`${obj.year}-${obj.month}-${obj.day}T${formattedHour}:${obj.minute}:${obj.second}Z`).getTime();
+    const diffMs = tzAsUtc - dummyUtc.getTime();
+
+    return new Date(dummyUtc.getTime() - diffMs);
+  } catch (e) {
+    return new Date(`${cleanDate}T${pad(hour)}:${pad(minute)}:00`);
+  }
+}
+
 export function getStartOfWeek(date: Date, timezone: string = 'Europe/Paris'): Date {
   const dateStr = getLocalDateString(date, timezone);
   const parts = dateStr.split('-').map(Number);
@@ -43,6 +75,7 @@ export function getStartOfWeek(date: Date, timezone: string = 'Europe/Paris'): D
   d.setHours(0, 0, 0, 0);
   return d;
 }
+
 
 /**
  * Détection formelle de cycle dans le graphe WBS DAG via DFS coloré (Anti-Infinite Recursion).
@@ -363,8 +396,8 @@ export function generateSchedule(
 
     let sessionsCreatedToday = existingCompletedSessions.length;
 
-    const dayStartMs = new Date(d).setHours(0, 0, 0, 0);
-    const dayEndMs = new Date(d).setHours(23, 59, 59, 999);
+    const dayStartMs = createTZDate(dateStr, 0, 0, userTimezone).getTime();
+    const dayEndMs = createTZDate(dateStr, 23, 59, userTimezone).getTime();
     const dayEvents = externalEvents.filter(ev => {
       const evStart = new Date(ev.startTime).getTime();
       const evEnd = new Date(ev.endTime).getTime();
@@ -380,11 +413,9 @@ export function generateSchedule(
     while (currentSlotStartMinute + slotDurationMinutes <= dayEndMinute) {
       if (sessionsCreatedToday >= maxSessionsPerDay) break;
 
-      const slotStart = new Date(d);
       const startH = Math.floor(currentSlotStartMinute / 60);
       const startM = currentSlotStartMinute % 60;
-      slotStart.setHours(startH, startM, 0, 0);
-
+      const slotStart = createTZDate(dateStr, startH, startM, userTimezone);
       const slotEnd = new Date(slotStart.getTime() + slotDurationMinutes * 60 * 1000);
 
       if (isSlotBlockedByExternalEvent(slotStart, slotEnd, dayEvents, settings.bufferMinutesBefore, settings.bufferMinutesAfter)) {
@@ -392,9 +423,9 @@ export function generateSchedule(
         continue;
       }
 
-      const hour = slotStart.getHours();
-      const slotIdx = hour < 12 ? 0 : (hour < 18 ? 1 : 2);
+      const slotIdx = startH < 12 ? 0 : (startH < 18 ? 1 : 2);
       const targetCog: CognitiveLoad = slotIdx === 0 ? 'high' : (slotIdx === 1 ? 'medium' : 'low');
+
 
       const candidates = allMilestones.filter(m => {
         // CORRECTION BIAIS 1 : Normalisation stricte de la date au format YYYY-MM-DD
