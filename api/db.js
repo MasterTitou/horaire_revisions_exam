@@ -83,36 +83,51 @@ export async function getQuotaUsage(userKey, dateStr) {
 
 export async function incrementQuotaUsage(userKey, dateStr, type = 'lite', maxLimit = 500) {
   const key = `${userKey}:${dateStr}`;
-  const current = await getQuotaUsage(userKey, dateStr);
-  const currentCount = type === 'heavy' ? current.heavy : current.lite;
 
+  if (isPostgresConfigured()) {
+    const isHeavy = type === 'heavy';
+    const result = await safeSql(() => sql`
+      INSERT INTO ai_daily_quotas (user_key, usage_date, lite_count, heavy_count, updated_at)
+      VALUES (${userKey}, ${dateStr}::date, ${isHeavy ? 0 : 1}, ${isHeavy ? 1 : 0}, NOW())
+      ON CONFLICT (user_key, usage_date)
+      DO UPDATE SET
+        lite_count = CASE WHEN NOT ${isHeavy} THEN ai_daily_quotas.lite_count + 1 ELSE ai_daily_quotas.lite_count END,
+        heavy_count = CASE WHEN ${isHeavy} THEN ai_daily_quotas.heavy_count + 1 ELSE ai_daily_quotas.heavy_count END,
+        updated_at = NOW()
+      RETURNING lite_count, heavy_count;
+    `, 800);
+
+    if (result && result.rows && result.rows.length > 0) {
+      const updatedLite = parseInt(result.rows[0].lite_count || 0, 10);
+      const updatedHeavy = parseInt(result.rows[0].heavy_count || 0, 10);
+      const newCount = isHeavy ? updatedHeavy : updatedLite;
+
+      const prev = localQuotaStore.get(key) || { lite: 0, heavy: 0, liteTokens: 0, heavyTokens: 0 };
+      localQuotaStore.set(key, { ...prev, lite: updatedLite, heavy: updatedHeavy });
+
+      if (newCount > maxLimit) {
+        return { allowed: false, current: newCount, maxLimit };
+      }
+      return { allowed: true, current: newCount, maxLimit };
+    }
+  }
+
+  // Fallback mémoire volatile
+  const current = localQuotaStore.get(key) || { lite: 0, heavy: 0, liteTokens: 0, heavyTokens: 0 };
+  const currentCount = type === 'heavy' ? current.heavy : current.lite;
   if (currentCount >= maxLimit) {
     return { allowed: false, current: currentCount, maxLimit };
   }
 
-  const newLite = type === 'lite' ? current.lite + 1 : current.lite;
-  const newHeavy = type === 'heavy' ? current.heavy + 1 : current.heavy;
-  const liteTokens = current.liteTokens || 0;
-  const heavyTokens = current.heavyTokens || 0;
-
-  // Mise à jour immédiate en mémoire (Garantit 0ms d'attente)
-  localQuotaStore.set(key, { lite: newLite, heavy: newHeavy, liteTokens, heavyTokens });
-
-  // Sync PostgreSQL asynchrone sécurisé
-  if (isPostgresConfigured()) {
-    safeSql(() => sql`
-      INSERT INTO ai_daily_quotas (user_key, usage_date, lite_count, heavy_count, lite_tokens, heavy_tokens, updated_at)
-      VALUES (${userKey}, ${dateStr}::date, ${newLite}, ${newHeavy}, ${liteTokens}, ${heavyTokens}, NOW())
-      ON CONFLICT (user_key, usage_date)
-      DO UPDATE SET
-        lite_count = EXCLUDED.lite_count,
-        heavy_count = EXCLUDED.heavy_count,
-        updated_at = NOW();
-    `, 500).catch(() => {});
-  }
-
-  return { allowed: true, current: type === 'heavy' ? newHeavy : newLite, maxLimit };
+  const updated = {
+    ...current,
+    lite: type === 'lite' ? current.lite + 1 : current.lite,
+    heavy: type === 'heavy' ? current.heavy + 1 : current.heavy
+  };
+  localQuotaStore.set(key, updated);
+  return { allowed: true, current: type === 'heavy' ? updated.heavy : updated.lite, maxLimit };
 }
+
 
 export async function recordTokensUsage(userKey, dateStr, type = 'lite', tokensCount = 0) {
   if (!tokensCount || tokensCount <= 0) return;

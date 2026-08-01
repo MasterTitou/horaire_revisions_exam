@@ -1,8 +1,8 @@
 // api/webhooks/google-calendar.js
-// Traitement des notifications Push Webhook Google Calendar avec Debouncing
+// Traitement des notifications Push Webhook Google Calendar avec anti-résonance (Message-Number Guard + Debounce)
 
-// In-memory cache de verrouillage pour le debouncing (rafale de webhooks)
 const debounceLockMap = new Map();
+const messageNumberMap = new Map();
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
@@ -13,9 +13,10 @@ export default async function handler(req, res) {
     const channelId = req.headers['x-goog-channel-id'];
     const resourceState = req.headers['x-goog-resource-state'];
     const resourceId = req.headers['x-goog-resource-id'];
+    const messageNumberStr = req.headers['x-goog-message-number'];
+    const messageNumber = messageNumberStr ? parseInt(messageNumberStr, 10) : 0;
 
     if (resourceState === 'sync') {
-      // Confirmation de l'établissement du canal watch
       return res.status(200).send('SYNC_OK');
     }
 
@@ -23,23 +24,33 @@ export default async function handler(req, res) {
       const lockKey = channelId || resourceId || 'global_gcal_lock';
       const now = Date.now();
 
-      // ANTI-REBOND (DEBOUNCING) : Si un webhook a été reçu dans les 3 dernières secondes, on ignore l'appel doublon
+      // 1. GUARD ANTI-RÉSONANCE PAR MESSAGE NUMBER : Ignorer si le numéro de message est obsolète ou identique
+      if (messageNumber && messageNumberMap.has(lockKey)) {
+        const lastMsgNum = messageNumberMap.get(lockKey);
+        if (messageNumber <= lastMsgNum) {
+          console.log(`[Webhook Guard] Ignored duplicate/echo message #${messageNumber} for channel: ${lockKey}`);
+          return res.status(200).json({ status: 'DUPLICATE_MESSAGE_IGNORED', messageNumber });
+        }
+      }
+
+      // 2. ANTI-REBOND (DEBOUNCING 5s) : Ignorer les rafales en boucle
       if (debounceLockMap.has(lockKey)) {
         const lastTime = debounceLockMap.get(lockKey);
-        if (now - lastTime < 3000) {
+        if (now - lastTime < 5000) {
           console.log(`[Webhook Debounce] Ignored burst notification for lockKey: ${lockKey}`);
           return res.status(200).json({ status: 'DEBOUNCED' });
         }
       }
 
+      if (messageNumber) messageNumberMap.set(lockKey, messageNumber);
       debounceLockMap.set(lockKey, now);
 
-      console.log(`[Webhook Push] Valid Google Calendar event change detected for channel: ${channelId}`);
+      console.log(`[Webhook Push] Valid Google Calendar event change detected (Msg #${messageNumber}) for channel: ${channelId}`);
 
-      // Signal de succès au webhook Google
       return res.status(200).json({
         status: 'SCHEDULE_RECALCULATION_TRIGGERED',
         channelId,
+        messageNumber,
         timestamp: new Date().toISOString()
       });
     }

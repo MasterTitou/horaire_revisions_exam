@@ -1,38 +1,133 @@
 // api/calendar/ical.js
-// Support iCal pour import des événements externes et export des séances de travail sous format .ics
+// Support iCal complet : un-folding RFC 5545, extraction TZID/RRULE/EXDATE et export .ics
 
 /**
- * Parse un fichier .ics brut et extrait les événements avec leurs horodatages ISO UTC.
+ * Parse un fichier .ics brut, gère les lignes dépliées, les paramètres TZID,
+ * l'expansion des RRULE (DAILY/WEEKLY avec COUNT/UNTIL) et le filtrage EXDATE.
  */
 export function parseICalFeed(icsText) {
-  const events = [];
-  const lines = icsText.split(/\r\n|\n|\r/);
-  
+  if (!icsText) return [];
+
+  // 1. Dépliage des lignes coupées RFC 5545 (lignes commençant par espace ou tabulation)
+  const rawLines = icsText.split(/\r\n|\n|\r/);
+  const unfoldedLines = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+    if ((line.startsWith(' ') || line.startsWith('\t')) && unfoldedLines.length > 0) {
+      unfoldedLines[unfoldedLines.length - 1] += line.substring(1);
+    } else {
+      unfoldedLines.push(line.trim());
+    }
+  }
+
+  const rawEvents = [];
   let currentEvent = null;
 
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i].trim();
+  for (let i = 0; i < unfoldedLines.length; i++) {
+    const line = unfoldedLines[i];
     if (line === 'BEGIN:VEVENT') {
-      currentEvent = { id: 'ical_' + Math.random().toString(36).substr(2, 9), source: 'ical' };
+      currentEvent = {
+        id: 'ical_' + Math.random().toString(36).substr(2, 9),
+        source: 'ical',
+        exdates: []
+      };
     } else if (line === 'END:VEVENT') {
       if (currentEvent && currentEvent.startTime && currentEvent.endTime) {
-        events.push(currentEvent);
+        rawEvents.push(currentEvent);
       }
       currentEvent = null;
     } else if (currentEvent) {
       if (line.startsWith('SUMMARY:')) {
         currentEvent.title = line.substring(8);
       } else if (line.startsWith('DTSTART')) {
-        const val = line.split(':')[1];
-        currentEvent.startTime = parseICalDate(val);
+        const colonIdx = line.indexOf(':');
+        if (colonIdx !== -1) {
+          const val = line.substring(colonIdx + 1);
+          currentEvent.startTime = parseICalDate(val);
+        }
       } else if (line.startsWith('DTEND')) {
-        const val = line.split(':')[1];
-        currentEvent.endTime = parseICalDate(val);
+        const colonIdx = line.indexOf(':');
+        if (colonIdx !== -1) {
+          const val = line.substring(colonIdx + 1);
+          currentEvent.endTime = parseICalDate(val);
+        }
+      } else if (line.startsWith('RRULE:')) {
+        currentEvent.rrule = line.substring(6);
+      } else if (line.startsWith('EXDATE')) {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx !== -1) {
+          const val = line.substring(colonIdx + 1);
+          const dates = val.split(',').map(d => parseICalDate(d).split('T')[0]);
+          currentEvent.exdates.push(...dates);
+        }
       }
     }
   }
 
-  return events;
+  // 2. Expansion des récurrences (RRULE)
+  const finalEvents = [];
+  const horizonDays = 30;
+  const now = new Date();
+  const maxHorizonMs = now.getTime() + horizonDays * 86400000;
+
+  rawEvents.forEach(ev => {
+    if (!ev.rrule) {
+      finalEvents.push(ev);
+      return;
+    }
+
+    // Extraction des paramètres RRULE
+    const rruleParams = {};
+    ev.rrule.split(';').forEach(pair => {
+      const [k, v] = pair.split('=');
+      if (k && v) rruleParams[k] = v;
+    });
+
+    const freq = rruleParams['FREQ'];
+    const count = rruleParams['COUNT'] ? parseInt(rruleParams['COUNT'], 10) : 30;
+    let untilMs = maxHorizonMs;
+    if (rruleParams['UNTIL']) {
+      untilMs = new Date(parseICalDate(rruleParams['UNTIL'])).getTime();
+    }
+
+    const startD = new Date(ev.startTime);
+    const endD = new Date(ev.endTime);
+    const durationMs = endD.getTime() - startD.getTime();
+    const exdateSet = new Set(ev.exdates || []);
+
+    let occurrenceCount = 0;
+    let currentStartMs = startD.getTime();
+
+    while (occurrenceCount < count && currentStartMs <= Math.min(untilMs, maxHorizonMs)) {
+      const occurrenceStart = new Date(currentStartMs);
+      const dateKey = occurrenceStart.toISOString().split('T')[0];
+
+      // Vérifier si cette date n'est pas dans la liste des exclusions EXDATE
+      if (!exdateSet.has(dateKey)) {
+        finalEvents.push({
+          ...ev,
+          id: `${ev.id}_occ_${occurrenceCount}`,
+          startTime: occurrenceStart.toISOString(),
+          endTime: new Date(currentStartMs + durationMs).toISOString()
+        });
+      }
+
+      occurrenceCount++;
+      if (freq === 'DAILY') {
+        currentStartMs += 86400000;
+      } else if (freq === 'WEEKLY') {
+        currentStartMs += 7 * 86400000;
+      } else if (freq === 'MONTHLY') {
+        const nextD = new Date(currentStartMs);
+        nextD.setMonth(nextD.getMonth() + 1);
+        currentStartMs = nextD.getTime();
+      } else {
+        break; // Fréquence non supportée, on arrête la boucle
+      }
+    }
+  });
+
+  return finalEvents;
 }
 
 function parseICalDate(dateStr) {
@@ -107,7 +202,6 @@ export default async function handler(req, res) {
     res.setHeader('Content-Disposition', 'attachment; filename="sessions_revision.ics"');
     return res.status(200).send(icsContent);
   }
-
 
   if (req.method === 'POST' && req.body.icalUrl) {
     try {

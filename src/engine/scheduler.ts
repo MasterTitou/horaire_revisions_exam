@@ -45,6 +45,56 @@ export function getStartOfWeek(date: Date, timezone: string = 'Europe/Paris'): D
 }
 
 /**
+ * Détection formelle de cycle dans le graphe WBS DAG via DFS coloré (Anti-Infinite Recursion).
+ */
+export function detectCycles(projects: Project[]): { hasCycle: boolean; cycleNodes: Set<string> } {
+  const msMap = new Map<string, Milestone>();
+  const graph = new Map<string, string[]>();
+
+  projects.forEach(p => {
+    (p.milestones || []).forEach(m => {
+      msMap.set(m.id, m);
+      graph.set(m.id, m.dependsOn || []);
+    });
+  });
+
+  const visited = new Set<string>();
+  const inStack = new Set<string>();
+  const cycleNodes = new Set<string>();
+
+  const dfs = (nodeId: string): boolean => {
+    visited.add(nodeId);
+    inStack.add(nodeId);
+
+    const neighbors = graph.get(nodeId) || [];
+    for (const neighbor of neighbors) {
+      if (!msMap.has(neighbor)) continue;
+      if (!visited.has(neighbor)) {
+        if (dfs(neighbor)) {
+          cycleNodes.add(nodeId);
+          return true;
+        }
+      } else if (inStack.has(neighbor)) {
+        cycleNodes.add(nodeId);
+        cycleNodes.add(neighbor);
+        return true;
+      }
+    }
+
+    inStack.delete(nodeId);
+    return false;
+  };
+
+  for (const mId of msMap.keys()) {
+    if (!visited.has(mId)) {
+      dfs(mId);
+    }
+  }
+
+  return { hasCycle: cycleNodes.size > 0, cycleNodes };
+}
+
+/**
  * Calcul du Chemin Critique (CPM - Critical Path Method) 100% PURE, DÉTERMINISTE & GLOBAL CROSS-PROJETS.
  * Identifie l'intégralité de la chaîne de dépendances (y compris inter-projets) où la Marge Totale (Slack = LS - ES) est égale à zéro.
  */
@@ -55,12 +105,17 @@ export function computeCriticalPath(
   const criticalMap: Record<string, boolean> = {};
   if (!projects || projects.length === 0) return criticalMap;
 
+  // Détection et neutralisation des cycles éventuels pour éviter tout stack overflow
+  const { cycleNodes } = detectCycles(projects);
+
   // 1. Dictionnaire global de tous les jalons (Support complet des dépendances cross-projets)
   const msMap = new Map<string, Milestone>();
   const durationMap = new Map<string, number>();
 
   projects.forEach(project => {
     (project.milestones || []).forEach(m => {
+      // Ignorer les jalons pris dans un cycle pour le calcul CPM
+      if (cycleNodes.has(m.id)) return;
       msMap.set(m.id, m);
       const calFactor = m.cognitiveLoad === 'high'
         ? calibration.highFactor
@@ -69,6 +124,7 @@ export function computeCriticalPath(
       durationMap.set(m.id, duration);
     });
   });
+
 
   if (msMap.size === 0) return criticalMap;
 

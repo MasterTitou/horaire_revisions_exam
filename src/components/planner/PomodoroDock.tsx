@@ -34,43 +34,54 @@ export const PomodoroDock: React.FC<PomodoroDockProps> = ({
   const [isRunning, setIsRunning] = useState(false);
   const [mode, setMode] = useState<'focus' | 'break'>('focus');
 
+  const targetEndTimeRef = React.useRef<number | null>(null);
+
   // Update timer on settings change if not running
   useEffect(() => {
     if (!isRunning) {
       setTimeLeft(mode === 'focus' ? focusTime * 60 : breakTime * 60);
+      targetEndTimeRef.current = null;
     }
   }, [focusTime, breakTime, mode]);
 
-  // Page Visibility API : suspendre le timer si l'onglet passe en arrière-plan
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && isRunning) {
-        setIsRunning(false);
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isRunning]);
-
+  // Différentiel d'horodatage absolu (Anti-Bridage Navigateur / Background Tab Throttling)
   useEffect(() => {
     let timer: any = null;
-    if (isRunning && timeLeft > 0) {
-      timer = setInterval(() => {
-        setTimeLeft(prev => prev - 1);
-      }, 1000);
-    } else if (timeLeft === 0 && isRunning) {
-      setIsRunning(false);
-      if (mode === 'focus') {
-        setMode('break');
-        setTimeLeft(breakTime * 60);
-      } else {
-        setMode('focus');
-        setTimeLeft(focusTime * 60);
+
+    if (isRunning) {
+      if (!targetEndTimeRef.current) {
+        targetEndTimeRef.current = Date.now() + timeLeft * 1000;
       }
+
+      timer = setInterval(() => {
+        if (!targetEndTimeRef.current) return;
+        const now = Date.now();
+        const diffMs = targetEndTimeRef.current - now;
+        const secondsRemaining = Math.max(0, Math.ceil(diffMs / 1000));
+
+        setTimeLeft(secondsRemaining);
+
+        if (secondsRemaining <= 0) {
+          setIsRunning(false);
+          targetEndTimeRef.current = null;
+          if (mode === 'focus') {
+            setMode('break');
+            setTimeLeft(breakTime * 60);
+          } else {
+            setMode('focus');
+            setTimeLeft(focusTime * 60);
+          }
+        }
+      }, 500);
+    } else {
+      targetEndTimeRef.current = null;
     }
-    return () => clearInterval(timer);
-  }, [isRunning, timeLeft, mode, focusTime, breakTime]);
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isRunning, mode, focusTime, breakTime, timeLeft]);
+
 
 
   const toggleTimer = () => setIsRunning(!isRunning);
