@@ -481,16 +481,22 @@ export function generateSchedule(
           else if (bufferedDaysToDeadline <= 7) pressure = 2.0;
           else pressure = 1.2;
         } else {
-          // CORRECTION BIAIS 3 : Remplacement du HPH hérité par la durée réelle du créneau (slotHours)
-          pressure = Math.min(1.5, (remainingHours / slotHours) / bufferedDaysToDeadline);
+          pressure = Math.min(2.5, (remainingHours / slotHours) / bufferedDaysToDeadline);
         }
+
 
         let cogMatchBonus = 0;
         if (m.cognitiveLoad === targetCog) cogMatchBonus = 2.0;
         else if (slotIdx === 0 && m.cognitiveLoad === 'medium') cogMatchBonus = 0.5;
 
+        let urgencyBonus = 0;
+        if (bufferedDaysToDeadline <= 1) urgencyBonus = 8.0;
+        else if (bufferedDaysToDeadline <= 3) urgencyBonus = 4.5;
+        else if (bufferedDaysToDeadline <= 7) urgencyBonus = 2.0;
+
         const criticalBonus = m.isCriticalPath ? 3.5 : 0;
-        const score = (pressure * 2.0) + cogMatchBonus + criticalBonus + (remainingHours / 5);
+        const sizeComponent = Math.min(2.0, remainingHours / 5);
+        const score = (pressure * 2.0) + urgencyBonus + cogMatchBonus + criticalBonus + sizeComponent;
         return { milestone: m, score };
       });
 
@@ -593,7 +599,7 @@ export function evaluatePlanningConflicts(
   Object.values(existingSchedule || {}).forEach(sessions => {
     (sessions || []).forEach(s => {
       if (!s.isCompleted && s.milestoneId) {
-        const hours = s.durationMinutes ? (s.durationMinutes / 60) : HPH;
+        const hours = s.durationMinutes ? (s.durationMinutes / 60) : 1.0;
         milestonePlannedHours[s.milestoneId] = (milestonePlannedHours[s.milestoneId] || 0) + hours;
         totalPlannedNotCompletedHours += hours;
       }
@@ -675,8 +681,6 @@ export function evaluatePlanningConflicts(
   };
 }
 
-
-
 /**
  * Arbitrage déterministe non-destructif.
  */
@@ -710,13 +714,18 @@ export function resolveConflictsHeuristically(
     });
   });
 
-  // 2. Si l'impasse persiste, réajuster les jalons à charge cognitive élevée avec traçabilité flag wasReduced
+  // 2. Si l'impasse persiste, réajuster les jalons à charge cognitive élevée sans compoundage exponentiel
   conflicts.impasseMilestones.forEach(imp => {
     if (!imp.isHardDeadline) {
       updatedProjects.forEach(p => {
         p.milestones.forEach(m => {
           if (m.id === imp.id) {
-            m.estimatedHours = Math.max(2, Math.round((m.estimatedHours || 10) * 0.75));
+            // Conservation de la valeur d'origine immuable
+            if (m.initialEstimatedHours === undefined) {
+              m.initialEstimatedHours = m.estimatedHours;
+            }
+            const baseHours = m.initialEstimatedHours || m.estimatedHours || 10;
+            m.estimatedHours = Math.max(2, Math.round(baseHours * 0.75));
             m.wasReduced = true;
             actionsTaken.push(`Réduction du volume horaire de 25% sur « ${m.title} » (Ajusté).`);
           }
@@ -733,3 +742,4 @@ export function resolveConflictsHeuristically(
 
   return { updatedProjects, actionsTaken };
 }
+

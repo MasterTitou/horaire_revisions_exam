@@ -1,4 +1,5 @@
-const CACHE_NAME = 'revision-planner-v24';
+const CACHE_NAME = 'revision-planner-v25';
+
 
 const LOCAL_ASSETS = [
   '/',

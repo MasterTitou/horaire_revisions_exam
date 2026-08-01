@@ -145,10 +145,11 @@ export interface SessionXpInput {
 }
 
 export function calculateSessionXP(input: SessionXpInput): { xpGained: number; countedMinutes: number } {
-  const planned = input.plannedDurationMinutes || 60;
+  const actual = Math.max(0, isNaN(input.actualDurationMinutes) || !isFinite(input.actualDurationMinutes) ? 0 : input.actualDurationMinutes);
+  const planned = Math.max(15, isNaN(input.plannedDurationMinutes || 60) || !isFinite(input.plannedDurationMinutes || 60) ? 60 : (input.plannedDurationMinutes || 60));
   // Cap anti-oubli : max planned + 20%
   const maxAllowedMinutes = Math.round(planned * 1.2);
-  const countedMinutes = Math.min(input.actualDurationMinutes, maxAllowedMinutes);
+  const countedMinutes = Math.min(actual, maxAllowedMinutes);
 
   // Multiplicateur cognitif
   let cognitiveMultiplier = 1.0;
@@ -180,8 +181,9 @@ export function evaluateDomainMastery(hoursSpent: number): {
   tierProgressPct: number;
   hoursRemainingInTier: number;
 } {
-  const hours = Math.max(0, hoursSpent);
+  const hours = Math.max(0, isNaN(hoursSpent) || !isFinite(hoursSpent) ? 0 : hoursSpent);
   const level = Math.floor(hours / 20) + 1;
+
 
   if (hours < MASTERY_THRESHOLDS.NOVICE_TO_AUTONOMOUS) {
     const min = 0;

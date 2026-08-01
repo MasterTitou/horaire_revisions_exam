@@ -75,6 +75,8 @@ export function useProjectStore() {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'loading' | 'error'>('synced');
 
   const saveTimerRef = useRef<any>(null);
+  const latestPayloadRef = useRef<any>(null);
+
 
 
   // Compute Velocity Index & Dynamic Quests from WBS
@@ -260,6 +262,8 @@ export function useProjectStore() {
       userSettings: newSettings !== undefined ? newSettings : userSettings
     };
 
+    latestPayloadRef.current = payload;
+
     // Save to LocalStorage immediately
     localStorage.setItem('revisionCalendarData', JSON.stringify(payload));
     localStorage.setItem('horaire_revisions_backup', JSON.stringify(payload));
@@ -271,13 +275,14 @@ export function useProjectStore() {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
 
       saveTimerRef.current = setTimeout(() => {
+        const payloadToSend = latestPayloadRef.current || payload;
         fetch('/api/save', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payloadToSend)
         })
           .then(res => {
             if (res.ok) setSyncStatus('synced');
@@ -557,7 +562,49 @@ export function useProjectStore() {
         aggregates: newAggregates,
         toastQueue: [...newToastQueue, ...toastsToPush]
       };
+    } else {
+      // Décochement : déduire l'XP et les heures de domaine de manière symétrique
+      const actualMinutes = s.durationMinutes || 60;
+      const hoursSubtract = actualMinutes / 60;
+      const xpDeduct = Math.max(10, Math.round(actualMinutes * 1.5));
+      const newTotalXp = Math.max(0, updatedGamification.xp - xpDeduct);
+      const { level: newGlobalLevel, title: newTitle, xpToNextLevel } = calculateLevelAndTitle(newTotalXp);
+
+      let skillKey = 'logistics';
+      const noteLower = s.note.toLowerCase();
+      if (noteLower.includes('potager') || noteLower.includes('botanique') || noteLower.includes('agri')) skillKey = 'agri';
+      else if (noteLower.includes('fusée') || noteLower.includes('propulsion') || noteLower.includes('aero')) skillKey = 'aero';
+      else if (noteLower.includes('finance') || noteLower.includes('budget') || noteLower.includes('levée')) skillKey = 'finance';
+      else if (noteLower.includes('art') || noteLower.includes('design') || noteLower.includes('créa')) skillKey = 'art';
+      else if (noteLower.includes('tech') || noteLower.includes('dev') || noteLower.includes('arch') || noteLower.includes('code')) skillKey = 'tech';
+      else if (noteLower.includes('science') || noteLower.includes('recherche') || noteLower.includes('étude')) skillKey = 'science';
+
+      const currentSkill = updatedGamification.skills[skillKey] || DEFAULT_SKILLS[skillKey];
+      if (currentSkill) {
+        const newHoursSpent = Math.max(0, currentSkill.hoursSpent - hoursSubtract);
+        const mastery = evaluateDomainMastery(newHoursSpent);
+        updatedGamification = {
+          ...updatedGamification,
+          xp: newTotalXp,
+          level: newGlobalLevel,
+          title: newTitle,
+          xpToNextLevel,
+          sessionsCompleted: Math.max(0, updatedGamification.sessionsCompleted - 1),
+          skills: {
+            ...updatedGamification.skills,
+            [skillKey]: {
+              ...currentSkill,
+              hoursSpent: Math.round(newHoursSpent * 10) / 10,
+              level: mastery.level,
+              currentTier: mastery.currentTier,
+              tierProgressPct: mastery.tierProgressPct,
+              hoursRemainingInTier: mastery.hoursRemainingInTier
+            }
+          }
+        };
+      }
     }
+
 
     updatedGamification = updateMetricsAndQuests(updatedSchedule, projects, updatedGamification);
 

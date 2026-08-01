@@ -4,7 +4,9 @@ export interface Milestone {
   id: string;
   title: string;
   estimatedHours: number;
+  initialEstimatedHours?: number; // Volume horaire initial immuable avant arbitrage
   completedHours: number;
+
   startDate?: string; // Date de début minimale (YYYY-MM-DD)
   dueDate: string;
   cognitiveLoad: CognitiveLoad;
