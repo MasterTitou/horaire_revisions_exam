@@ -44,11 +44,20 @@ export async function initSchema() {
         PRIMARY KEY (user_key, usage_date)
       );
     `, 1500);
+
+    await safeSql(() => sql`
+      CREATE TABLE IF NOT EXISTS app_metadata (
+        id VARCHAR(50) PRIMARY KEY,
+        payload JSONB,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `, 1500);
     return true;
   } catch (err) {
     return false;
   }
 }
+
 
 export async function getQuotaUsage(userKey, dateStr) {
   const key = `${userKey}:${dateStr}`;

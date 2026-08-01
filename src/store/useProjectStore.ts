@@ -246,14 +246,15 @@ export function useProjectStore() {
     newGamification: Gamification,
     newDark: boolean,
     newEvents?: ExternalEvent[],
-    newSettings?: UserSettings
+    newSettings?: UserSettings,
+    newChatHistory?: ChatMessage[]
   ) => {
     const payload = {
       projects: newProjects,
       scheduleData: newSchedule,
       streak: newStreak,
       gamification: newGamification,
-      chatHistory,
+      chatHistory: newChatHistory !== undefined ? newChatHistory : chatHistory,
       isDarkMode: newDark,
       externalEvents: newEvents !== undefined ? newEvents : externalEvents,
       userSettings: newSettings !== undefined ? newSettings : userSettings
@@ -287,10 +288,18 @@ export function useProjectStore() {
     }
   }, [chatHistory, externalEvents, userSettings]);
 
-  const addProject = (name: string, code: string, deadline: string, isHardDeadline: boolean, startDate?: string) => {
+  const updateChatHistory = (action: React.SetStateAction<ChatMessage[]>) => {
+    setChatHistory(prev => {
+      const updated = typeof action === 'function' ? action(prev) : action;
+      saveAll(projects, scheduleData, streak, gamification, isDarkMode, externalEvents, userSettings, updated);
+      return updated;
+    });
+  };
+
+  const addProject = (name: string, code: string, deadline: string, isHardDeadline: boolean, startDate?: string, customId?: string) => {
     const todayStr = getLocalDateString(new Date());
     const newProj: Project = {
-      id: `prj_${Date.now()}`,
+      id: customId || `prj_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
       name,
       code: code.toUpperCase() || 'PRJ',
       color: COLORS[projects.length % COLORS.length],
@@ -319,6 +328,8 @@ export function useProjectStore() {
     startDate?: string
   ) => {
     const todayStr = getLocalDateString(new Date());
+    const newMsId = `ms_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
     const updatedProjects = projects.map(p => {
       if (p.id === projId) {
         return {
@@ -326,7 +337,7 @@ export function useProjectStore() {
           milestones: [
             ...p.milestones,
             {
-              id: `ms_${Date.now()}`,
+              id: newMsId,
               title,
               estimatedHours,
               completedHours: 0,
@@ -353,8 +364,27 @@ export function useProjectStore() {
   };
 
   const deleteProject = (projId: string) => {
-    const updatedProjects = projects.filter(p => p.id !== projId);
-    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData, gamification.calibration, externalEvents, userSettings);
+    const projToDelete = projects.find(p => p.id === projId);
+    const deletedMsIds = new Set(projToDelete?.milestones.map(m => m.id) || []);
+
+    // 1. Nettoyer le projet et retirer les références d'ID supprimés dans les dépendances
+    const updatedProjects = projects
+      .filter(p => p.id !== projId)
+      .map(p => ({
+        ...p,
+        milestones: p.milestones.map(m => ({
+          ...m,
+          dependsOn: (m.dependsOn || []).filter(depId => !deletedMsIds.has(depId))
+        }))
+      }));
+
+    // 2. Nettoyer les séances orphelines liées à ce projet
+    const cleanedSchedule: ScheduleData = {};
+    Object.entries(scheduleData).forEach(([dateStr, sessions]) => {
+      cleanedSchedule[dateStr] = sessions.filter(s => s.projectId !== projId);
+    });
+
+    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, cleanedSchedule, gamification.calibration, externalEvents, userSettings);
     const updatedGamo = updateMetricsAndQuests(updatedSchedule, updatedProjects, gamification);
 
     setProjects(updatedProjects);
@@ -364,16 +394,24 @@ export function useProjectStore() {
   };
 
   const deleteMilestone = (projId: string, msId: string) => {
+    // 1. Nettoyer le jalon ET purger msId de toutes les listes dependsOn
     const updatedProjects = projects.map(p => {
-      if (p.id === projId) {
-        return {
-          ...p,
-          milestones: p.milestones.filter(m => m.id !== msId)
-        };
-      }
-      return p;
+      const filteredMilestones = p.milestones
+        .filter(m => m.id !== msId)
+        .map(m => ({
+          ...m,
+          dependsOn: (m.dependsOn || []).filter(depId => depId !== msId)
+        }));
+      return { ...p, milestones: filteredMilestones };
     });
-    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData, gamification.calibration, externalEvents, userSettings);
+
+    // 2. Nettoyer les séances orphelines liées à ce jalon
+    const cleanedSchedule: ScheduleData = {};
+    Object.entries(scheduleData).forEach(([dateStr, sessions]) => {
+      cleanedSchedule[dateStr] = sessions.filter(s => s.milestoneId !== msId);
+    });
+
+    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, cleanedSchedule, gamification.calibration, externalEvents, userSettings);
     const updatedGamo = updateMetricsAndQuests(updatedSchedule, updatedProjects, gamification);
 
     setProjects(updatedProjects);
@@ -381,6 +419,7 @@ export function useProjectStore() {
     setGamification(updatedGamo);
     saveAll(updatedProjects, updatedSchedule, streak, updatedGamo, isDarkMode);
   };
+
 
   const dismissToast = (toastId: string) => {
     setGamification(prev => ({
@@ -661,12 +700,13 @@ export function useProjectStore() {
     resetAllData,
     exportDataJSON,
     importDataJSON,
-    setChatHistory,
+    setChatHistory: updateChatHistory,
     updateUserSettings,
     setExternalEvents,
     addExternalEvent,
     dismissToast
   };
 }
+
 
 

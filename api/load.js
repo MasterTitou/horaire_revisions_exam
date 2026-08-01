@@ -75,7 +75,18 @@ export default async function handler(req, res) {
 
       const scheduleData = {};
       sessionsRes.rows.forEach(s => {
-        const dateStr = new Date(s.session_date).toISOString().split('T')[0];
+        let dateStr = '';
+        if (typeof s.session_date === 'string') {
+          dateStr = s.session_date.split('T')[0];
+        } else if (s.session_date instanceof Date) {
+          const year = s.session_date.getFullYear();
+          const month = String(s.session_date.getMonth() + 1).padStart(2, '0');
+          const day = String(s.session_date.getDate()).padStart(2, '0');
+          dateStr = `${year}-${month}-${day}`;
+        } else {
+          dateStr = String(s.session_date).split('T')[0];
+        }
+
         if (!scheduleData[dateStr]) scheduleData[dateStr] = [];
         const ms = milestonesMap.get(s.milestone_id);
         scheduleData[dateStr].push({
@@ -87,15 +98,26 @@ export default async function handler(req, res) {
         });
       });
 
+      // Charger les métadonnées globales (gamification, streak, chatHistory, etc.)
+      const metaRes = await sql`SELECT payload FROM app_metadata WHERE id = 'global_state'`;
+      const metaData = (metaRes && metaRes.rows && metaRes.rows.length > 0) ? (metaRes.rows[0].payload || {}) : {};
+
       return res.status(200).json({
         projects,
         scheduleData,
+        streak: metaData.streak || { count: 0, lastDate: '' },
+        gamification: metaData.gamification || null,
+        chatHistory: metaData.chatHistory || [],
+        externalEvents: metaData.externalEvents || [],
+        userSettings: metaData.userSettings || null,
+        isDarkMode: !!metaData.isDarkMode,
         source: 'PostgreSQL Relational DB'
       });
     } catch (pgError) {
       console.log('PostgreSQL fallback vers Redis KV:', pgError.message);
     }
   }
+
 
   // 2. Fallback vers Redis KV / Upstash Redis REST
   const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;

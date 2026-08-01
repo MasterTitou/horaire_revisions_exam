@@ -77,15 +77,21 @@ export const App: React.FC = () => {
     let targetProjectId = parsed.projectId;
 
     if (!targetProjectId) {
-      const newProjCode = parsed.projectName.slice(0, 4).toUpperCase() || 'PRJ';
-      addProject(
-        parsed.projectName,
-        newProjCode,
-        parsed.deadline,
-        parsed.isHardDeadline
-      );
-      if (projects.length > 0) {
-        targetProjectId = projects[projects.length - 1].id;
+      const existingProj = projects.find(p => p.name.toLowerCase() === parsed.projectName.toLowerCase());
+      if (existingProj) {
+        targetProjectId = existingProj.id;
+      } else {
+        const newProjId = `prj_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        const newProjCode = parsed.projectName.slice(0, 4).toUpperCase() || 'PRJ';
+        addProject(
+          parsed.projectName,
+          newProjCode,
+          parsed.deadline,
+          parsed.isHardDeadline,
+          undefined,
+          newProjId
+        );
+        targetProjectId = newProjId;
       }
     }
 
@@ -101,6 +107,7 @@ export const App: React.FC = () => {
       regenerateSchedule();
     }
   };
+
 
 
 

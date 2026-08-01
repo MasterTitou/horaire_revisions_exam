@@ -123,10 +123,29 @@ export default async function handler(req, res) {
       } else {
         await sql`DELETE FROM projects`;
       }
+
+      // Sauvegarder les métadonnées globales (gamification, streak, settings, etc.)
+      const metaPayload = JSON.stringify({
+        streak: payload.streak || { count: 0, lastDate: '' },
+        gamification: payload.gamification || null,
+        chatHistory: payload.chatHistory || [],
+        externalEvents: payload.externalEvents || [],
+        userSettings: payload.userSettings || null,
+        isDarkMode: !!payload.isDarkMode
+      });
+
+      await sql`
+        INSERT INTO app_metadata (id, payload, updated_at)
+        VALUES ('global_state', ${metaPayload}::jsonb, NOW())
+        ON CONFLICT (id) DO UPDATE SET
+          payload = EXCLUDED.payload,
+          updated_at = NOW();
+      `;
     } catch (pgError) {
       console.error('Erreur Save PostgreSQL:', pgError.message);
     }
   }
+
 
   // 2. Sauvegarde miroir dans Redis KV
   const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;

@@ -90,12 +90,24 @@ export function generateICalExport(sessions, timezone = 'Europe/Paris') {
 }
 
 export default async function handler(req, res) {
-  if (req.method === 'GET' && req.query.action === 'export') {
-    const icsContent = generateICalExport([]);
+  if ((req.method === 'GET' || req.method === 'POST') && req.query.action === 'export') {
+    let sessionsToExport = [];
+    if (req.body && Array.isArray(req.body.sessions)) {
+      sessionsToExport = req.body.sessions;
+    } else if (req.query.data) {
+      try {
+        sessionsToExport = JSON.parse(decodeURIComponent(req.query.data));
+      } catch (e) {}
+    }
+
+    const timezone = req.query.timezone || req.body?.timezone || 'Europe/Paris';
+    const icsContent = generateICalExport(sessionsToExport, timezone);
+
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="sessions_revision.ics"');
     return res.status(200).send(icsContent);
   }
+
 
   if (req.method === 'POST' && req.body.icalUrl) {
     try {
