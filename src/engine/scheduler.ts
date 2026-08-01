@@ -44,7 +44,7 @@ export function getStartOfWeek(date: Date): Date {
 
 /**
  * Calcul du Chemin Critique (CPM - Critical Path Method) 100% PURE & DÉTERMINISTE.
- * Identifie les jalons où la Marge Totale (Slack = LS - ES) est égale à zéro.
+ * Identifie l'intégralité de la chaîne de dépendances (racine -> terminal) où la Marge Totale (Slack = LS - ES) est égale à zéro.
  */
 export function computeCriticalPath(
   projects: Project[],
@@ -68,7 +68,7 @@ export function computeCriticalPath(
       durationMap.set(m.id, duration);
     });
 
-    // Graph Construction: Predecessors & Successors
+    // Construction du Graphe DAG (Prédécesseurs & Successeurs)
     const predecessors = new Map<string, string[]>();
     const successors = new Map<string, string[]>();
 
@@ -87,7 +87,7 @@ export function computeCriticalPath(
 
     const calcForward = (mId: string, visited = new Set<string>()): number => {
       if (EF.has(mId)) return EF.get(mId)!;
-      if (visited.has(mId)) return 0; // Guard cyclic deps
+      if (visited.has(mId)) return 0;
       visited.add(mId);
 
       const preds = predecessors.get(mId) || [];
@@ -171,7 +171,7 @@ export function isSlotBlockedByExternalEvent(
     const evEndMs = new Date(event.endTime).getTime() + (bufferAfterMinutes * 60 * 1000);
 
     if (slotStartMs < evEndMs && slotEndMs > evStartMs) {
-      return true; // En conflit !
+      return true;
     }
   }
 
@@ -263,7 +263,8 @@ export function generateSchedule(
   const dayStartHour = settings.dayStartHour ?? 8;
   const dayEndHour = settings.dayEndHour ?? 23;
   const slotDurationMinutes = settings.slotDurationMinutes ?? 60;
-  const maxSessionsPerDay = Math.floor(MAX_STUDY_HOURS_PER_DAY / (slotDurationMinutes / 60));
+  const slotHours = slotDurationMinutes / 60;
+  const maxSessionsPerDay = Math.floor(MAX_STUDY_HOURS_PER_DAY / slotHours);
 
   const todayStr = getLocalDateString(new Date(), userTimezone);
 
@@ -272,7 +273,6 @@ export function generateSchedule(
     d.setDate(d.getDate() + i);
     const dateStr = getLocalDateString(d, userTimezone);
 
-    // RÈGLE STRICTE : Ne jamais replanifier de nouvelles séances dans le passé
     if (dateStr < todayStr) {
       if (!scheduleData[dateStr]) {
         scheduleData[dateStr] = existingSchedule[dateStr] || [];
@@ -280,14 +280,12 @@ export function generateSchedule(
       continue;
     }
 
-    // CORRECTION CRITIQUE (BUG 1) : Conserver les séances déjà complétées au lieu de vider le tableau
+    // CORRECTION BUG 1 : Conserver les séances complétées pour ce jour
     const existingCompletedSessions = (existingSchedule[dateStr] || []).filter(s => s.isCompleted);
     scheduleData[dateStr] = [...existingCompletedSessions];
 
-    // Compteur de sessions créées ce jour (incluant celles déjà complétées)
     let sessionsCreatedToday = existingCompletedSessions.length;
 
-    // Filtrer les événements externes du jour uniquement
     const dayStartMs = new Date(d).setHours(0, 0, 0, 0);
     const dayEndMs = new Date(d).setHours(23, 59, 59, 999);
     const dayEvents = externalEvents.filter(ev => {
@@ -312,23 +310,25 @@ export function generateSchedule(
 
       const slotEnd = new Date(slotStart.getTime() + slotDurationMinutes * 60 * 1000);
 
-      // 1. Vérification des conflits d'agendas externes
       if (isSlotBlockedByExternalEvent(slotStart, slotEnd, dayEvents, settings.bufferMinutesBefore, settings.bufferMinutesAfter)) {
         currentSlotStartMinute += 30;
         continue;
       }
 
-      // Slot index: 0 = Matin, 1 = Après-midi, 2 = Soir
       const hour = slotStart.getHours();
       const slotIdx = hour < 12 ? 0 : (hour < 18 ? 1 : 2);
       const targetCog: CognitiveLoad = slotIdx === 0 ? 'high' : (slotIdx === 1 ? 'medium' : 'low');
 
       const candidates = allMilestones.filter(m => {
-        if (m.startDate && dateStr < m.startDate) return false;
-        if (m.dueDate && dateStr > m.dueDate) return false;
+        // CORRECTION BIAIS 1 : Normalisation stricte de la date au format YYYY-MM-DD
+        const msStartStr = m.startDate ? m.startDate.split('T')[0] : '';
+        const msDueStr = m.dueDate ? m.dueDate.split('T')[0] : '';
+
+        if (msStartStr && dateStr < msStartStr) return false;
+        if (msDueStr && dateStr > msDueStr) return false;
         if (slotIdx === 2 && m.cognitiveLoad === 'high') return false;
 
-        // CORRECTION DÉPENDANCE (BUG 3) : Seuil relatif de 75% du temps estimé du prérequis
+        // CORRECTION BIAIS 2 : Seuil dynamique 75% ou m.isCompleted
         if (m.dependsOn && m.dependsOn.length > 0) {
           const allPrereqsDone = m.dependsOn.every(prereqId => {
             if (completedMilestoneIds.has(prereqId)) return true;
@@ -351,7 +351,8 @@ export function generateSchedule(
       const scored = candidates.map(m => {
         let daysToDeadline = 60;
         if (m.dueDate) {
-          const parts = m.dueDate.split('-');
+          const dueClean = m.dueDate.split('T')[0];
+          const parts = dueClean.split('-');
           if (parts.length === 3) {
             const targetD = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
             const currD = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -370,7 +371,8 @@ export function generateSchedule(
           else if (bufferedDaysToDeadline <= 7) pressure = 2.0;
           else pressure = 1.2;
         } else {
-          pressure = Math.min(1.5, (remainingHours / HPH) / bufferedDaysToDeadline);
+          // CORRECTION BIAIS 3 : Remplacement du HPH hérité par la durée réelle du créneau
+          pressure = Math.min(1.5, (remainingHours / slotHours) / bufferedDaysToDeadline);
         }
 
         let cogMatchBonus = 0;
@@ -385,7 +387,6 @@ export function generateSchedule(
       scored.sort((a, b) => b.score - a.score);
       const best = scored[0];
       if (best && best.score > 0) {
-        const slotHours = slotDurationMinutes / 60;
         projectedHours[best.milestone.id] += slotHours;
 
         const formatTime = (date: Date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
@@ -447,7 +448,7 @@ export interface PlanningConflictReport {
 }
 
 /**
- * Détection déterministe d'impasse de planning par jalon (BUG 5 & 6 corrigés).
+ * Détection déterministe d'impasse de planning par jalon & capacité globale unique (BUG 3 corrigé).
  */
 export function evaluatePlanningConflicts(
   projects: Project[],
@@ -455,11 +456,10 @@ export function evaluatePlanningConflicts(
   settings: UserSettings = DEFAULT_USER_SETTINGS
 ): PlanningConflictReport {
   let totalRequiredHours = 0;
-  let totalAvailableHours = 0;
+  let maxHorizonDays = 1;
   const overloadedProjects: PlanningConflictReport['overloadedProjects'] = [];
   const impasseMilestones: PlanningConflictReport['impasseMilestones'] = [];
 
-  const userTimezone = settings.timezone || 'Europe/Paris';
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -468,9 +468,12 @@ export function evaluatePlanningConflicts(
     let projDaysRemaining = 30;
 
     if (p.deadline) {
-      const target = new Date(p.deadline);
+      const cleanDeadline = p.deadline.split('T')[0];
+      const target = new Date(cleanDeadline);
       projDaysRemaining = Math.max(1, Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
     }
+
+    maxHorizonDays = Math.max(maxHorizonDays, projDaysRemaining);
 
     p.milestones.forEach(m => {
       if (!m.isCompleted) {
@@ -478,15 +481,13 @@ export function evaluatePlanningConflicts(
         projReqHours += req;
         totalRequiredHours += req;
 
-        // CORRECTION (BUG 6) : Calcul de l'échéance propre au jalon
         let msDaysRemaining = projDaysRemaining;
         if (m.dueDate) {
-          const msTarget = new Date(m.dueDate);
+          const cleanDue = m.dueDate.split('T')[0];
+          const msTarget = new Date(cleanDue);
           msDaysRemaining = Math.max(1, Math.round((msTarget.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
         }
 
-        // Impasse si besoin > capacité disponible sur l'échéance du jalon
-        const msCapacity = msDaysRemaining * MAX_STUDY_HOURS_PER_DAY;
         if (msDaysRemaining <= 3 && req > (3 * MAX_STUDY_HOURS_PER_DAY)) {
           impasseMilestones.push({
             id: m.id,
@@ -498,7 +499,6 @@ export function evaluatePlanningConflicts(
       }
     });
 
-    // CORRECTION (BUG 5) : Alignement strict sur MAX_STUDY_HOURS_PER_DAY (6h/jour)
     const capacity = projDaysRemaining * MAX_STUDY_HOURS_PER_DAY;
     if (projReqHours > capacity) {
       overloadedProjects.push({
@@ -508,14 +508,15 @@ export function evaluatePlanningConflicts(
         daysRemaining: projDaysRemaining
       });
     }
-
-    totalAvailableHours += capacity;
   });
 
-  const hasConflicts = overloadedProjects.length > 0 || impasseMilestones.length > 0;
+  // CORRECTION BUG 3 (Scheduler) : La capacité globale unique se calcule sur l'horizon maximum d'un seul agenda utilisateur
+  const totalAvailableHours = maxHorizonDays * MAX_STUDY_HOURS_PER_DAY;
+
+  const hasConflicts = overloadedProjects.length > 0 || impasseMilestones.length > 0 || totalRequiredHours > totalAvailableHours;
   let summaryMessage = "Planning équilibré et réalisable.";
   if (hasConflicts) {
-    summaryMessage = `Surcharge détectée : ${totalRequiredHours.toFixed(1)}h requises pour ~${totalAvailableHours}h de capacité disponible sur les projets en cours.`;
+    summaryMessage = `Surcharge détectée : ${totalRequiredHours.toFixed(1)}h requises pour ~${totalAvailableHours}h de capacité disponible sur votre agenda unique.`;
   }
 
   return {
@@ -529,17 +530,18 @@ export function evaluatePlanningConflicts(
 }
 
 /**
- * Arbitrage déterministe non-destructif (BUG 8 corrigé avec wasReduced flag et logs exacts).
+ * Arbitrage déterministe non-destructif (BIAIS 4 corrigé avec getLocalDateString).
  */
 export function resolveConflictsHeuristically(
   projects: Project[],
-  conflicts: PlanningConflictReport
+  conflicts: PlanningConflictReport,
+  timezone: string = 'Europe/Paris'
 ): { updatedProjects: Project[]; actionsTaken: string[] } {
   const actionsTaken: string[] = [];
 
   const updatedProjects = JSON.parse(JSON.stringify(projects)) as Project[];
 
-  // 1. Reporter les jalons non-fermes (isHardDeadline = false) des projets surchargés
+  // 1. Reporter les jalons non-fermes des projets surchargés
   conflicts.overloadedProjects.forEach(overloaded => {
     const proj = updatedProjects.find(p => p.id === overloaded.id);
     if (!proj) return;
@@ -547,9 +549,11 @@ export function resolveConflictsHeuristically(
     proj.milestones.forEach(m => {
       if (!m.isCompleted && !m.isHardDeadline) {
         if (m.dueDate) {
-          const d = new Date(m.dueDate);
+          const cleanDue = m.dueDate.split('T')[0];
+          const d = new Date(cleanDue);
           d.setDate(d.getDate() + 7);
-          m.dueDate = d.toISOString().split('T')[0];
+          // CORRECTION BIAIS 4 : Utiliser getLocalDateString pour éviter le décalage de timezone UTC
+          m.dueDate = getLocalDateString(d, timezone);
           actionsTaken.push(`Décalage de 7 jours du jalon non-ferme « ${m.title} » (${proj.name}).`);
         }
       }
@@ -563,7 +567,7 @@ export function resolveConflictsHeuristically(
         p.milestones.forEach(m => {
           if (m.id === imp.id) {
             m.estimatedHours = Math.max(2, Math.round((m.estimatedHours || 10) * 0.75));
-            m.wasReduced = true; // Traçabilité non-destructive
+            m.wasReduced = true;
             actionsTaken.push(`Réduction du volume horaire de 25% sur « ${m.title} » (Ajusté).`);
           }
         });
