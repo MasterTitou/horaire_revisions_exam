@@ -348,7 +348,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
       let arbitrageMsg: ChatMessage;
 
       if (res.status === 429 || data.quotaExhausted) {
-        const fallbackResult = resolveConflictsHeuristically(projects, report);
+        const fallbackResult = resolveConflictsHeuristically(projects, report, 'Europe/Paris');
         if (onUpdateProjects) onUpdateProjects(fallbackResult.updatedProjects);
 
         setLastArbitrageNotice({
@@ -391,7 +391,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
 
     } catch (err) {
       console.error('Erreur arbitrage:', err);
-      const fallbackResult = resolveConflictsHeuristically(projects, report);
+      const fallbackResult = resolveConflictsHeuristically(projects, report, 'Europe/Paris');
       if (onUpdateProjects) onUpdateProjects(fallbackResult.updatedProjects);
 
       setLastArbitrageNotice({
@@ -399,6 +399,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
         message: "Arbitrage déterministe TS de repli appliqué.",
         details: fallbackResult.actionsTaken
       });
+
     } finally {
       setArbitrating(false);
       fetchQuotas();

@@ -34,8 +34,10 @@ export function getLocalDateString(d: Date, timezone: string = 'Europe/Paris'): 
   }
 }
 
-export function getStartOfWeek(date: Date): Date {
-  const d = new Date(date);
+export function getStartOfWeek(date: Date, timezone: string = 'Europe/Paris'): Date {
+  const dateStr = getLocalDateString(date, timezone);
+  const parts = dateStr.split('-').map(Number);
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
   const day = d.getDay();
   d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
   d.setHours(0, 0, 0, 0);
@@ -43,23 +45,22 @@ export function getStartOfWeek(date: Date): Date {
 }
 
 /**
- * Calcul du Chemin Critique (CPM - Critical Path Method) 100% PURE & DÉTERMINISTE.
- * Identifie l'intégralité de la chaîne de dépendances (racine -> terminal) où la Marge Totale (Slack = LS - ES) est égale à zéro.
+ * Calcul du Chemin Critique (CPM - Critical Path Method) 100% PURE, DÉTERMINISTE & GLOBAL CROSS-PROJETS.
+ * Identifie l'intégralité de la chaîne de dépendances (y compris inter-projets) où la Marge Totale (Slack = LS - ES) est égale à zéro.
  */
 export function computeCriticalPath(
   projects: Project[],
   calibration: CalibrationLoop = DEFAULT_CALIBRATION
 ): Record<string, boolean> {
   const criticalMap: Record<string, boolean> = {};
+  if (!projects || projects.length === 0) return criticalMap;
+
+  // 1. Dictionnaire global de tous les jalons (Support complet des dépendances cross-projets)
+  const msMap = new Map<string, Milestone>();
+  const durationMap = new Map<string, number>();
 
   projects.forEach(project => {
-    const milestones = project.milestones;
-    if (!milestones || milestones.length === 0) return;
-
-    const msMap = new Map<string, Milestone>();
-    const durationMap = new Map<string, number>();
-
-    milestones.forEach(m => {
+    (project.milestones || []).forEach(m => {
       msMap.set(m.id, m);
       const calFactor = m.cognitiveLoad === 'high'
         ? calibration.highFactor
@@ -67,86 +68,88 @@ export function computeCriticalPath(
       const duration = Math.max(1, Math.round((m.estimatedHours || 10) * calFactor));
       durationMap.set(m.id, duration);
     });
+  });
 
-    // Construction du Graphe DAG (Prédécesseurs & Successeurs)
-    const predecessors = new Map<string, string[]>();
-    const successors = new Map<string, string[]>();
+  if (msMap.size === 0) return criticalMap;
 
-    milestones.forEach(m => {
-      predecessors.set(m.id, m.dependsOn || []);
-      if (!successors.has(m.id)) successors.set(m.id, []);
-      (m.dependsOn || []).forEach(pId => {
-        if (!successors.has(pId)) successors.set(pId, []);
-        successors.get(pId)!.push(m.id);
-      });
+  // 2. Construction du Graphe DAG Global (Prédécesseurs & Successeurs)
+  const predecessors = new Map<string, string[]>();
+  const successors = new Map<string, string[]>();
+
+  msMap.forEach((m, mId) => {
+    predecessors.set(mId, m.dependsOn || []);
+    if (!successors.has(mId)) successors.set(mId, []);
+    (m.dependsOn || []).forEach(pId => {
+      if (!successors.has(pId)) successors.set(pId, []);
+      successors.get(pId)!.push(mId);
+    });
+  });
+
+  // 3. PASSE AVANT (Forward Pass: ES & EF)
+  const ES = new Map<string, number>();
+  const EF = new Map<string, number>();
+
+  const calcForward = (mId: string, visited = new Set<string>()): number => {
+    if (EF.has(mId)) return EF.get(mId)!;
+    if (visited.has(mId)) return 0;
+    visited.add(mId);
+
+    const preds = predecessors.get(mId) || [];
+    let maxEarliestStart = 0;
+    preds.forEach(pId => {
+      if (msMap.has(pId)) {
+        maxEarliestStart = Math.max(maxEarliestStart, calcForward(pId, new Set(visited)));
+      }
     });
 
-    // 1. PASSE AVANT (Forward Pass: ES & EF)
-    const ES = new Map<string, number>();
-    const EF = new Map<string, number>();
+    const es = maxEarliestStart;
+    const ef = es + (durationMap.get(mId) || 10);
+    ES.set(mId, es);
+    EF.set(mId, ef);
+    return ef;
+  };
 
-    const calcForward = (mId: string, visited = new Set<string>()): number => {
-      if (EF.has(mId)) return EF.get(mId)!;
-      if (visited.has(mId)) return 0;
-      visited.add(mId);
+  let globalMaxFinish = 0;
+  msMap.forEach((_, mId) => {
+    const ef = calcForward(mId);
+    globalMaxFinish = Math.max(globalMaxFinish, ef);
+  });
 
-      const preds = predecessors.get(mId) || [];
-      let maxEarliestStart = 0;
-      preds.forEach(pId => {
-        if (msMap.has(pId)) {
-          maxEarliestStart = Math.max(maxEarliestStart, calcForward(pId, new Set(visited)));
+  // 4. PASSE ARRIÈRE (Backward Pass: LS & LF)
+  const LS = new Map<string, number>();
+  const LF = new Map<string, number>();
+
+  const calcBackward = (mId: string, visited = new Set<string>()): number => {
+    if (LS.has(mId)) return LS.get(mId)!;
+    if (visited.has(mId)) return globalMaxFinish;
+    visited.add(mId);
+
+    const succs = successors.get(mId) || [];
+    let minLatestFinish = globalMaxFinish;
+
+    if (succs.length > 0) {
+      succs.forEach(sId => {
+        if (msMap.has(sId)) {
+          minLatestFinish = Math.min(minLatestFinish, calcBackward(sId, new Set(visited)));
         }
       });
+    }
 
-      const es = maxEarliestStart;
-      const ef = es + (durationMap.get(mId) || 10);
-      ES.set(mId, es);
-      EF.set(mId, ef);
-      return ef;
-    };
+    const lf = minLatestFinish;
+    const ls = lf - (durationMap.get(mId) || 10);
+    LF.set(mId, lf);
+    LS.set(mId, ls);
+    return ls;
+  };
 
-    let projectMaxFinish = 0;
-    milestones.forEach(m => {
-      const ef = calcForward(m.id);
-      projectMaxFinish = Math.max(projectMaxFinish, ef);
-    });
+  msMap.forEach((_, mId) => calcBackward(mId));
 
-    // 2. PASSE ARRIÈRE (Backward Pass: LS & LF)
-    const LS = new Map<string, number>();
-    const LF = new Map<string, number>();
-
-    const calcBackward = (mId: string, visited = new Set<string>()): number => {
-      if (LS.has(mId)) return LS.get(mId)!;
-      if (visited.has(mId)) return projectMaxFinish;
-      visited.add(mId);
-
-      const succs = successors.get(mId) || [];
-      let minLatestFinish = projectMaxFinish;
-
-      if (succs.length > 0) {
-        succs.forEach(sId => {
-          if (msMap.has(sId)) {
-            minLatestFinish = Math.min(minLatestFinish, calcBackward(sId, new Set(visited)));
-          }
-        });
-      }
-
-      const lf = minLatestFinish;
-      const ls = lf - (durationMap.get(mId) || 10);
-      LF.set(mId, lf);
-      LS.set(mId, ls);
-      return ls;
-    };
-
-    milestones.forEach(m => calcBackward(m.id));
-
-    // 3. CALCUL DE LA MARGE TOTALE (Slack = LS - ES)
-    milestones.forEach(m => {
-      const es = ES.get(m.id) || 0;
-      const ls = LS.get(m.id) || 0;
-      const slack = Math.max(0, ls - es);
-      criticalMap[m.id] = (slack === 0);
-    });
+  // 5. CALCUL DE LA MARGE TOTALE (Slack = LS - ES)
+  msMap.forEach((_, mId) => {
+    const es = ES.get(mId) || 0;
+    const ls = LS.get(mId) || 0;
+    const slack = Math.max(0, ls - es);
+    criticalMap[mId] = (slack === 0);
   });
 
   return criticalMap;
@@ -328,7 +331,9 @@ export function generateSchedule(
         if (msDueStr && dateStr > msDueStr) return false;
         if (slotIdx === 2 && m.cognitiveLoad === 'high') return false;
 
-        // CORRECTION BIAIS 2 : Seuil dynamique 75% ou m.isCompleted
+        // CORRECTION BIAIS 2 (DOCUMENTATION SEUIL 75%) :
+        // Le seuil de 75% d'exécution permet le chevauchement maîtrisé (Fast-Tracking WBS).
+        // Il débloque la tâche suivante une fois le cœur de l'effort réalisé sans attendre 100%.
         if (m.dependsOn && m.dependsOn.length > 0) {
           const allPrereqsDone = m.dependsOn.every(prereqId => {
             if (completedMilestoneIds.has(prereqId)) return true;
@@ -371,7 +376,7 @@ export function generateSchedule(
           else if (bufferedDaysToDeadline <= 7) pressure = 2.0;
           else pressure = 1.2;
         } else {
-          // CORRECTION BIAIS 3 : Remplacement du HPH hérité par la durée réelle du créneau
+          // CORRECTION BIAIS 3 : Remplacement du HPH hérité par la durée réelle du créneau (slotHours)
           pressure = Math.min(1.5, (remainingHours / slotHours) / bufferedDaysToDeadline);
         }
 
@@ -448,11 +453,11 @@ export interface PlanningConflictReport {
 }
 
 /**
- * Détection déterministe d'impasse de planning par jalon & capacité globale unique (BUG 3 corrigé).
+ * Détection déterministe d'impasse de planning par jalon, déduplication des séances planifiées & capacité globale unique.
  */
 export function evaluatePlanningConflicts(
   projects: Project[],
-  existingSchedule: ScheduleData,
+  existingSchedule: ScheduleData = {},
   settings: UserSettings = DEFAULT_USER_SETTINGS
 ): PlanningConflictReport {
   let totalRequiredHours = 0;
@@ -460,8 +465,21 @@ export function evaluatePlanningConflicts(
   const overloadedProjects: PlanningConflictReport['overloadedProjects'] = [];
   const impasseMilestones: PlanningConflictReport['impasseMilestones'] = [];
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const userTimezone = settings.timezone || 'Europe/Paris';
+  const todayStr = getLocalDateString(new Date(), userTimezone);
+  const parts = todayStr.split('-').map(Number);
+  const today = new Date(parts[0], parts[1] - 1, parts[2]);
+
+  // Déduplication des heures déjà planifiées (non encore complétées) dans existingSchedule
+  const milestonePlannedHours: Record<string, number> = {};
+  Object.values(existingSchedule || {}).forEach(sessions => {
+    (sessions || []).forEach(s => {
+      if (!s.isCompleted && s.milestoneId) {
+        const hours = s.durationMinutes ? (s.durationMinutes / 60) : HPH;
+        milestonePlannedHours[s.milestoneId] = (milestonePlannedHours[s.milestoneId] || 0) + hours;
+      }
+    });
+  });
 
   projects.forEach(p => {
     let projReqHours = 0;
@@ -469,23 +487,30 @@ export function evaluatePlanningConflicts(
 
     if (p.deadline) {
       const cleanDeadline = p.deadline.split('T')[0];
-      const target = new Date(cleanDeadline);
-      projDaysRemaining = Math.max(1, Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+      const pParts = cleanDeadline.split('-').map(Number);
+      if (pParts.length === 3) {
+        const target = new Date(pParts[0], pParts[1] - 1, pParts[2]);
+        projDaysRemaining = Math.max(1, Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+      }
     }
 
     maxHorizonDays = Math.max(maxHorizonDays, projDaysRemaining);
 
     p.milestones.forEach(m => {
       if (!m.isCompleted) {
-        const req = Math.max(0, (m.estimatedHours || 10) - (m.completedHours || 0));
+        const alreadyPlanned = milestonePlannedHours[m.id] || 0;
+        const req = Math.max(0, (m.estimatedHours || 10) - (m.completedHours || 0) - alreadyPlanned);
         projReqHours += req;
         totalRequiredHours += req;
 
         let msDaysRemaining = projDaysRemaining;
         if (m.dueDate) {
           const cleanDue = m.dueDate.split('T')[0];
-          const msTarget = new Date(cleanDue);
-          msDaysRemaining = Math.max(1, Math.round((msTarget.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+          const mParts = cleanDue.split('-').map(Number);
+          if (mParts.length === 3) {
+            const msTarget = new Date(mParts[0], mParts[1] - 1, mParts[2]);
+            msDaysRemaining = Math.max(1, Math.round((msTarget.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+          }
         }
 
         if (msDaysRemaining <= 3 && req > (3 * MAX_STUDY_HOURS_PER_DAY)) {
@@ -510,7 +535,7 @@ export function evaluatePlanningConflicts(
     }
   });
 
-  // CORRECTION BUG 3 (Scheduler) : La capacité globale unique se calcule sur l'horizon maximum d'un seul agenda utilisateur
+  // CORRECTION POINT 2 : La capacité globale unique se calcule sur l'horizon maximum d'un seul agenda utilisateur
   const totalAvailableHours = maxHorizonDays * MAX_STUDY_HOURS_PER_DAY;
 
   const hasConflicts = overloadedProjects.length > 0 || impasseMilestones.length > 0 || totalRequiredHours > totalAvailableHours;
@@ -530,7 +555,7 @@ export function evaluatePlanningConflicts(
 }
 
 /**
- * Arbitrage déterministe non-destructif (BIAIS 4 corrigé avec getLocalDateString).
+ * Arbitrage déterministe non-destructif.
  */
 export function resolveConflictsHeuristically(
   projects: Project[],
@@ -550,11 +575,13 @@ export function resolveConflictsHeuristically(
       if (!m.isCompleted && !m.isHardDeadline) {
         if (m.dueDate) {
           const cleanDue = m.dueDate.split('T')[0];
-          const d = new Date(cleanDue);
-          d.setDate(d.getDate() + 7);
-          // CORRECTION BIAIS 4 : Utiliser getLocalDateString pour éviter le décalage de timezone UTC
-          m.dueDate = getLocalDateString(d, timezone);
-          actionsTaken.push(`Décalage de 7 jours du jalon non-ferme « ${m.title} » (${proj.name}).`);
+          const dParts = cleanDue.split('-').map(Number);
+          if (dParts.length === 3) {
+            const d = new Date(dParts[0], dParts[1] - 1, dParts[2]);
+            d.setDate(d.getDate() + 7);
+            m.dueDate = getLocalDateString(d, timezone);
+            actionsTaken.push(`Décalage de 7 jours du jalon non-ferme « ${m.title} » (${proj.name}).`);
+          }
         }
       }
     });
