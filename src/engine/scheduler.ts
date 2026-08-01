@@ -2,6 +2,7 @@ import { Project, Milestone, ScheduleData, CognitiveLoad, CalibrationLoop, Exter
 
 export const SLOTS = ["Matin", "Après-midi", "Soir"];
 export const HPH = 10 / 3;
+export const MAX_STUDY_HOURS_PER_DAY = 6;
 
 export const DEFAULT_CALIBRATION: CalibrationLoop = {
   highFactor: 1.25,   // +25% correction sur Architecture / Stratégie
@@ -19,8 +20,18 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   slotDurationMinutes: 60
 };
 
-export function getLocalDateString(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export function getLocalDateString(d: Date, timezone: string = 'Europe/Paris'): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(d);
+  } catch (e) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
 }
 
 export function getStartOfWeek(date: Date): Date {
@@ -32,10 +43,13 @@ export function getStartOfWeek(date: Date): Date {
 }
 
 /**
- * Calcul du Chemin Critique (CPM - Critical Path Method) sur le graphe DAG des jalons WBS.
- * Identifie les jalons où la Marge Totale (Slack) est égale à zéro.
+ * Calcul du Chemin Critique (CPM - Critical Path Method) 100% PURE & DÉTERMINISTE.
+ * Identifie les jalons où la Marge Totale (Slack = LS - ES) est égale à zéro.
  */
-export function computeCriticalPath(projects: Project[]): Record<string, boolean> {
+export function computeCriticalPath(
+  projects: Project[],
+  calibration: CalibrationLoop = DEFAULT_CALIBRATION
+): Record<string, boolean> {
   const criticalMap: Record<string, boolean> = {};
 
   projects.forEach(project => {
@@ -43,41 +57,95 @@ export function computeCriticalPath(projects: Project[]): Record<string, boolean
     if (!milestones || milestones.length === 0) return;
 
     const msMap = new Map<string, Milestone>();
-    milestones.forEach(m => msMap.set(m.id, m));
+    const durationMap = new Map<string, number>();
 
-    const getChainDuration = (mId: string, visited = new Set<string>()): number => {
-      if (visited.has(mId)) return 0;
+    milestones.forEach(m => {
+      msMap.set(m.id, m);
+      const calFactor = m.cognitiveLoad === 'high'
+        ? calibration.highFactor
+        : (m.cognitiveLoad === 'medium' ? calibration.mediumFactor : calibration.lowFactor);
+      const duration = Math.max(1, Math.round((m.estimatedHours || 10) * calFactor));
+      durationMap.set(m.id, duration);
+    });
+
+    // Graph Construction: Predecessors & Successors
+    const predecessors = new Map<string, string[]>();
+    const successors = new Map<string, string[]>();
+
+    milestones.forEach(m => {
+      predecessors.set(m.id, m.dependsOn || []);
+      if (!successors.has(m.id)) successors.set(m.id, []);
+      (m.dependsOn || []).forEach(pId => {
+        if (!successors.has(pId)) successors.set(pId, []);
+        successors.get(pId)!.push(m.id);
+      });
+    });
+
+    // 1. PASSE AVANT (Forward Pass: ES & EF)
+    const ES = new Map<string, number>();
+    const EF = new Map<string, number>();
+
+    const calcForward = (mId: string, visited = new Set<string>()): number => {
+      if (EF.has(mId)) return EF.get(mId)!;
+      if (visited.has(mId)) return 0; // Guard cyclic deps
       visited.add(mId);
 
-      const ms = msMap.get(mId);
-      if (!ms) return 0;
+      const preds = predecessors.get(mId) || [];
+      let maxEarliestStart = 0;
+      preds.forEach(pId => {
+        if (msMap.has(pId)) {
+          maxEarliestStart = Math.max(maxEarliestStart, calcForward(pId, new Set(visited)));
+        }
+      });
 
-      let maxParentDuration = 0;
-      if (ms.dependsOn && ms.dependsOn.length > 0) {
-        ms.dependsOn.forEach(parentId => {
-          maxParentDuration = Math.max(maxParentDuration, getChainDuration(parentId, new Set(visited)));
+      const es = maxEarliestStart;
+      const ef = es + (durationMap.get(mId) || 10);
+      ES.set(mId, es);
+      EF.set(mId, ef);
+      return ef;
+    };
+
+    let projectMaxFinish = 0;
+    milestones.forEach(m => {
+      const ef = calcForward(m.id);
+      projectMaxFinish = Math.max(projectMaxFinish, ef);
+    });
+
+    // 2. PASSE ARRIÈRE (Backward Pass: LS & LF)
+    const LS = new Map<string, number>();
+    const LF = new Map<string, number>();
+
+    const calcBackward = (mId: string, visited = new Set<string>()): number => {
+      if (LS.has(mId)) return LS.get(mId)!;
+      if (visited.has(mId)) return projectMaxFinish;
+      visited.add(mId);
+
+      const succs = successors.get(mId) || [];
+      let minLatestFinish = projectMaxFinish;
+
+      if (succs.length > 0) {
+        succs.forEach(sId => {
+          if (msMap.has(sId)) {
+            minLatestFinish = Math.min(minLatestFinish, calcBackward(sId, new Set(visited)));
+          }
         });
       }
 
-      return maxParentDuration + (ms.estimatedHours || 10);
+      const lf = minLatestFinish;
+      const ls = lf - (durationMap.get(mId) || 10);
+      LF.set(mId, lf);
+      LS.set(mId, ls);
+      return ls;
     };
 
-    let maxProjectChain = 0;
-    const durationsMap: Record<string, number> = {};
+    milestones.forEach(m => calcBackward(m.id));
 
+    // 3. CALCUL DE LA MARGE TOTALE (Slack = LS - ES)
     milestones.forEach(m => {
-      const dur = getChainDuration(m.id);
-      durationsMap[m.id] = dur;
-      maxProjectChain = Math.max(maxProjectChain, dur);
-    });
-
-    milestones.forEach(m => {
-      if (maxProjectChain > 0 && durationsMap[m.id] >= maxProjectChain * 0.85) {
-        criticalMap[m.id] = true;
-        m.isCriticalPath = true;
-      } else {
-        m.isCriticalPath = false;
-      }
+      const es = ES.get(m.id) || 0;
+      const ls = LS.get(m.id) || 0;
+      const slack = Math.max(0, ls - es);
+      criticalMap[m.id] = (slack === 0);
     });
   });
 
@@ -102,7 +170,6 @@ export function isSlotBlockedByExternalEvent(
     const evStartMs = new Date(event.startTime).getTime() - (bufferBeforeMinutes * 60 * 1000);
     const evEndMs = new Date(event.endTime).getTime() + (bufferAfterMinutes * 60 * 1000);
 
-    // Chevauchement d'intervalles : (slotStart < evEnd) AND (slotEnd > evStart)
     if (slotStartMs < evEndMs && slotEndMs > evStartMs) {
       return true; // En conflit !
     }
@@ -121,7 +188,8 @@ export function generateSchedule(
 ): ScheduleData {
   if (!projects || projects.length === 0) return {};
 
-  const criticalMap = computeCriticalPath(projects);
+  const userTimezone = settings.timezone || 'Europe/Paris';
+  const criticalMap = computeCriticalPath(projects, calibration);
   const scheduleData: ScheduleData = { ...existingSchedule };
 
   // Milestone completion tracking
@@ -166,7 +234,7 @@ export function generateSchedule(
         const actualDone = Math.max(ms.completedHours || 0, milestoneCompletedHours[ms.id] || 0);
 
         const calFactor = ms.cognitiveLoad === 'high' ? calibration.highFactor : (ms.cognitiveLoad === 'medium' ? calibration.mediumFactor : calibration.lowFactor);
-        const calibratedEstimate = Math.round(ms.estimatedHours * calFactor);
+        const calibratedEstimate = Math.round((ms.estimatedHours || 10) * calFactor);
 
         allMilestones.push({
           project: proj,
@@ -195,20 +263,16 @@ export function generateSchedule(
   const dayStartHour = settings.dayStartHour ?? 8;
   const dayEndHour = settings.dayEndHour ?? 23;
   const slotDurationMinutes = settings.slotDurationMinutes ?? 60;
-
-  // Plafond quotidien : max 6 heures de sessions de révision par jour
-  // Cela évite d'empiler 11+ sessions sur un seul jour et force la distribution
-  const MAX_STUDY_HOURS_PER_DAY = 6;
   const maxSessionsPerDay = Math.floor(MAX_STUDY_HOURS_PER_DAY / (slotDurationMinutes / 60));
 
-  const todayStr = getLocalDateString(new Date());
+  const todayStr = getLocalDateString(new Date(), userTimezone);
 
   for (let i = 0; i < 7; i++) {
     const d = new Date(currentWeekStart);
     d.setDate(d.getDate() + i);
-    const dateStr = getLocalDateString(d);
-    
-    // RÈGLE STRICTE : Ne jamais planifier de nouvelles séances dans le passé (avant aujourd'hui)
+    const dateStr = getLocalDateString(d, userTimezone);
+
+    // RÈGLE STRICTE : Ne jamais replanifier de nouvelles séances dans le passé
     if (dateStr < todayStr) {
       if (!scheduleData[dateStr]) {
         scheduleData[dateStr] = existingSchedule[dateStr] || [];
@@ -216,9 +280,14 @@ export function generateSchedule(
       continue;
     }
 
-    scheduleData[dateStr] = [];
+    // CORRECTION CRITIQUE (BUG 1) : Conserver les séances déjà complétées au lieu de vider le tableau
+    const existingCompletedSessions = (existingSchedule[dateStr] || []).filter(s => s.isCompleted);
+    scheduleData[dateStr] = [...existingCompletedSessions];
 
-    // Filtrer les événements externes du jour uniquement (optimisation + exactitude)
+    // Compteur de sessions créées ce jour (incluant celles déjà complétées)
+    let sessionsCreatedToday = existingCompletedSessions.length;
+
+    // Filtrer les événements externes du jour uniquement
     const dayStartMs = new Date(d).setHours(0, 0, 0, 0);
     const dayEndMs = new Date(d).setHours(23, 59, 59, 999);
     const dayEvents = externalEvents.filter(ev => {
@@ -227,10 +296,6 @@ export function generateSchedule(
       return evStart < dayEndMs && evEnd > dayStartMs;
     });
 
-    // Compteur de sessions créées ce jour
-    let sessionsCreatedToday = 0;
-
-    // Découpage en minutes avec prise en compte du temps de tampon (Buffer) entre chaque séance
     const dayStartMinute = dayStartHour * 60;
     const dayEndMinute = dayEndHour * 60;
     const bufferAfter = settings.bufferMinutesAfter ?? 15;
@@ -238,7 +303,6 @@ export function generateSchedule(
     let currentSlotStartMinute = dayStartMinute;
 
     while (currentSlotStartMinute + slotDurationMinutes <= dayEndMinute) {
-      // Vérifier le plafond quotidien
       if (sessionsCreatedToday >= maxSessionsPerDay) break;
 
       const slotStart = new Date(d);
@@ -248,7 +312,7 @@ export function generateSchedule(
 
       const slotEnd = new Date(slotStart.getTime() + slotDurationMinutes * 60 * 1000);
 
-      // 1. Vérification des conflits d'agendas externes & temps de tampon
+      // 1. Vérification des conflits d'agendas externes
       if (isSlotBlockedByExternalEvent(slotStart, slotEnd, dayEvents, settings.bufferMinutesBefore, settings.bufferMinutesAfter)) {
         currentSlotStartMinute += 30;
         continue;
@@ -260,21 +324,24 @@ export function generateSchedule(
       const targetCog: CognitiveLoad = slotIdx === 0 ? 'high' : (slotIdx === 1 ? 'medium' : 'low');
 
       const candidates = allMilestones.filter(m => {
-        // Ne pas planifier avant la date de début définie du projet ou du jalon
         if (m.startDate && dateStr < m.startDate) return false;
         if (m.dueDate && dateStr > m.dueDate) return false;
         if (slotIdx === 2 && m.cognitiveLoad === 'high') return false;
 
+        // CORRECTION DÉPENDANCE (BUG 3) : Seuil relatif de 75% du temps estimé du prérequis
         if (m.dependsOn && m.dependsOn.length > 0) {
           const allPrereqsDone = m.dependsOn.every(prereqId => {
-            return completedMilestoneIds.has(prereqId) || (milestoneCompletedHours[prereqId] || 0) >= 5;
+            if (completedMilestoneIds.has(prereqId)) return true;
+            const doneHours = milestoneCompletedHours[prereqId] || 0;
+            const prereqTarget = allMilestones.find(item => item.id === prereqId);
+            const prereqEst = prereqTarget ? prereqTarget.estimatedHours : 10;
+            return doneHours >= (prereqEst * 0.75);
           });
           if (!allPrereqsDone) return false;
         }
 
         return true;
       });
-
 
       if (candidates.length === 0) {
         currentSlotStartMinute += 30;
@@ -336,7 +403,6 @@ export function generateSchedule(
         });
         sessionsCreatedToday++;
 
-        // Avancer au prochain créneau en incluant le temps de tampon (Buffer)
         currentSlotStartMinute += (slotDurationMinutes + bufferAfter);
       } else {
         currentSlotStartMinute += 30;
@@ -347,9 +413,6 @@ export function generateSchedule(
   return scheduleData;
 }
 
-/**
- * Replanification dynamique déclenchée lors d'un événement Webhook ou d'une mise à jour d'agenda externe.
- */
 export function replanifyOnCalendarChange(
   projects: Project[],
   currentWeekStart: Date,
@@ -358,14 +421,12 @@ export function replanifyOnCalendarChange(
   settings: UserSettings = DEFAULT_USER_SETTINGS,
   calibration: CalibrationLoop = DEFAULT_CALIBRATION
 ): ScheduleData {
-  // Conserver uniquement les séances déjà complétées par l'utilisateur
   const preservedSchedule: ScheduleData = {};
 
   Object.entries(existingSchedule).forEach(([dateStr, sessions]) => {
     preservedSchedule[dateStr] = sessions.filter(s => s.isCompleted);
   });
 
-  // Régénérer les séances non complétées sur les nouvelles heures creuses disponibles
   return generateSchedule(
     projects,
     currentWeekStart,
@@ -386,27 +447,29 @@ export interface PlanningConflictReport {
 }
 
 /**
- * Détection déterministe d'impasse de planning (Sans appel LLM).
+ * Détection déterministe d'impasse de planning par jalon (BUG 5 & 6 corrigés).
  */
 export function evaluatePlanningConflicts(
   projects: Project[],
-  existingSchedule: ScheduleData
+  existingSchedule: ScheduleData,
+  settings: UserSettings = DEFAULT_USER_SETTINGS
 ): PlanningConflictReport {
   let totalRequiredHours = 0;
   let totalAvailableHours = 0;
   const overloadedProjects: PlanningConflictReport['overloadedProjects'] = [];
   const impasseMilestones: PlanningConflictReport['impasseMilestones'] = [];
 
+  const userTimezone = settings.timezone || 'Europe/Paris';
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   projects.forEach(p => {
     let projReqHours = 0;
-    let daysRemaining = 30;
+    let projDaysRemaining = 30;
 
     if (p.deadline) {
       const target = new Date(p.deadline);
-      daysRemaining = Math.max(1, Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+      projDaysRemaining = Math.max(1, Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
     }
 
     p.milestones.forEach(m => {
@@ -415,7 +478,16 @@ export function evaluatePlanningConflicts(
         projReqHours += req;
         totalRequiredHours += req;
 
-        if (daysRemaining <= 3 && req > 12) {
+        // CORRECTION (BUG 6) : Calcul de l'échéance propre au jalon
+        let msDaysRemaining = projDaysRemaining;
+        if (m.dueDate) {
+          const msTarget = new Date(m.dueDate);
+          msDaysRemaining = Math.max(1, Math.round((msTarget.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+        }
+
+        // Impasse si besoin > capacité disponible sur l'échéance du jalon
+        const msCapacity = msDaysRemaining * MAX_STUDY_HOURS_PER_DAY;
+        if (msDaysRemaining <= 3 && req > (3 * MAX_STUDY_HOURS_PER_DAY)) {
           impasseMilestones.push({
             id: m.id,
             title: m.title,
@@ -426,14 +498,14 @@ export function evaluatePlanningConflicts(
       }
     });
 
-    // Estimation de la capacité disponible : max 5h par jour sur les jours restants
-    const capacity = daysRemaining * 5;
+    // CORRECTION (BUG 5) : Alignement strict sur MAX_STUDY_HOURS_PER_DAY (6h/jour)
+    const capacity = projDaysRemaining * MAX_STUDY_HOURS_PER_DAY;
     if (projReqHours > capacity) {
       overloadedProjects.push({
         id: p.id,
         name: p.name,
         requiredHours: projReqHours,
-        daysRemaining
+        daysRemaining: projDaysRemaining
       });
     }
 
@@ -457,15 +529,13 @@ export function evaluatePlanningConflicts(
 }
 
 /**
- * Mode de repli déterministe (Fallback Heuristique) exécuté quand le quota Gemini 3.6 Flash (20/j) est épuisé.
+ * Arbitrage déterministe non-destructif (BUG 8 corrigé avec wasReduced flag et logs exacts).
  */
 export function resolveConflictsHeuristically(
   projects: Project[],
   conflicts: PlanningConflictReport
 ): { updatedProjects: Project[]; actionsTaken: string[] } {
-  const actionsTaken: string[] = [
-    "⚡ Arbitrage effectué par le moteur déterministe TS (Quota IA quotidienne atteint)."
-  ];
+  const actionsTaken: string[] = [];
 
   const updatedProjects = JSON.parse(JSON.stringify(projects)) as Project[];
 
@@ -486,25 +556,26 @@ export function resolveConflictsHeuristically(
     });
   });
 
-  // 2. Si l'impasse persiste, réajuster les jalons à charge cognitive élevée sans échéance stricte
+  // 2. Si l'impasse persiste, réajuster les jalons à charge cognitive élevée avec traçabilité flag wasReduced
   conflicts.impasseMilestones.forEach(imp => {
     if (!imp.isHardDeadline) {
       updatedProjects.forEach(p => {
         p.milestones.forEach(m => {
           if (m.id === imp.id) {
             m.estimatedHours = Math.max(2, Math.round((m.estimatedHours || 10) * 0.75));
-            actionsTaken.push(`Réduction du volume horaire de 25% sur « ${m.title} ».`);
+            m.wasReduced = true; // Traçabilité non-destructive
+            actionsTaken.push(`Réduction du volume horaire de 25% sur « ${m.title} » (Ajusté).`);
           }
         });
       });
     }
   });
 
-  if (actionsTaken.length === 1) {
-    actionsTaken.push("Lissage automatique effectué sur la répartition des créneaux hebdomadaires.");
+  if (actionsTaken.length === 0) {
+    actionsTaken.push("Aucun réajustement automatique requis sur le planning actuel.");
+  } else {
+    actionsTaken.unshift("⚡ Arbitrage déterministe appliqué par le moteur TS :");
   }
 
   return { updatedProjects, actionsTaken };
 }
-
-

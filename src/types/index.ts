@@ -12,7 +12,9 @@ export interface Milestone {
   isCompleted: boolean;
   dependsOn?: string[]; // IDs des jalons prérequis obligatoires
   isCriticalPath?: boolean; // Calculé dynamiquement (Slack === 0)
+  wasReduced?: boolean; // Indique si la durée estimée a été réajustée lors d'un arbitrage
 }
+
 
 export interface Project {
   id: string;
