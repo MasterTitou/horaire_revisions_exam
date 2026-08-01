@@ -1,24 +1,13 @@
-const CACHE_NAME = 'revision-planner-v23';
+const CACHE_NAME = 'revision-planner-v24';
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-const ASSETS_TO_CACHE = [
+const LOCAL_ASSETS = [
   '/',
   '/index.html',
   '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  '/icons/icon-512.png'
+];
+
+const EXTERNAL_ASSETS = [
   'https://cdn.tailwindcss.com',
   'https://cdn.jsdelivr.net/npm/chart.js',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap',
@@ -28,11 +17,20 @@ const ASSETS_TO_CACHE = [
   '/sounds/lofi.mp3'
 ];
 
-// Installation : mise en cache des assets
+// Installation : mise en cache résiliente des assets
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(ASSETS_TO_CACHE);
+    caches.open(CACHE_NAME).then(async cache => {
+      // 1. Assets locaux obligatoires
+      await cache.addAll(LOCAL_ASSETS);
+      // 2. Assets tiers distants (tolérants aux échecs réseau individuels via Promise.allSettled)
+      await Promise.allSettled(
+        EXTERNAL_ASSETS.map(url =>
+          fetch(url, { mode: 'no-cors' })
+            .then(res => cache.put(url, res))
+            .catch(err => console.log('SW external asset skip:', url, err.message))
+        )
+      );
     })
   );
   self.skipWaiting();
@@ -57,16 +55,22 @@ self.addEventListener('fetch', event => {
     return event.respondWith(fetch(event.request));
   }
 
-  // Network-First for HTML/Navigation so updates apply automatically
+  // Network-First pour la Navigation / HTML afin de toujours appliquer les mises à jour
   if (event.request.mode === 'navigate' || event.request.url.endsWith('/index.html') || event.request.url.endsWith('/')) {
     event.respondWith(
-      fetch(event.request).then(response => {
-        if (response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        }
-        return response;
-      }).catch(() => caches.match(event.request) || caches.match('/index.html'))
+      fetch(event.request)
+        .then(response => {
+          if (response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() =>
+          // FIX CORRIGÉ : caches.match(request) retourne une Promise (truthy).
+          // Utilisation explicite de .then(r => r || caches.match('/index.html')) pour garantir le fallback SPA hors-ligne.
+          caches.match(event.request).then(r => r || caches.match('/index.html'))
+        )
     );
     return;
   }

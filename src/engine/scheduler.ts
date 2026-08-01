@@ -555,6 +555,7 @@ export interface PlanningConflictReport {
   totalPlannedNotCompletedHours: number; // INFORMATIF : heures déjà planifiées mais pas encore complétées
   overloadedProjects: { id: string; name: string; requiredHours: number; daysRemaining: number }[];
   impasseMilestones: { id: string; title: string; cognitiveLoad: string; isHardDeadline: boolean }[];
+  cycleMilestones: { id: string; title: string }[];
   summaryMessage: string;
 }
 
@@ -574,11 +575,20 @@ export function evaluatePlanningConflicts(
   const parts = todayStr.split('-').map(Number);
   const today = new Date(parts[0], parts[1] - 1, parts[2]);
 
+  // Détection des cycles WBS
+  const { hasCycle, cycleNodes } = detectCycles(projects);
+  const cycleMilestones: PlanningConflictReport['cycleMilestones'] = [];
+  if (hasCycle) {
+    projects.forEach(p => {
+      p.milestones.forEach(m => {
+        if (cycleNodes.has(m.id)) {
+          cycleMilestones.push({ id: m.id, title: m.title });
+        }
+      });
+    });
+  }
+
   // Heures déjà planifiées mais non complétées : gardées à titre INFORMATIF seulement.
-  // generateSchedule régénère systématiquement ces séances à chaque appel (elles ne
-  // survivent pas à une replanification), donc elles ne doivent PAS réduire le
-  // volume d'heures considéré comme "requis" — sous peine de sous-estimer la charge
-  // réelle que generateSchedule devra recaser.
   const milestonePlannedHours: Record<string, number> = {};
   Object.values(existingSchedule || {}).forEach(sessions => {
     (sessions || []).forEach(s => {
@@ -607,8 +617,6 @@ export function evaluatePlanningConflicts(
 
     p.milestones.forEach(m => {
       if (!m.isCompleted) {
-        // Seules les heures COMPLÉTÉES sont déduites — cohérent avec generateSchedule
-        // qui ne préserve que les sessions isCompleted lors d'une replanification.
         const req = Math.max(0, (m.estimatedHours || 10) - (m.completedHours || 0));
         projReqHours += req;
         totalRequiredHours += req;
@@ -647,9 +655,11 @@ export function evaluatePlanningConflicts(
 
   const totalAvailableHours = maxHorizonDays * MAX_STUDY_HOURS_PER_DAY;
 
-  const hasConflicts = overloadedProjects.length > 0 || impasseMilestones.length > 0 || totalRequiredHours > totalAvailableHours;
+  const hasConflicts = overloadedProjects.length > 0 || impasseMilestones.length > 0 || totalRequiredHours > totalAvailableHours || cycleMilestones.length > 0;
   let summaryMessage = "Planning équilibré et réalisable.";
-  if (hasConflicts) {
+  if (cycleMilestones.length > 0) {
+    summaryMessage = `⚠️ Dépendance circulaire détectée sur ${cycleMilestones.length} jalon(s) [${cycleMilestones.map(c => c.title).join(' ↔ ')}]. Veuillez débloquer les dépendances WBS.`;
+  } else if (hasConflicts) {
     summaryMessage = `Surcharge détectée : ${totalRequiredHours.toFixed(1)}h requises pour ~${totalAvailableHours}h de capacité disponible sur votre agenda unique.`;
   }
 
@@ -660,9 +670,11 @@ export function evaluatePlanningConflicts(
     totalPlannedNotCompletedHours,
     overloadedProjects,
     impasseMilestones,
+    cycleMilestones,
     summaryMessage
   };
 }
+
 
 
 /**
