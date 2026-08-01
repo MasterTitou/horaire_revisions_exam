@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Project, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, DynamicQuest, ExternalEvent, UserSettings } from '../types';
+import { Project, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, DynamicQuest, ExternalEvent, UserSettings, CognitiveLoad } from '../types';
 import { generateSchedule, getStartOfWeek, HPH, DEFAULT_USER_SETTINGS, replanifyOnCalendarChange, getLocalDateString } from '../engine/scheduler';
+
+import {
+  calculateSessionXP,
+  evaluateDomainMastery,
+  calculateLevelAndTitle,
+  extractDailyQuestsFromWBS,
+  checkBadgeUnlocks
+} from '../engine/gamificationEngine';
 
 
 const COLORS = [
@@ -8,15 +16,15 @@ const COLORS = [
   "#059669", "#E11D48", "#F59E0B", "#8B5CF6", "#14B8A6", "#EC4899"
 ];
 
-// UNIVERSAL MULTI-DOMAIN SKILLS TREE
+// UNIVERSAL MULTI-DOMAIN SKILLS TREE INITIALISATION
 const DEFAULT_SKILLS: Record<string, DomainSkill> = {
-  agri: { id: 'agri', name: 'Agriculture & Botanique', icon: '🌿', hoursSpent: 14, level: 2 },
-  aero: { id: 'aero', name: 'Aérospatial & Ingénierie', icon: '🚀', hoursSpent: 10, level: 2 },
-  finance: { id: 'finance', name: 'Finance & Business', icon: '💼', hoursSpent: 18, level: 2 },
-  art: { id: 'art', name: 'Art & Création', icon: '🎨', hoursSpent: 8, level: 1 },
-  tech: { id: 'tech', name: 'Tech & Systèmes', icon: '💻', hoursSpent: 22, level: 3 },
-  science: { id: 'science', name: 'Sciences & Recherche', icon: '🔬', hoursSpent: 6, level: 1 },
-  logistics: { id: 'logistics', name: 'Logistique & Organisation', icon: '📋', hoursSpent: 12, level: 2 }
+  agri: { id: 'agri', name: 'Agriculture & Botanique', icon: '🌿', hoursSpent: 14, level: 1, currentTier: 'Novice', tierProgressPct: 70, hoursRemainingInTier: 6 },
+  aero: { id: 'aero', name: 'Aérospatial & Ingénierie', icon: '🚀', hoursSpent: 10, level: 1, currentTier: 'Novice', tierProgressPct: 50, hoursRemainingInTier: 10 },
+  finance: { id: 'finance', name: 'Finance & Business', icon: '💼', hoursSpent: 18, level: 1, currentTier: 'Novice', tierProgressPct: 90, hoursRemainingInTier: 2 },
+  art: { id: 'art', name: 'Art & Création', icon: '🎨', hoursSpent: 8, level: 1, currentTier: 'Novice', tierProgressPct: 40, hoursRemainingInTier: 12 },
+  tech: { id: 'tech', name: 'Tech & Systèmes', icon: '💻', hoursSpent: 22, level: 2, currentTier: 'Débutant Autonome', tierProgressPct: 3, hoursRemainingInTier: 78 },
+  science: { id: 'science', name: 'Sciences & Recherche', icon: '🔬', hoursSpent: 6, level: 1, currentTier: 'Novice', tierProgressPct: 30, hoursRemainingInTier: 14 },
+  logistics: { id: 'logistics', name: 'Logistique & Organisation', icon: '📋', hoursSpent: 12, level: 1, currentTier: 'Novice', tierProgressPct: 60, hoursRemainingInTier: 8 }
 };
 
 const DEFAULT_CALIBRATION = {
@@ -29,11 +37,22 @@ const DEFAULT_CALIBRATION = {
 const DEFAULT_GAMIFICATION: Gamification = {
   xp: 0,
   level: 1,
+  title: '🌱 Apprenti',
+  xpToNextLevel: 400,
   velocityIndex: 92,
   calibration: DEFAULT_CALIBRATION,
   skills: DEFAULT_SKILLS,
   quests: [],
   badges: [],
+  unlockedBadges: [],
+  aggregates: {
+    weeklyHighCognitiveHours: 0,
+    consecutivePunctualMilestones: 0,
+    lastActiveDate: '',
+    resurrectedProjectsCount: 0,
+    totalActiveFocusSeconds: 0
+  },
+  toastQueue: [],
   pomodorosCompleted: 0,
   sessionsCompleted: 0,
   bestStreak: 0,
@@ -58,7 +77,7 @@ export function useProjectStore() {
   const saveTimerRef = useRef<any>(null);
 
 
-  // Compute Velocity Index & Dynamic Quests
+  // Compute Velocity Index & Dynamic Quests from WBS
   const updateMetricsAndQuests = (currentSchedule: ScheduleData, currentProjects: Project[], currentGamo: Gamification): Gamification => {
     let totalPlanned = 0;
     let totalDone = 0;
@@ -69,25 +88,7 @@ export function useProjectStore() {
     });
 
     const velocityIndex = totalPlanned > 0 ? Math.min(100, Math.round((totalDone / totalPlanned) * 100)) : 100;
-
-    const quests: DynamicQuest[] = [];
-    currentProjects.forEach(p => {
-      p.milestones.forEach(ms => {
-        if (!ms.isCompleted && quests.length < 4) {
-          quests.push({
-            id: `q_${ms.id}`,
-            milestoneId: ms.id,
-            projectId: p.id,
-            title: ms.title,
-            projectCode: p.code,
-            dueDate: ms.dueDate || p.deadline,
-            targetHours: ms.estimatedHours,
-            completedHours: ms.completedHours,
-            isCompleted: ms.isCompleted
-          });
-        }
-      });
-    });
+    const quests = extractDailyQuestsFromWBS(currentProjects);
 
     return {
       ...currentGamo,
@@ -95,6 +96,7 @@ export function useProjectStore() {
       quests
     };
   };
+
 
   // Process and apply state payload
   const applyStatePayload = useCallback((d: any) => {
@@ -380,6 +382,13 @@ export function useProjectStore() {
     saveAll(updatedProjects, updatedSchedule, streak, updatedGamo, isDarkMode);
   };
 
+  const dismissToast = (toastId: string) => {
+    setGamification(prev => ({
+      ...prev,
+      toastQueue: (prev.toastQueue || []).filter(t => t.id !== toastId)
+    }));
+  };
+
   const toggleSession = (dateStr: string, sessionIndex: number) => {
     const sessions = scheduleData[dateStr] || [];
     if (!sessions[sessionIndex]) return;
@@ -395,10 +404,56 @@ export function useProjectStore() {
     };
 
     let updatedGamification = { ...gamification };
-    if (s.isCompleted) {
-      updatedGamification.sessionsCompleted += 1;
-      updatedGamification.xp += 25;
 
+    if (s.isCompleted) {
+      // Trouver la charge cognitive du jalon parent
+      let cognitiveLoad: CognitiveLoad = 'medium';
+      let plannedMinutes = 60;
+      const targetProj = projects.find(p => p.id === s.projectId);
+      if (targetProj) {
+        const targetMs = targetProj.milestones.find(m => m.id === s.milestoneId);
+        if (targetMs) {
+          cognitiveLoad = targetMs.cognitiveLoad || 'medium';
+          plannedMinutes = Math.round((targetMs.estimatedHours || 1) * 60);
+        }
+      }
+
+      // 1. Calcul de l'XP pondérée avec plancher & cap anti-oubli
+      const actualMinutes = s.durationMinutes || 60;
+      const { xpGained, countedMinutes } = calculateSessionXP({
+        actualDurationMinutes: actualMinutes,
+        plannedDurationMinutes: plannedMinutes,
+        cognitiveLoad,
+        velocityIndex: gamification.velocityIndex || 100,
+        isOnTime: true
+      });
+
+      const newTotalXp = updatedGamification.xp + xpGained;
+      const { level: newGlobalLevel, title: newTitle, xpToNextLevel } = calculateLevelAndTitle(newTotalXp);
+
+      // Si montée de niveau, push toast
+      const newToastQueue = [...(updatedGamification.toastQueue || [])];
+      if (newGlobalLevel > updatedGamification.level) {
+        newToastQueue.push({
+          id: `toast_lvl_${newGlobalLevel}_${Date.now()}`,
+          type: 'level',
+          title: 'Niveau Supérieur !',
+          message: `Félicitations, vous êtes désormais ${newTitle}`,
+          icon: '✨',
+          subtext: `Niveau ${newGlobalLevel} débloqué (+${xpGained} XP)`
+        });
+      } else {
+        newToastQueue.push({
+          id: `toast_xp_${Date.now()}`,
+          type: 'xp',
+          title: 'Session Validée !',
+          message: `+${xpGained} XP Qualifiés`,
+          icon: '⚡',
+          subtext: `Charge cognitive: ${cognitiveLoad.toUpperCase()}`
+        });
+      }
+
+      // 2. Détermination du domaine & mise à jour des heures qualifiées
       let skillKey = 'logistics';
       const noteLower = s.note.toLowerCase();
       if (noteLower.includes('potager') || noteLower.includes('botanique') || noteLower.includes('agri')) skillKey = 'agri';
@@ -408,18 +463,60 @@ export function useProjectStore() {
       else if (noteLower.includes('tech') || noteLower.includes('dev') || noteLower.includes('arch') || noteLower.includes('code')) skillKey = 'tech';
       else if (noteLower.includes('science') || noteLower.includes('recherche') || noteLower.includes('étude')) skillKey = 'science';
 
-      const currentSkill = updatedGamification.skills[skillKey] || DEFAULT_SKILLS[skillKey];
-      const hoursAdd = Math.round(HPH);
-      const newHours = currentSkill.hoursSpent + hoursAdd;
-      const newLevel = Math.floor(newHours / 10) + 1;
+      const currentSkill = updatedGamification.skills[skillKey] || DEFAULT_SKILLS[skillKey] || {
+        id: skillKey, name: 'Domaine', icon: '⚡', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20
+      };
 
-      updatedGamification.skills = {
+      const hoursAdd = countedMinutes / 60;
+      const newHoursSpent = currentSkill.hoursSpent + hoursAdd;
+      const mastery = evaluateDomainMastery(newHoursSpent);
+
+      const updatedSkills = {
         ...updatedGamification.skills,
         [skillKey]: {
           ...currentSkill,
-          hoursSpent: newHours,
-          level: newLevel
+          hoursSpent: Math.round(newHoursSpent * 10) / 10,
+          level: mastery.level,
+          currentTier: mastery.currentTier,
+          tierProgressPct: mastery.tierProgressPct,
+          hoursRemainingInTier: mastery.hoursRemainingInTier
         }
+      };
+
+      // 3. Mise à jour des agrégats O(1)
+      const currentAggs = updatedGamification.aggregates || {
+        weeklyHighCognitiveHours: 0,
+        consecutivePunctualMilestones: 0,
+        lastActiveDate: '',
+        resurrectedProjectsCount: 0,
+        totalActiveFocusSeconds: 0
+      };
+
+      const highCogHoursAdd = cognitiveLoad === 'high' ? hoursAdd : 0;
+      const newAggregates = {
+        ...currentAggs,
+        weeklyHighCognitiveHours: currentAggs.weeklyHighCognitiveHours + highCogHoursAdd,
+        consecutivePunctualMilestones: currentAggs.consecutivePunctualMilestones + 1,
+        totalActiveFocusSeconds: currentAggs.totalActiveFocusSeconds + (countedMinutes * 60)
+      };
+
+      // 4. Évaluation O(1) des badges
+      const { newlyUnlocked, toastsToPush } = checkBadgeUnlocks(
+        { ...updatedGamification, skills: updatedSkills },
+        newAggregates
+      );
+
+      updatedGamification = {
+        ...updatedGamification,
+        xp: newTotalXp,
+        level: newGlobalLevel,
+        title: newTitle,
+        xpToNextLevel,
+        sessionsCompleted: updatedGamification.sessionsCompleted + 1,
+        skills: updatedSkills,
+        unlockedBadges: [...(updatedGamification.unlockedBadges || []), ...newlyUnlocked],
+        aggregates: newAggregates,
+        toastQueue: [...newToastQueue, ...toastsToPush]
       };
     }
 
@@ -429,6 +526,7 @@ export function useProjectStore() {
     setGamification(updatedGamification);
     saveAll(projects, updatedSchedule, streak, updatedGamification, isDarkMode);
   };
+
 
   const changeWeek = (offset: number) => {
     const nextWeek = new Date(currentWeekStart);
@@ -462,14 +560,15 @@ export function useProjectStore() {
     setScheduleData({});
     setStreak({ count: 0, lastDate: '' });
     const freshSkills: Record<string, DomainSkill> = {
-      agri: { id: 'agri', name: 'Agriculture & Botanique', icon: '🌿', hoursSpent: 0, level: 1 },
-      aero: { id: 'aero', name: 'Aérospatial & Ingénierie', icon: '🚀', hoursSpent: 0, level: 1 },
-      finance: { id: 'finance', name: 'Finance & Business', icon: '💼', hoursSpent: 0, level: 1 },
-      art: { id: 'art', name: 'Art & Création', icon: '🎨', hoursSpent: 0, level: 1 },
-      tech: { id: 'tech', name: 'Tech & Systèmes', icon: '💻', hoursSpent: 0, level: 1 },
-      science: { id: 'science', name: 'Sciences & Recherche', icon: '🔬', hoursSpent: 0, level: 1 },
-      logistics: { id: 'logistics', name: 'Logistique & Organisation', icon: '📋', hoursSpent: 0, level: 1 }
+      agri: { id: 'agri', name: 'Agriculture & Botanique', icon: '🌿', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
+      aero: { id: 'aero', name: 'Aérospatial & Ingénierie', icon: '🚀', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
+      finance: { id: 'finance', name: 'Finance & Business', icon: '💼', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
+      art: { id: 'art', name: 'Art & Création', icon: '🎨', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
+      tech: { id: 'tech', name: 'Tech & Systèmes', icon: '💻', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
+      science: { id: 'science', name: 'Sciences & Recherche', icon: '🔬', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
+      logistics: { id: 'logistics', name: 'Logistique & Organisation', icon: '📋', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 }
     };
+
     const freshGamo: Gamification = {
       ...DEFAULT_GAMIFICATION,
       velocityIndex: 100,
@@ -565,7 +664,9 @@ export function useProjectStore() {
     setChatHistory,
     updateUserSettings,
     setExternalEvents,
-    addExternalEvent
+    addExternalEvent,
+    dismissToast
   };
 }
+
 

@@ -74,12 +74,17 @@ export interface Streak {
   lastDate: string;
 }
 
+export type MasteryTier = 'Novice' | 'Débutant Autonome' | 'Praticien Confirmé' | 'Expert' | 'Maître';
+
 export interface DomainSkill {
   id: string;
   name: string;
   icon: string;
   hoursSpent: number;
   level: number;
+  currentTier: MasteryTier;
+  tierProgressPct: number; // 0 to 100% normalized for Radar Chart
+  hoursRemainingInTier: number;
 }
 
 export interface DynamicQuest {
@@ -92,6 +97,43 @@ export interface DynamicQuest {
   targetHours: number;
   completedHours: number;
   isCompleted: boolean;
+  xpReward: number;
+}
+
+export type BadgeCategory = 'discipline' | 'volume' | 'mastery' | 'resilience';
+export type BadgeTier = 'bronze' | 'silver' | 'gold';
+
+export interface BadgeDefinition {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  category: BadgeCategory;
+  tier: BadgeTier;
+  targetValue: number;
+}
+
+export interface UnlockedBadge {
+  badgeId: string;
+  unlockedAt: string;
+  tier: BadgeTier;
+}
+
+export interface GamificationAggregates {
+  weeklyHighCognitiveHours: number;
+  consecutivePunctualMilestones: number;
+  lastActiveDate: string;
+  resurrectedProjectsCount: number;
+  totalActiveFocusSeconds: number;
+}
+
+export interface GamificationToast {
+  id: string;
+  type: 'xp' | 'level' | 'badge' | 'mastery';
+  title: string;
+  message: string;
+  icon: string;
+  subtext?: string;
 }
 
 export interface CalibrationLoop {
@@ -104,11 +146,16 @@ export interface CalibrationLoop {
 export interface Gamification {
   xp: number;
   level: number;
+  title: string;
+  xpToNextLevel: number;
   velocityIndex: number;
   calibration: CalibrationLoop;
   skills: Record<string, DomainSkill>;
   quests: DynamicQuest[];
-  badges: string[];
+  badges: string[]; // Legacy array for backward compatibility
+  unlockedBadges: UnlockedBadge[];
+  aggregates: GamificationAggregates;
+  toastQueue: GamificationToast[];
   pomodorosCompleted: number;
   sessionsCompleted: number;
   bestStreak: number;
@@ -122,6 +169,7 @@ export interface Gamification {
   };
   subjectPomoStats: Record<string, number>;
 }
+
 
 export interface ChatMessage {
   role: 'user' | 'assistant';

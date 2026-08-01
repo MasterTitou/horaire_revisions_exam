@@ -41,6 +41,18 @@ export const PomodoroDock: React.FC<PomodoroDockProps> = ({
     }
   }, [focusTime, breakTime, mode]);
 
+  // Page Visibility API : suspendre le timer si l'onglet passe en arrière-plan
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isRunning) {
+        setIsRunning(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isRunning]);
+
   useEffect(() => {
     let timer: any = null;
     if (isRunning && timeLeft > 0) {
@@ -59,6 +71,7 @@ export const PomodoroDock: React.FC<PomodoroDockProps> = ({
     }
     return () => clearInterval(timer);
   }, [isRunning, timeLeft, mode, focusTime, breakTime]);
+
 
   const toggleTimer = () => setIsRunning(!isRunning);
   const resetTimer = () => {

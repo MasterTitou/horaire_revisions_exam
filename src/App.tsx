@@ -16,6 +16,8 @@ import { ProfileTab } from './components/profile/ProfileTab';
 import { QuickTaskParserModal } from './components/ai/QuickTaskParserModal';
 
 
+import { GamificationToastQueue } from './components/common/GamificationToastQueue';
+
 export const App: React.FC = () => {
   const {
     projects,
@@ -44,7 +46,8 @@ export const App: React.FC = () => {
     setChatHistory,
     updateUserSettings,
     setExternalEvents,
-    addExternalEvent
+    addExternalEvent,
+    dismissToast
   } = useProjectStore();
 
   const [activeTab, setActiveTab] = useState('planner');
@@ -219,6 +222,7 @@ export const App: React.FC = () => {
               onResetData={resetAllData}
               onExportData={exportDataJSON}
               onImportData={importDataJSON}
+              isDarkMode={isDarkMode}
             />
           </div>
         )}
@@ -232,12 +236,19 @@ export const App: React.FC = () => {
           onAddParsedTask={handleAddParsedTask}
         />
 
+        {/* Floating Gamification Toast Queue */}
+        <GamificationToastQueue
+          toasts={gamification.toastQueue || []}
+          onDismiss={dismissToast}
+        />
+
         {/* Floating Pomodoro Dock */}
         <PomodoroDock />
       </div>
     </div>
   );
 };
+
 
 export default App;
 

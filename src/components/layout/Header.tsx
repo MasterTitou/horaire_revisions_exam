@@ -88,13 +88,13 @@ export const Header: React.FC<HeaderProps> = ({
           <span>{velocity}% Vélocité</span>
         </div>
 
-        {/* Level Badge Pill */}
+        {/* Level Title Badge Pill */}
         <div className="card px-3.5 py-2 flex items-center gap-2 rounded-full" style={{ background: 'var(--terra-l)', border: '1px solid var(--border)' }}>
-          <span className="flex items-center justify-center text-teal-700">
-            <Leaf className="w-4 h-4" />
+          <span className="text-xs font-black" style={{ color: 'var(--terra)' }}>
+            {gamification.title || '🌱 Apprenti'} · Niv.{gamification.level || 1}
           </span>
-          <span className="text-xs font-black" style={{ color: 'var(--terra)' }}>Maîtrise Niv.{gamification.level}</span>
         </div>
+
 
         {/* Notification Bell Toggle */}
         <button

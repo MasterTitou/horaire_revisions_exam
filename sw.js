@@ -1,4 +1,5 @@
-const CACHE_NAME = 'revision-planner-v15';
+const CACHE_NAME = 'revision-planner-v16';
+
 
 
 
