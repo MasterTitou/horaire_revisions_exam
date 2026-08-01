@@ -79,17 +79,27 @@ export interface Streak {
 }
 
 export type MasteryTier = 'Novice' | 'Débutant Autonome' | 'Praticien Confirmé' | 'Expert' | 'Maître';
+export type DomainCategory = 'STEM' | 'Humanities' | 'Arts' | 'Physical' | 'Craft' | 'Custom';
 
-export interface DomainSkill {
+export interface StudyDomain {
   id: string;
   name: string;
+  category: DomainCategory;
+  color: string;
   icon: string;
+  isSystem: boolean;
+  archived: boolean;
   hoursSpent: number;
   level: number;
   currentTier: MasteryTier;
-  tierProgressPct: number; // 0 to 100% normalized for Radar Chart
+  tierProgressPct: number; // 0 à 100% normalisé pour le Radar Chart
   hoursRemainingInTier: number;
+  xpMultiplier?: number;
+  keywords?: string[];
 }
+
+export type DomainSkill = StudyDomain;
+
 
 export interface DynamicQuest {
   id: string;

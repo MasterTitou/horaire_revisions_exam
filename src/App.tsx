@@ -47,8 +47,14 @@ export const App: React.FC = () => {
     updateUserSettings,
     setExternalEvents,
     addExternalEvent,
-    dismissToast
+    dismissToast,
+    addCustomDomain,
+    updateDomain,
+    archiveDomain,
+    restoreDomain
   } = useProjectStore();
+
+
 
   const [activeTab, setActiveTab] = useState('planner');
   const [isQuickParserOpen, setIsQuickParserOpen] = useState(false);
@@ -229,8 +235,13 @@ export const App: React.FC = () => {
               onResetData={resetAllData}
               onExportData={exportDataJSON}
               onImportData={importDataJSON}
+              onAddCustomDomain={addCustomDomain}
+              onUpdateDomain={updateDomain}
+              onArchiveDomain={archiveDomain}
+              onRestoreDomain={restoreDomain}
               isDarkMode={isDarkMode}
             />
+
           </div>
         )}
 

@@ -171,9 +171,53 @@ export function calculateSessionXP(input: SessionXpInput): { xpGained: number; c
   return { xpGained, countedMinutes };
 }
 
+/**
+ * Résolution déterministe du domaine cible selon la hiérarchie stricte :
+ * 1. Exclure immédiatement tout domaine archivé (`archived: true`).
+ * 2. Correspondance exacte sur `domainId` ou nom.
+ * 3. Correspondance sur mots-clés de domaines personnalisés (`keywords`).
+ * 4. Correspondance sur mots-clés de domaines système.
+ * 5. Reconstitution par défaut sur le domaine "logistics" (Organisation & Logistique).
+ */
+export function resolveTargetDomainKey(
+  noteOrTitle: string,
+  domains: Record<string, any>,
+  explicitDomainId?: string
+): string {
+  if (!domains) return 'logistics';
+
+  const activeDomains = Object.values(domains).filter((d: any) => !d.archived);
+  if (activeDomains.length === 0) return 'logistics';
+
+  if (explicitDomainId && domains[explicitDomainId] && !domains[explicitDomainId].archived) {
+    return explicitDomainId;
+  }
+
+  const query = (noteOrTitle || '').toLowerCase().trim();
+  if (!query) return 'logistics';
+
+  const exactMatch = activeDomains.find((d: any) => d.id.toLowerCase() === query || d.name.toLowerCase() === query);
+  if (exactMatch) return exactMatch.id;
+
+  for (const domain of activeDomains.filter((d: any) => !d.isSystem)) {
+    if (domain.keywords && Array.isArray(domain.keywords) && domain.keywords.some((k: string) => query.includes(k.toLowerCase()))) {
+      return domain.id;
+    }
+  }
+
+  for (const domain of activeDomains.filter((d: any) => d.isSystem)) {
+    if (domain.keywords && Array.isArray(domain.keywords) && domain.keywords.some((k: string) => query.includes(k.toLowerCase()))) {
+      return domain.id;
+    }
+  }
+
+  return activeDomains.find((d: any) => d.id === 'logistics')?.id || activeDomains[0].id;
+}
+
 // ==========================================
 // 3. ÉVALUATION D'UN DOMAINE (NORMALISATION RADAR CHART)
 // ==========================================
+
 
 export function evaluateDomainMastery(hoursSpent: number): {
   level: number;

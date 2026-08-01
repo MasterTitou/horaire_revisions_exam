@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Project, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, DynamicQuest, ExternalEvent, UserSettings, CognitiveLoad } from '../types';
+import { Project, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, StudyDomain, DomainCategory, DynamicQuest, ExternalEvent, UserSettings, CognitiveLoad } from '../types';
+
+
 import { generateSchedule, getStartOfWeek, HPH, DEFAULT_USER_SETTINGS, replanifyOnCalendarChange, getLocalDateString } from '../engine/scheduler';
 
 import {
@@ -7,25 +9,20 @@ import {
   evaluateDomainMastery,
   calculateLevelAndTitle,
   extractDailyQuestsFromWBS,
-  checkBadgeUnlocks
+  checkBadgeUnlocks,
+  resolveTargetDomainKey
 } from '../engine/gamificationEngine';
 
+import { mergeDomainOntology } from '../engine/domainSeeds';
 
 const COLORS = [
   "#0E8478", "#6B46C1", "#2E7D32", "#FF6B35", "#3B82F6", "#D946EF",
   "#059669", "#E11D48", "#F59E0B", "#8B5CF6", "#14B8A6", "#EC4899"
 ];
 
-// UNIVERSAL MULTI-DOMAIN SKILLS TREE INITIALISATION
-const DEFAULT_SKILLS: Record<string, DomainSkill> = {
-  agri: { id: 'agri', name: 'Agriculture & Botanique', icon: '🌿', hoursSpent: 14, level: 1, currentTier: 'Novice', tierProgressPct: 70, hoursRemainingInTier: 6 },
-  aero: { id: 'aero', name: 'Aérospatial & Ingénierie', icon: '🚀', hoursSpent: 10, level: 1, currentTier: 'Novice', tierProgressPct: 50, hoursRemainingInTier: 10 },
-  finance: { id: 'finance', name: 'Finance & Business', icon: '💼', hoursSpent: 18, level: 1, currentTier: 'Novice', tierProgressPct: 90, hoursRemainingInTier: 2 },
-  art: { id: 'art', name: 'Art & Création', icon: '🎨', hoursSpent: 8, level: 1, currentTier: 'Novice', tierProgressPct: 40, hoursRemainingInTier: 12 },
-  tech: { id: 'tech', name: 'Tech & Systèmes', icon: '💻', hoursSpent: 22, level: 2, currentTier: 'Débutant Autonome', tierProgressPct: 3, hoursRemainingInTier: 78 },
-  science: { id: 'science', name: 'Sciences & Recherche', icon: '🔬', hoursSpent: 6, level: 1, currentTier: 'Novice', tierProgressPct: 30, hoursRemainingInTier: 14 },
-  logistics: { id: 'logistics', name: 'Logistique & Organisation', icon: '📋', hoursSpent: 12, level: 1, currentTier: 'Novice', tierProgressPct: 60, hoursRemainingInTier: 8 }
-};
+// UNIVERSAL MULTI-DOMAIN SKILLS TREE INITIALISATION (HYBRID MODEL)
+const DEFAULT_SKILLS = mergeDomainOntology();
+
 
 const DEFAULT_CALIBRATION = {
   highFactor: 1.25,
@@ -130,11 +127,13 @@ export function useProjectStore() {
     }
 
     const rawGamo = d.gamification || DEFAULT_GAMIFICATION;
+    const mergedSkills = mergeDomainOntology(rawGamo.skills);
     const initialGamo = {
       ...DEFAULT_GAMIFICATION,
       ...rawGamo,
-      skills: { ...DEFAULT_SKILLS, ...(rawGamo.skills || {}) }
+      skills: mergedSkills
     };
+
 
     const extEvts = (d.externalEvents && Array.isArray(d.externalEvents)) ? d.externalEvents : [];
     const settings = d.userSettings || DEFAULT_USER_SETTINGS;
@@ -520,17 +519,10 @@ export function useProjectStore() {
       }
 
       // 2. Détermination du domaine & mise à jour des heures qualifiées
-      let skillKey = 'logistics';
-      const noteLower = s.note.toLowerCase();
-      if (noteLower.includes('potager') || noteLower.includes('botanique') || noteLower.includes('agri')) skillKey = 'agri';
-      else if (noteLower.includes('fusée') || noteLower.includes('propulsion') || noteLower.includes('aero')) skillKey = 'aero';
-      else if (noteLower.includes('finance') || noteLower.includes('budget') || noteLower.includes('levée')) skillKey = 'finance';
-      else if (noteLower.includes('art') || noteLower.includes('design') || noteLower.includes('créa')) skillKey = 'art';
-      else if (noteLower.includes('tech') || noteLower.includes('dev') || noteLower.includes('arch') || noteLower.includes('code')) skillKey = 'tech';
-      else if (noteLower.includes('science') || noteLower.includes('recherche') || noteLower.includes('étude')) skillKey = 'science';
+      const skillKey = resolveTargetDomainKey(s.note, updatedGamification.skills);
 
       const currentSkill = updatedGamification.skills[skillKey] || DEFAULT_SKILLS[skillKey] || {
-        id: skillKey, name: 'Domaine', icon: '⚡', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20
+        id: skillKey, name: 'Domaine', category: 'Custom', color: '#14B8A6', icon: '⚡', isSystem: false, archived: false, hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20
       };
 
       const hoursAdd = countedMinutes / 60;
@@ -592,14 +584,7 @@ export function useProjectStore() {
       const newTotalXp = Math.max(0, updatedGamification.xp - xpDeduct);
       const { level: newGlobalLevel, title: newTitle, xpToNextLevel } = calculateLevelAndTitle(newTotalXp);
 
-      let skillKey = 'logistics';
-      const noteLower = s.note.toLowerCase();
-      if (noteLower.includes('potager') || noteLower.includes('botanique') || noteLower.includes('agri')) skillKey = 'agri';
-      else if (noteLower.includes('fusée') || noteLower.includes('propulsion') || noteLower.includes('aero')) skillKey = 'aero';
-      else if (noteLower.includes('finance') || noteLower.includes('budget') || noteLower.includes('levée')) skillKey = 'finance';
-      else if (noteLower.includes('art') || noteLower.includes('design') || noteLower.includes('créa')) skillKey = 'art';
-      else if (noteLower.includes('tech') || noteLower.includes('dev') || noteLower.includes('arch') || noteLower.includes('code')) skillKey = 'tech';
-      else if (noteLower.includes('science') || noteLower.includes('recherche') || noteLower.includes('étude')) skillKey = 'science';
+      const skillKey = resolveTargetDomainKey(s.note, updatedGamification.skills);
 
       const currentSkill = updatedGamification.skills[skillKey] || DEFAULT_SKILLS[skillKey];
       if (currentSkill) {
@@ -626,6 +611,7 @@ export function useProjectStore() {
         };
       }
     }
+
 
 
     updatedGamification = updateMetricsAndQuests(updatedSchedule, projects, updatedGamification);
@@ -669,15 +655,8 @@ export function useProjectStore() {
     setProjects([]);
     setScheduleData({});
     setStreak({ count: 0, lastDate: '' });
-    const freshSkills: Record<string, DomainSkill> = {
-      agri: { id: 'agri', name: 'Agriculture & Botanique', icon: '🌿', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
-      aero: { id: 'aero', name: 'Aérospatial & Ingénierie', icon: '🚀', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
-      finance: { id: 'finance', name: 'Finance & Business', icon: '💼', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
-      art: { id: 'art', name: 'Art & Création', icon: '🎨', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
-      tech: { id: 'tech', name: 'Tech & Systèmes', icon: '💻', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
-      science: { id: 'science', name: 'Sciences & Recherche', icon: '🔬', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 },
-      logistics: { id: 'logistics', name: 'Logistique & Organisation', icon: '📋', hoursSpent: 0, level: 1, currentTier: 'Novice', tierProgressPct: 0, hoursRemainingInTier: 20 }
-    };
+    const freshSkills = mergeDomainOntology();
+
 
     const freshGamo: Gamification = {
       ...DEFAULT_GAMIFICATION,
@@ -746,6 +725,65 @@ export function useProjectStore() {
     setExternalEvents(updatedEvents);
   };
 
+  const addCustomDomain = (name: string, category: DomainCategory, color: string, icon: string, keywords: string[] = []) => {
+    const domainId = `custom_${Date.now()}`;
+    const newDomain: StudyDomain = {
+      id: domainId,
+      name,
+      category,
+      color: color || '#3B82F6',
+      icon: icon || '⚡',
+      isSystem: false,
+      archived: false,
+      hoursSpent: 0,
+      level: 1,
+      currentTier: 'Novice',
+      tierProgressPct: 0,
+      hoursRemainingInTier: 20,
+      keywords
+    };
+
+    const updatedGamification = {
+      ...gamification,
+      skills: {
+        ...gamification.skills,
+        [domainId]: newDomain
+      }
+    };
+
+    setGamification(updatedGamification);
+    saveAll(projects, scheduleData, streak, updatedGamification, isDarkMode);
+  };
+
+  const updateDomain = (domainId: string, updates: Partial<StudyDomain>) => {
+    const existing = gamification.skills[domainId];
+    if (!existing) return;
+
+    const updatedDomain = {
+      ...existing,
+      ...updates
+    };
+
+    const updatedGamification = {
+      ...gamification,
+      skills: {
+        ...gamification.skills,
+        [domainId]: updatedDomain
+      }
+    };
+
+    setGamification(updatedGamification);
+    saveAll(projects, scheduleData, streak, updatedGamification, isDarkMode);
+  };
+
+  const archiveDomain = (domainId: string) => {
+    updateDomain(domainId, { archived: true });
+  };
+
+  const restoreDomain = (domainId: string) => {
+    updateDomain(domainId, { archived: false });
+  };
+
   return {
     projects,
     scheduleData,
@@ -775,9 +813,14 @@ export function useProjectStore() {
     updateUserSettings,
     setExternalEvents,
     addExternalEvent,
-    dismissToast
+    dismissToast,
+    addCustomDomain,
+    updateDomain,
+    archiveDomain,
+    restoreDomain
   };
 }
+
 
 
 

@@ -9,23 +9,24 @@ import {
   Tooltip,
   Legend
 } from 'chart.js';
-import { DomainSkill } from '../../types';
+import { StudyDomain } from '../../types';
 import { evaluateDomainMastery } from '../../engine/gamificationEngine';
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
 interface DomainRadarChartProps {
-  skills: Record<string, DomainSkill>;
+  skills: Record<string, StudyDomain>;
   isDarkMode?: boolean;
 }
 
 export const DomainRadarChart: React.FC<DomainRadarChartProps> = ({ skills, isDarkMode }) => {
-  const skillList = Object.values(skills || {});
+  // Exclure les domaines archivés
+  const skillList = Object.values(skills || {}).filter(s => !s.archived);
 
-  // Trier par heures décroissantes et garder les 8 principaux domaines
+  // Trier par heures décroissantes pour faire émerger le Top-8
   const sortedSkills = [...skillList].sort((a, b) => b.hoursSpent - a.hoursSpent);
 
-  let displayedSkills: { name: string; icon: string; pct: number; hours: number }[] = [];
+  let displayedSkills: { name: string; icon: string; pct: number; hours: number; color: string }[] = [];
 
   if (sortedSkills.length <= 8) {
     displayedSkills = sortedSkills.map(s => {
@@ -34,18 +35,20 @@ export const DomainRadarChart: React.FC<DomainRadarChartProps> = ({ skills, isDa
         name: `${s.icon} ${s.name}`,
         icon: s.icon,
         pct: mastery.tierProgressPct,
-        hours: s.hoursSpent
+        hours: s.hoursSpent,
+        color: s.color || '#3B82F6'
       };
     });
   } else {
-    // 7 principaux + 1 regroupe "Autres"
+    // 7 principaux + 1 regroupe "Autres Domaines"
     const top7 = sortedSkills.slice(0, 7).map(s => {
       const mastery = evaluateDomainMastery(s.hoursSpent);
       return {
         name: `${s.icon} ${s.name}`,
         icon: s.icon,
         pct: mastery.tierProgressPct,
-        hours: s.hoursSpent
+        hours: s.hoursSpent,
+        color: s.color || '#3B82F6'
       };
     });
 
@@ -59,7 +62,8 @@ export const DomainRadarChart: React.FC<DomainRadarChartProps> = ({ skills, isDa
         name: '🌐 Autres Domaines',
         icon: '🌐',
         pct: masteryOthers.tierProgressPct,
-        hours: Math.round(avgHours)
+        hours: Math.round(avgHours),
+        color: '#64748B'
       }
     ];
   }
@@ -81,11 +85,11 @@ export const DomainRadarChart: React.FC<DomainRadarChartProps> = ({ skills, isDa
         backgroundColor: fillColor,
         borderColor: mainColor,
         borderWidth: 2,
-        pointBackgroundColor: mainColor,
+        pointBackgroundColor: displayedSkills.map(d => d.color),
         pointBorderColor: '#fff',
         pointHoverBackgroundColor: '#fff',
         pointHoverBorderColor: mainColor,
-        pointRadius: 4
+        pointRadius: 5
       }
     ]
   };
