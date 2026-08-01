@@ -488,7 +488,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
       )}
 
       {/* Layout Multi-Discussions (Sidebar + Chat) */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 h-[550px] relative">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 h-[580px] max-h-[75vh] min-h-0 relative">
 
         {/* Bouton Mobile Toggle Sidebar */}
         <div className="md:hidden flex items-center justify-between pb-2 border-b">
@@ -510,11 +510,11 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
 
         {/* Sidebar des Conversations */}
         <div className={`
-          md:col-span-4 flex flex-col space-y-3 rounded-2xl p-3 border scr overflow-y-auto transition-all z-20
+          md:col-span-4 flex flex-col h-full min-h-0 space-y-3 rounded-2xl p-3 border scr overflow-y-auto transition-all z-20
           ${isSidebarOpen ? 'absolute inset-0 bg-white dark:bg-gray-900 shadow-xl' : 'hidden md:flex'}
         `} style={{ background: 'var(--bg, #f8fafc)', borderColor: 'var(--border)' }}>
           
-          <div className="flex items-center justify-between pb-2 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center justify-between pb-2 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
             <h3 className="font-extrabold text-xs flex items-center gap-1.5">
               <MessageSquare className="w-4 h-4 text-teal-600" />
               <span>Vos Discussions ({threads.length})</span>
@@ -529,7 +529,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
             </button>
           </div>
 
-          <div className="space-y-1.5 flex-1 overflow-y-auto scr pr-1">
+          <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto scr pr-1">
             {threads.map(thread => {
               const isActive = thread.id === activeThreadId;
               const isEditing = editingThreadId === thread.id;
@@ -596,11 +596,11 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
         </div>
 
         {/* Panneau Principal de la Chat Thread Active */}
-        <div className="md:col-span-8 flex flex-col h-full rounded-2xl border p-3.5 space-y-3" style={{ background: 'var(--bg, #f8fafc)', borderColor: 'var(--border)' }}>
+        <div className="md:col-span-8 flex flex-col h-full min-h-0 rounded-2xl border p-3.5 space-y-3" style={{ background: 'var(--bg, #f8fafc)', borderColor: 'var(--border)' }}>
           
           {/* En-tête de la Conversation Active */}
           {activeThread && (
-            <div className="flex items-center justify-between border-b pb-2.5" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex items-center justify-between border-b pb-2.5 shrink-0" style={{ borderColor: 'var(--border)' }}>
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-teal-500/10 flex items-center justify-center text-teal-700 font-extrabold">
                   <Bot className="w-4 h-4" />
@@ -632,8 +632,9 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
           {/* Corps des Messages */}
           <div
             ref={chatContainerRef}
-            className="flex-1 overflow-y-auto space-y-3 p-2 rounded-xl scr"
+            className="flex-1 min-h-0 overflow-y-auto space-y-3 p-2 rounded-xl scr"
           >
+
             {activeThread && activeThread.messages.length === 0 ? (
               <div className="text-center py-16 space-y-2 text-xs" style={{ color: 'var(--muted)' }}>
                 <Sparkles className="w-8 h-8 mx-auto text-teal-500/40 animate-pulse" />

@@ -258,3 +258,24 @@ body {
 .login-inp:focus {
   border-color: #14B8A6;
 }
+
+/* SCROLLBAR CUSTOM STYLES */
+.scr {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(14, 132, 120, 0.3) transparent;
+}
+.scr::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scr::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scr::-webkit-scrollbar-thumb {
+  background: rgba(14, 132, 120, 0.25);
+  border-radius: 9999px;
+}
+.scr::-webkit-scrollbar-thumb:hover {
+  background: rgba(14, 132, 120, 0.45);
+}
+
