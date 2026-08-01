@@ -105,16 +105,13 @@ export function computeCriticalPath(
   const criticalMap: Record<string, boolean> = {};
   if (!projects || projects.length === 0) return criticalMap;
 
-  // Détection et neutralisation des cycles éventuels pour éviter tout stack overflow
   const { cycleNodes } = detectCycles(projects);
 
-  // 1. Dictionnaire global de tous les jalons (Support complet des dépendances cross-projets)
   const msMap = new Map<string, Milestone>();
   const durationMap = new Map<string, number>();
 
   projects.forEach(project => {
     (project.milestones || []).forEach(m => {
-      // Ignorer les jalons pris dans un cycle pour le calcul CPM
       if (cycleNodes.has(m.id)) return;
       msMap.set(m.id, m);
       const calFactor = m.cognitiveLoad === 'high'
@@ -125,23 +122,47 @@ export function computeCriticalPath(
     });
   });
 
-
   if (msMap.size === 0) return criticalMap;
 
-  // 2. Construction du Graphe DAG Global (Prédécesseurs & Successeurs)
+  // Prédécesseurs filtrés (on ignore les dependsOn pointant vers un id inconnu)
   const predecessors = new Map<string, string[]>();
   const successors = new Map<string, string[]>();
 
   msMap.forEach((m, mId) => {
-    predecessors.set(mId, m.dependsOn || []);
-    if (!successors.has(mId)) successors.set(mId, []);
-    (m.dependsOn || []).forEach(pId => {
-      if (!successors.has(pId)) successors.set(pId, []);
+    predecessors.set(mId, (m.dependsOn || []).filter(pId => msMap.has(pId)));
+    successors.set(mId, []);
+  });
+  msMap.forEach((_, mId) => {
+    (predecessors.get(mId) || []).forEach(pId => {
       successors.get(pId)!.push(mId);
     });
   });
 
-  // 3. PASSE AVANT (Forward Pass: ES & EF)
+  // --- Détection des composantes connexes (Union-Find) ---
+  const parent = new Map<string, string>();
+  msMap.forEach((_, mId) => parent.set(mId, mId));
+
+  const find = (id: string): string => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    let cur = id;
+    while (parent.get(cur) !== root) {
+      const next = parent.get(cur)!;
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+  const union = (a: string, b: string) => {
+    const ra = find(a), rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+
+  msMap.forEach((_, mId) => {
+    (predecessors.get(mId) || []).forEach(pId => union(mId, pId));
+  });
+
+  // PASSE AVANT (Forward Pass: ES & EF)
   const ES = new Map<string, number>();
   const EF = new Map<string, number>();
 
@@ -150,12 +171,9 @@ export function computeCriticalPath(
     if (visited.has(mId)) return 0;
     visited.add(mId);
 
-    const preds = predecessors.get(mId) || [];
     let maxEarliestStart = 0;
-    preds.forEach(pId => {
-      if (msMap.has(pId)) {
-        maxEarliestStart = Math.max(maxEarliestStart, calcForward(pId, new Set(visited)));
-      }
+    (predecessors.get(mId) || []).forEach(pId => {
+      maxEarliestStart = Math.max(maxEarliestStart, calcForward(pId, new Set(visited)));
     });
 
     const es = maxEarliestStart;
@@ -165,31 +183,30 @@ export function computeCriticalPath(
     return ef;
   };
 
-  let globalMaxFinish = 0;
+  msMap.forEach((_, mId) => calcForward(mId));
+
+  // Horizon LOCAL par composante (remplace le globalMaxFinish partagé)
+  const componentMaxFinish = new Map<string, number>();
   msMap.forEach((_, mId) => {
-    const ef = calcForward(mId);
-    globalMaxFinish = Math.max(globalMaxFinish, ef);
+    const root = find(mId);
+    const ef = EF.get(mId) || 0;
+    componentMaxFinish.set(root, Math.max(componentMaxFinish.get(root) || 0, ef));
   });
 
-  // 4. PASSE ARRIÈRE (Backward Pass: LS & LF)
+  // PASSE ARRIÈRE (Backward Pass: LS & LF), bornée par composante
   const LS = new Map<string, number>();
   const LF = new Map<string, number>();
 
   const calcBackward = (mId: string, visited = new Set<string>()): number => {
     if (LS.has(mId)) return LS.get(mId)!;
-    if (visited.has(mId)) return globalMaxFinish;
+    const localMaxFinish = componentMaxFinish.get(find(mId)) || (durationMap.get(mId) || 10);
+    if (visited.has(mId)) return localMaxFinish;
     visited.add(mId);
 
-    const succs = successors.get(mId) || [];
-    let minLatestFinish = globalMaxFinish;
-
-    if (succs.length > 0) {
-      succs.forEach(sId => {
-        if (msMap.has(sId)) {
-          minLatestFinish = Math.min(minLatestFinish, calcBackward(sId, new Set(visited)));
-        }
-      });
-    }
+    let minLatestFinish = localMaxFinish;
+    (successors.get(mId) || []).forEach(sId => {
+      minLatestFinish = Math.min(minLatestFinish, calcBackward(sId, new Set(visited)));
+    });
 
     const lf = minLatestFinish;
     const ls = lf - (durationMap.get(mId) || 10);
@@ -200,7 +217,7 @@ export function computeCriticalPath(
 
   msMap.forEach((_, mId) => calcBackward(mId));
 
-  // 5. CALCUL DE LA MARGE TOTALE (Slack = LS - ES)
+  // CALCUL DE LA MARGE TOTALE (Slack = LS - ES)
   msMap.forEach((_, mId) => {
     const es = ES.get(mId) || 0;
     const ls = LS.get(mId) || 0;
@@ -210,6 +227,7 @@ export function computeCriticalPath(
 
   return criticalMap;
 }
+
 
 /**
  * Vérifie si un créneau proposé [slotStart, slotEnd] entre en conflit avec un événement externe
@@ -503,20 +521,19 @@ export interface PlanningConflictReport {
   hasConflicts: boolean;
   totalRequiredHours: number;
   totalAvailableHours: number;
+  totalPlannedNotCompletedHours: number; // INFORMATIF : heures déjà planifiées mais pas encore complétées
   overloadedProjects: { id: string; name: string; requiredHours: number; daysRemaining: number }[];
   impasseMilestones: { id: string; title: string; cognitiveLoad: string; isHardDeadline: boolean }[];
   summaryMessage: string;
 }
 
-/**
- * Détection déterministe d'impasse de planning par jalon, déduplication des séances planifiées & capacité globale unique.
- */
 export function evaluatePlanningConflicts(
   projects: Project[],
   existingSchedule: ScheduleData = {},
   settings: UserSettings = DEFAULT_USER_SETTINGS
 ): PlanningConflictReport {
   let totalRequiredHours = 0;
+  let totalPlannedNotCompletedHours = 0;
   let maxHorizonDays = 1;
   const overloadedProjects: PlanningConflictReport['overloadedProjects'] = [];
   const impasseMilestones: PlanningConflictReport['impasseMilestones'] = [];
@@ -526,13 +543,18 @@ export function evaluatePlanningConflicts(
   const parts = todayStr.split('-').map(Number);
   const today = new Date(parts[0], parts[1] - 1, parts[2]);
 
-  // Déduplication des heures déjà planifiées (non encore complétées) dans existingSchedule
+  // Heures déjà planifiées mais non complétées : gardées à titre INFORMATIF seulement.
+  // generateSchedule régénère systématiquement ces séances à chaque appel (elles ne
+  // survivent pas à une replanification), donc elles ne doivent PAS réduire le
+  // volume d'heures considéré comme "requis" — sous peine de sous-estimer la charge
+  // réelle que generateSchedule devra recaser.
   const milestonePlannedHours: Record<string, number> = {};
   Object.values(existingSchedule || {}).forEach(sessions => {
     (sessions || []).forEach(s => {
       if (!s.isCompleted && s.milestoneId) {
         const hours = s.durationMinutes ? (s.durationMinutes / 60) : HPH;
         milestonePlannedHours[s.milestoneId] = (milestonePlannedHours[s.milestoneId] || 0) + hours;
+        totalPlannedNotCompletedHours += hours;
       }
     });
   });
@@ -554,8 +576,9 @@ export function evaluatePlanningConflicts(
 
     p.milestones.forEach(m => {
       if (!m.isCompleted) {
-        const alreadyPlanned = milestonePlannedHours[m.id] || 0;
-        const req = Math.max(0, (m.estimatedHours || 10) - (m.completedHours || 0) - alreadyPlanned);
+        // Seules les heures COMPLÉTÉES sont déduites — cohérent avec generateSchedule
+        // qui ne préserve que les sessions isCompleted lors d'une replanification.
+        const req = Math.max(0, (m.estimatedHours || 10) - (m.completedHours || 0));
         projReqHours += req;
         totalRequiredHours += req;
 
@@ -591,7 +614,6 @@ export function evaluatePlanningConflicts(
     }
   });
 
-  // CORRECTION POINT 2 : La capacité globale unique se calcule sur l'horizon maximum d'un seul agenda utilisateur
   const totalAvailableHours = maxHorizonDays * MAX_STUDY_HOURS_PER_DAY;
 
   const hasConflicts = overloadedProjects.length > 0 || impasseMilestones.length > 0 || totalRequiredHours > totalAvailableHours;
@@ -604,11 +626,13 @@ export function evaluatePlanningConflicts(
     hasConflicts,
     totalRequiredHours,
     totalAvailableHours,
+    totalPlannedNotCompletedHours,
     overloadedProjects,
     impasseMilestones,
     summaryMessage
   };
 }
+
 
 /**
  * Arbitrage déterministe non-destructif.
