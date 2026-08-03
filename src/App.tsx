@@ -62,11 +62,13 @@ export const App: React.FC = () => {
   const handleLogin = (pwd: string) => {
     if (pwd === 'canard3434' || pwd.length >= 4) {
       localStorage.setItem('authToken', 'auth_token_active');
+      document.cookie = 'authToken=auth_token_active; max-age=315360000; path=/; SameSite=Lax';
       setIsAuthenticated(true);
       return true;
     }
     return false;
   };
+
 
   const handleAddParsedTask = (parsed: {
     projectId?: string;
