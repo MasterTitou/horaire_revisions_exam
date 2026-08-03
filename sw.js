@@ -1,4 +1,4 @@
-const CACHE_NAME = 'revision-planner-v27';
+const CACHE_NAME = 'revision-planner-v28';
 
 
 
@@ -6,6 +6,8 @@ const CACHE_NAME = 'revision-planner-v27';
 const LOCAL_ASSETS = [
   '/',
   '/index.html',
+  '/icons/apple-touch-icon.png',
+  '/icons/favicon.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png'
 ];

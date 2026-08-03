@@ -279,3 +279,58 @@ body {
   background: rgba(14, 132, 120, 0.45);
 }
 
+/* 60 FPS HARDWARE-ACCELERATED MOBILE BOTTOM SHEET & ACCORDION ANIMATIONS */
+.bottom-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 25, 23, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity;
+}
+
+.bottom-sheet-backdrop.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.bottom-sheet-modal {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 101;
+  background: var(--bg-card);
+  border-top-left-radius: 28px;
+  border-top-right-radius: 28px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.18);
+  padding: 1.25rem;
+  max-height: 88vh;
+  overflow-y: auto;
+  transform: translateY(100%);
+  opacity: 0;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+  will-change: transform, opacity;
+}
+
+.bottom-sheet-modal.active {
+  transform: translateY(0%);
+  opacity: 1;
+}
+
+/* HORIZONTAL PILLS SCROLLBAR HIDE */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+
