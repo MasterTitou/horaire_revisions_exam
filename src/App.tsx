@@ -223,6 +223,8 @@ export const App: React.FC = () => {
               chatHistory={chatHistory}
               setChatHistory={setChatHistory}
               authToken="auth_active"
+              gamification={gamification}
+              scheduleData={scheduleData}
             />
           </div>
         )}

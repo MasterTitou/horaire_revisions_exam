@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Project, ChatMessage, ChatThread } from '../../types';
+import { Project, ChatMessage, ChatThread, Gamification, ScheduleData } from '../../types';
 import {
   Send, Bot, Sliders, Zap, ShieldAlert, Cpu, CheckCircle,
   Plus, Trash2, Edit3, MessageSquare, Copy, RotateCcw,
@@ -13,6 +13,8 @@ interface AICoachTabProps {
   setChatHistory: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   authToken: string;
   onUpdateProjects?: (updated: Project[]) => void;
+  gamification?: Gamification;
+  scheduleData?: ScheduleData;
 }
 
 export const AICoachTab: React.FC<AICoachTabProps> = ({
@@ -20,7 +22,9 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
   chatHistory,
   setChatHistory,
   authToken,
-  onUpdateProjects
+  onUpdateProjects,
+  gamification,
+  scheduleData
 }) => {
   // Multi-threads State
   const [threads, setThreads] = useState<ChatThread[]>(() => {
@@ -224,14 +228,67 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
     setLoading(true);
 
     try {
-      let context = `=== CONTEXTE SYSTÈME DE GESTION DE PROJETS UNIVERSEL ===\n`;
-      context += `PROJETS EN COURS (${projects.length}):\n`;
+      // 1. Calcul des Métriques Froides & Factuelles
+      const allMilestones = projects.flatMap(p => p.milestones);
+      const totalMilestones = allMilestones.length;
+      const completedMilestones = allMilestones.filter(m => m.isCompleted).length;
+      const completionRatePct = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0;
+
+      const totalEstimatedHours = allMilestones.reduce((acc, m) => acc + (m.estimatedHours || 0), 0);
+      const totalInitialHours = allMilestones.reduce((acc, m) => acc + (m.initialEstimatedHours || m.estimatedHours || 0), 0);
+      const estimationDeltaRatio = totalInitialHours > 0 ? Math.round(((totalEstimatedHours - totalInitialHours) / totalInitialHours) * 100) : 0;
+
+      const highEffortMs = allMilestones.filter(m => m.cognitiveLoad === 'high');
+      const highHours = highEffortMs.reduce((acc, m) => acc + m.estimatedHours, 0);
+      const highDensityPct = totalEstimatedHours > 0 ? Math.round((highHours / totalEstimatedHours) * 100) : 0;
+
+      // Charge sur les 3 prochains jours (72h)
+      const todayStr = new Date().toISOString().split('T')[0];
+      const in3DaysDate = new Date();
+      in3DaysDate.setDate(in3DaysDate.getDate() + 3);
+      const in3DaysStr = in3DaysDate.toISOString().split('T')[0];
+
+      const upcoming72hHighMs = highEffortMs.filter(m => m.dueDate >= todayStr && m.dueDate <= in3DaysStr);
+      const upcoming72hHighHours = upcoming72hHighMs.reduce((acc, m) => acc + m.estimatedHours, 0);
+
+      const highFactor = gamification?.calibration?.highFactor || 1.25;
+      const mediumFactor = gamification?.calibration?.mediumFactor || 1.10;
+      const lowFactor = gamification?.calibration?.lowFactor || 1.00;
+
+      const pomodorosCompleted = gamification?.pomodorosCompleted || 0;
+      const sessionsCompleted = gamification?.sessionsCompleted || 0;
+      const velocityIndex = gamification?.velocityIndex || 1.0;
+      const streakCount = gamification?.aggregates?.consecutivePunctualMilestones || 0;
+
+      let coldMetricsStr = `=== MÉTRIQUES FROIDES & FACTUELLES DE PERFORMANCE ===\n`;
+      coldMetricsStr += `• Taux de complétion des jalons : ${completedMilestones}/${totalMilestones} (${completionRatePct}%)\n`;
+      coldMetricsStr += `• Volume horaire estimé total : ${totalEstimatedHours}h (Écart moyen vs initial: ${estimationDeltaRatio > 0 ? '+' : ''}${estimationDeltaRatio}%)\n`;
+      coldMetricsStr += `• Facteurs de calibration d'effort : High=${highFactor}x, Medium=${mediumFactor}x, Low=${lowFactor}x\n`;
+      coldMetricsStr += `• Densité de charge Haute (🧠 Stratégie) : ${highHours}h sur ${totalEstimatedHours}h (${highDensityPct}% du total)\n`;
+      coldMetricsStr += `• Charge 72h (3 prochains jours) : ${upcoming72hHighHours}h d'effort Haute Stratégie prévues (${upcoming72hHighMs.length} jalons)\n`;
+      coldMetricsStr += `• Historique & Vélocité : ${sessionsCompleted} sessions achevées, ${pomodorosCompleted} Pomodoros, Indice de vélocité=${velocityIndex}, Série à l'heure=${streakCount}\n`;
+
+      let projectsContext = `PROJETS EN COURS (${projects.length}):\n`;
       projects.forEach(p => {
-        context += `- Projet [${p.code}] ${p.name} (Échéance: ${p.deadline || 'N/A'}, ${p.isHardDeadline ? 'Ferme' : 'Filée'})\n`;
+        projectsContext += `- Projet [${p.code}] ${p.name} (Échéance: ${p.deadline || 'N/A'}, ${p.isHardDeadline ? 'Ferme' : 'Filée'})\n`;
         p.milestones.forEach(m => {
-          context += `   • Jalon WBS: ${m.title} | ${m.estimatedHours}h | Effort: ${m.cognitiveLoad}\n`;
+          projectsContext += `   • Jalon WBS: ${m.title} | ${m.estimatedHours}h | Effort: ${m.cognitiveLoad} | Complété: ${m.isCompleted ? 'Oui' : 'Non'}\n`;
         });
       });
+
+      const systemInstructionText = `Tu es un méta-analyste de performance et coach expert en gestion de projets et révisions.
+Ton rôle est d'analyser la situation de l'utilisateur et d'apporter des diagnostics précis, des conseils stratégiques ET des encouragements motivants.
+
+REGLES ABSOLUES DE COMMUNICATION :
+1. LES CONSEILS ET LES ENCOURAGEMENTS SONT TRÈS BIENVENUS ET APPRÉCIÉS, mais ils doivent IMPÉRATIVEMENT s'appuyer sur les métriques froides et factuelles ci-dessous (taux de complétion %, écarts d'estimation, densité de charge 72h, vélocité).
+   - Exemple de BON CONSEIL / ENCOURAGEMENT : "Excellente régularité (${sessionsCompleted} sessions achevées) ! Attention toutefois sur les 3 prochains jours : tu as ${upcoming72hHighHours}h de charge Haute Stratégie (densité ${highDensityPct}%). Avec ton facteur de calibration de ${highFactor}x, prévois des plages de repos."
+   - Exemple à ÉVITER : "Bravo tu avances bien, n'oublie pas de te reposer !" (Trop générique, sans chiffres ni diagnostic factuel).
+2. Diagnostique clairement les biais d'estimation, préviens les risques de surchauffe cognitive avant l'échec, et célèbre les victoires réelles mesurées par les chiffres.
+3. Adopte un ton professionnel, bienveillant, clair et synthétique (utilisant puces et gras).
+
+${coldMetricsStr}
+
+${projectsContext}`;
 
       // Filtrage des messages système/erreur pour ne garder que le vrai dialogue valide
       const validHistory = updatedMessages.filter(m => !m.content.startsWith('⚠️') && !m.content.startsWith('⚡'));
@@ -260,7 +317,7 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
           'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: `Tu es un coach universel expert en gestion de projets tout domaine. Tu réponds avec bienveillance et rigueur.\n\n${context}` }] },
+          systemInstruction: { parts: [{ text: systemInstructionText }] },
           contents: formattedContents
         })
       });
