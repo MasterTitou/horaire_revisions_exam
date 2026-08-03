@@ -138,6 +138,11 @@ export function useProjectStore() {
     const extEvts = (d.externalEvents && Array.isArray(d.externalEvents)) ? d.externalEvents : [];
     const settings = d.userSettings || DEFAULT_USER_SETTINGS;
 
+    const rawFeeds = d.icalFeeds || d.userSettings?.icalFeeds;
+    if (Array.isArray(rawFeeds) && rawFeeds.length > 0) {
+      localStorage.setItem('imported_ical_feeds', JSON.stringify(rawFeeds));
+    }
+
     if (d.externalEvents && Array.isArray(d.externalEvents)) {
       setExternalEventsState(d.externalEvents);
     }
@@ -177,11 +182,11 @@ export function useProjectStore() {
 
     // 2. Fetch from Cloud Redis API if authenticated
     const token = localStorage.getItem('authToken');
-    if (token) {
+    if (token || isAuthenticated) {
       setSyncStatus('loading');
       fetch('/api/load', {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token || 'auth_token_active'}`
         }
       })
         .then(res => {
@@ -193,6 +198,35 @@ export function useProjectStore() {
             applyStatePayload(cloudData);
             localStorage.setItem('revisionCalendarData', JSON.stringify(cloudData));
             localStorage.setItem('horaire_revisions_backup', JSON.stringify(cloudData));
+
+            // Rafraîchir immédiatement les flux iCal distants après synchronisation cloud
+            const rawFeeds = cloudData.icalFeeds || cloudData.userSettings?.icalFeeds;
+            if (Array.isArray(rawFeeds) && rawFeeds.length > 0) {
+              rawFeeds.forEach((feed: any) => {
+                if (feed.url) {
+                  fetch('/api/calendar/ical', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ icalUrl: feed.url })
+                  })
+                    .then(r => r.json())
+                    .then(data => {
+                      if (data.success && data.events) {
+                        const tagged = data.events.map((ev: any) => ({
+                          ...ev,
+                          integrationId: feed.id,
+                          title: `[${feed.name}] ${ev.title}`
+                        }));
+                        setExternalEventsState(prev => [
+                          ...prev.filter(e => e.integrationId !== feed.id),
+                          ...tagged
+                        ]);
+                      }
+                    })
+                    .catch(e => console.error(`iCal auto-refresh err (${feed.name}):`, e.message));
+                }
+              });
+            }
           }
           setSyncStatus('synced');
         })
@@ -202,7 +236,7 @@ export function useProjectStore() {
         });
     }
 
-    // 3. Rafraîchissement automatique en arrière-plan de tous les flux iCal importés (ex: École)
+    // 3. Rafraîchissement automatique en arrière-plan des flux iCal locaux
     const savedFeeds = localStorage.getItem('imported_ical_feeds');
     if (savedFeeds) {
       try {
@@ -237,7 +271,7 @@ export function useProjectStore() {
         console.error('Error parsing iCal feeds for auto-refresh:', err);
       }
     }
-  }, [applyStatePayload]);
+  }, [applyStatePayload, isAuthenticated]);
 
   // Dual Save: 1. LocalStorage, 2. Cloud Redis API (/api/save)
   const saveAll = useCallback((
@@ -250,6 +284,14 @@ export function useProjectStore() {
     newSettings?: UserSettings,
     newChatHistory?: ChatMessage[]
   ) => {
+    const savedFeedsRaw = localStorage.getItem('imported_ical_feeds');
+    const localFeeds = savedFeedsRaw ? JSON.parse(savedFeedsRaw) : [];
+    const currentSettings = newSettings !== undefined ? newSettings : userSettings;
+    const mergedSettings = {
+      ...currentSettings,
+      icalFeeds: currentSettings.icalFeeds || localFeeds
+    };
+
     const payload = {
       projects: newProjects,
       scheduleData: newSchedule,
@@ -258,8 +300,10 @@ export function useProjectStore() {
       chatHistory: newChatHistory !== undefined ? newChatHistory : chatHistory,
       isDarkMode: newDark,
       externalEvents: newEvents !== undefined ? newEvents : externalEvents,
-      userSettings: newSettings !== undefined ? newSettings : userSettings
+      userSettings: mergedSettings,
+      icalFeeds: mergedSettings.icalFeeds
     };
+
 
     latestPayloadRef.current = payload;
 

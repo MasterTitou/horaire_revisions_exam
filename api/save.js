@@ -131,8 +131,10 @@ export default async function handler(req, res) {
         chatHistory: payload.chatHistory || [],
         externalEvents: payload.externalEvents || [],
         userSettings: payload.userSettings || null,
+        icalFeeds: payload.icalFeeds || payload.userSettings?.icalFeeds || [],
         isDarkMode: !!payload.isDarkMode
       });
+
 
       const incomingUpdatedAt = payload.updatedAt || new Date().toISOString();
 

@@ -33,26 +33,40 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
   const [icalUrl, setIcalUrl] = useState('');
   const [isLoadingICal, setIsLoadingICal] = useState(false);
 
-  // Agendas iCal Importés conservés en mémoire
+  // Agendas iCal Importés conservés en mémoire et synchronisés dans le Cloud
   const [importedFeeds, setImportedFeeds] = useState<ICalFeed[]>(() => {
+    if (userSettings?.icalFeeds && userSettings.icalFeeds.length > 0) {
+      return userSettings.icalFeeds;
+    }
     const saved = localStorage.getItem('imported_ical_feeds');
     return saved ? JSON.parse(saved) : [];
   });
 
   const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(() => {
-    return !!localStorage.getItem('google_access_token');
+    return !!(userSettings?.googleAccessToken || localStorage.getItem('google_access_token'));
   });
 
-  // Formulaire d'événement manuel indisponible
+  // Formulaire d'événement manuel
   const [manualTitle, setManualTitle] = useState('');
   const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
   const [manualStartTime, setManualStartTime] = useState('14:00');
   const [manualEndTime, setManualEndTime] = useState('15:00');
 
-  // Sauvegarde de la liste des flux iCal importés
+  // Conserver le state local en synchro avec userSettings.icalFeeds lors de chargements distants
+
+  useEffect(() => {
+    if (userSettings?.icalFeeds) {
+      setImportedFeeds(userSettings.icalFeeds);
+    }
+  }, [userSettings?.icalFeeds]);
+
+  // Sauvegarde de la liste des flux iCal importés dans localStorage ET userSettings (Cloud Sync)
   useEffect(() => {
     localStorage.setItem('imported_ical_feeds', JSON.stringify(importedFeeds));
-  }, [importedFeeds]);
+    if (JSON.stringify(userSettings?.icalFeeds || []) !== JSON.stringify(importedFeeds)) {
+      onUpdateSettings({ icalFeeds: importedFeeds });
+    }
+  }, [importedFeeds, onUpdateSettings, userSettings?.icalFeeds]);
 
   // Écoute de l'événement OAuth Google Success envoyé par la fenêtre popup
   useEffect(() => {
@@ -61,6 +75,8 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
         const token = event.data.token;
         localStorage.setItem('google_access_token', token);
         setIsGoogleConnected(true);
+        onUpdateSettings({ googleConnected: true, googleAccessToken: token });
+
 
         // Récupérer automatiquement les événements Google Calendar
         fetch('/api/calendar/google?action=fetch_events', {

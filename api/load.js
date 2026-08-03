@@ -110,7 +110,9 @@ export default async function handler(req, res) {
         chatHistory: metaData.chatHistory || [],
         externalEvents: metaData.externalEvents || [],
         userSettings: metaData.userSettings || null,
+        icalFeeds: metaData.icalFeeds || metaData.userSettings?.icalFeeds || [],
         isDarkMode: !!metaData.isDarkMode,
+
         source: 'PostgreSQL Relational DB'
       });
     } catch (pgError) {

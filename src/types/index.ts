@@ -52,6 +52,14 @@ export interface ExternalEvent {
   source: 'google' | 'ical' | 'manual';
 }
 
+export interface ICalFeed {
+  id: string;
+  name: string;
+  url: string;
+  eventCount: number;
+  addedAt: string;
+}
+
 export interface UserSettings {
   timezone: string; // e.g. 'Europe/Paris'
   bufferMinutesBefore: number; // Default 15
@@ -59,7 +67,11 @@ export interface UserSettings {
   dayStartHour: number;        // Default 8 (08:00)
   dayEndHour: number;          // Default 23 (23:00)
   slotDurationMinutes: number; // Default 60
+  icalFeeds?: ICalFeed[];
+  googleConnected?: boolean;
+  googleAccessToken?: string;
 }
+
 
 export interface CalendarIntegration {
   id: string;
