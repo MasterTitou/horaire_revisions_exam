@@ -155,42 +155,25 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
     onSetExternalEvents(externalEvents.filter(ev => ev.integrationId !== feedId));
   };
 
-  const [customClientId, setCustomClientId] = useState<string>(() => userSettings?.googleClientId || localStorage.getItem('google_client_id') || '');
-  const [showClientIdInput, setShowClientIdInput] = useState<boolean>(false);
-
   const handleConnectGoogle = async () => {
-    let authUrl = '';
     try {
       const res = await fetch('/api/calendar/google?action=auth_url');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) authUrl = data.url;
+      const data = await res.json();
+      if (data.url) {
+        window.open(data.url, '_blank', 'width=500,height=600');
+      } else {
+        alert(data.message || 'Pour utiliser OAuth2 Google automatique, ajoutez GOOGLE_CLIENT_ID dans Vercel.\n\nSinon, utilisez simplement le bouton 📅 1-clic direct à côté de chaque créneau !');
       }
     } catch (e) {
-      console.warn('API auth_url failed, using client fallback:', e);
+      alert('Utilisez le bouton 📅 1-clic direct sur chaque créneau du planning pour exporter vers Google Calendar sans configuration.');
     }
-
-    if (!authUrl) {
-      const activeClientId = customClientId.trim() || userSettings?.googleClientId || localStorage.getItem('google_client_id');
-      if (activeClientId) {
-        const redirectUri = window.location.origin + '/api/calendar/google?action=callback';
-        const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly');
-        authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${activeClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&access_type=offline&prompt=consent`;
-      } else {
-        setShowClientIdInput(true);
-        alert('⚠️ Clé GOOGLE_CLIENT_ID absente sur Vercel.\n\nVeuillez saisir votre Google Client ID dans le champ ci-dessous pour vous connecter.');
-        return;
-      }
-    }
-
-    window.open(authUrl, '_blank', 'width=520,height=650');
   };
 
   const handleDisconnectGoogle = () => {
     localStorage.removeItem('google_access_token');
     setIsGoogleConnected(false);
     onUpdateSettings({ googleConnected: false, googleAccessToken: undefined });
-    // I4: Purger les événements Google de la liste d'événements externes
+    // Purger les événements Google de la liste d'événements externes
     const nonGoogleEvents = externalEvents.filter(ev => !ev.id?.startsWith('gcal_') && ev.source !== 'google');
     onSetExternalEvents(nonGoogleEvents);
   };
@@ -267,32 +250,12 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
                     </button>
                   </div>
                 ) : (
-                  <div className="mt-4 space-y-2">
-                    <button
-                      onClick={handleConnectGoogle}
-                      className="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg transition"
-                    >
-                      Connecter Google Calendar
-                    </button>
-
-                    {showClientIdInput && (
-                      <div className="pt-2 border-t border-slate-700/60 space-y-1.5">
-                        <label className="text-[10px] text-amber-400 font-bold block">Google Client ID :</label>
-                        <input
-                          type="text"
-                          placeholder="xxxxxx.apps.googleusercontent.com"
-                          value={customClientId}
-                          onChange={e => {
-                            const val = e.target.value;
-                            setCustomClientId(val);
-                            localStorage.setItem('google_client_id', val);
-                            onUpdateSettings({ googleClientId: val });
-                          }}
-                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
-                        />
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    onClick={handleConnectGoogle}
+                    className="mt-4 w-full py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg transition"
+                  >
+                    Connecter Google Calendar
+                  </button>
                 )}
               </div>
 
