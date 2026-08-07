@@ -13,42 +13,28 @@ function isPostgresConfigured() {
 async function storeGoogleTokens(userKey, accessToken, refreshToken) {
   if (!isPostgresConfigured()) return;
   try {
-    await sql`
-      INSERT INTO calendar_integrations (user_key, provider, access_token, refresh_token, last_synced_at)
-      VALUES (${userKey}, 'google', ${accessToken}, ${refreshToken}, NOW())
-      ON CONFLICT ON CONSTRAINT calendar_integrations_user_provider_uq
-      DO UPDATE SET
-        access_token = EXCLUDED.access_token,
-        refresh_token = CASE
-          WHEN EXCLUDED.refresh_token IS NOT NULL AND EXCLUDED.refresh_token != ''
-          THEN EXCLUDED.refresh_token
-          ELSE calendar_integrations.refresh_token
-        END,
-        last_synced_at = NOW();
-    `;
-  } catch (e) {
-    // Fallback: try without unique constraint (first run)
-    try {
-      const existing = await sql`
-        SELECT id FROM calendar_integrations WHERE user_key = ${userKey} AND provider = 'google' LIMIT 1;
+    if (refreshToken) {
+      await sql`
+        INSERT INTO calendar_integrations (user_key, provider, access_token, refresh_token, last_synced_at)
+        VALUES (${userKey}, 'google', ${accessToken}, ${refreshToken}, NOW())
+        ON CONFLICT (user_key, provider)
+        DO UPDATE SET
+          access_token = EXCLUDED.access_token,
+          refresh_token = EXCLUDED.refresh_token,
+          last_synced_at = NOW();
       `;
-      if (existing.rows.length > 0) {
-        await sql`
-          UPDATE calendar_integrations
-          SET access_token = ${accessToken},
-              refresh_token = CASE WHEN ${refreshToken} IS NOT NULL AND ${refreshToken} != '' THEN ${refreshToken} ELSE refresh_token END,
-              last_synced_at = NOW()
-          WHERE user_key = ${userKey} AND provider = 'google';
-        `;
-      } else {
-        await sql`
-          INSERT INTO calendar_integrations (user_key, provider, access_token, refresh_token, last_synced_at)
-          VALUES (${userKey}, 'google', ${accessToken}, ${refreshToken || null}, NOW());
-        `;
-      }
-    } catch (e2) {
-      console.error('[Google Auth] Erreur stockage token en BDD:', e2.message);
+    } else {
+      await sql`
+        INSERT INTO calendar_integrations (user_key, provider, access_token, last_synced_at)
+        VALUES (${userKey}, 'google', ${accessToken}, NOW())
+        ON CONFLICT (user_key, provider)
+        DO UPDATE SET
+          access_token = EXCLUDED.access_token,
+          last_synced_at = NOW();
+      `;
     }
+  } catch (e) {
+    console.error('[Google Auth] Erreur stockage token en BDD:', e.message);
   }
 }
 
