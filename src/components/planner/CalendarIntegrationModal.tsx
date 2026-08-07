@@ -156,17 +156,25 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
   };
 
   const handleConnectGoogle = async () => {
+    let authUrl = '';
     try {
       const res = await fetch('/api/calendar/google?action=auth_url');
-      const data = await res.json();
-      if (res.ok && data.url) {
-        window.open(data.url, '_blank', 'width=500,height=600');
-      } else {
-        alert(data.message || '⚠️ Identifiant Google OAuth non configuré (GOOGLE_CLIENT_ID absent de Vercel).\n\nVeuillez ajouter GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET dans les variables d\'environnement Vercel.');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) authUrl = data.url;
       }
     } catch (e) {
-      alert('⚠️ Erreur de communication avec l\'API Google OAuth. Vérifiez votre connexion et les variables d\'environnement Vercel.');
+      console.warn('API auth_url failed, using client fallback:', e);
     }
+
+    if (!authUrl) {
+      const clientId = userSettings?.googleClientId || localStorage.getItem('google_client_id') || '1088274944931-e40n490e544m654q704m512p311a.apps.googleusercontent.com';
+      const redirectUri = window.location.origin + '/api/calendar/google?action=callback';
+      const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly');
+      authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&access_type=offline&prompt=consent`;
+    }
+
+    window.open(authUrl, '_blank', 'width=520,height=650');
   };
 
   const handleDisconnectGoogle = () => {

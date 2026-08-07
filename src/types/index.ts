@@ -70,6 +70,7 @@ export interface UserSettings {
   icalFeeds?: ICalFeed[];
   googleConnected?: boolean;
   googleAccessToken?: string;
+  googleClientId?: string;
 }
 
 

@@ -186,18 +186,14 @@ export default async function handler(req, res) {
 
   // ─── AUTH URL ───
   if (req.method === 'GET' && action === 'auth_url') {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      return res.status(400).json({
-        error: 'GOOGLE_CLIENT_ID non configuré',
-        message: 'Veuillez ajouter la variable GOOGLE_CLIENT_ID dans Vercel ou utiliser le bouton 📅 1-clic direct sur les créneaux.'
-      });
-    }
+    const clientId = process.env.GOOGLE_CLIENT_ID || '1088274944931-e40n490e544m654q704m512p311a.apps.googleusercontent.com';
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'horaire-revisions-exam.vercel.app';
+    const proto = req.headers['x-forwarded-proto'] || 'https';
+    const defaultRedirectUri = `${proto}://${host}/api/calendar/google?action=callback`;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || defaultRedirectUri;
 
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://horaire-revisions-exam.vercel.app/api/calendar/google?action=callback';
     const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly');
-
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&access_type=offline&prompt=consent`;
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&access_type=offline&prompt=consent`;
 
     return res.status(200).json({ url: authUrl });
   }
@@ -205,9 +201,12 @@ export default async function handler(req, res) {
   // ─── OAUTH2 CALLBACK ───
   if (req.method === 'GET' && action === 'callback') {
     const { code } = req.query;
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://horaire-revisions-exam.vercel.app/api/calendar/google?action=callback';
+    const clientId = process.env.GOOGLE_CLIENT_ID || '1088274944931-e40n490e544m654q704m512p311a.apps.googleusercontent.com';
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'horaire-revisions-exam.vercel.app';
+    const proto = req.headers['x-forwarded-proto'] || 'https';
+    const defaultRedirectUri = `${proto}://${host}/api/calendar/google?action=callback`;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || defaultRedirectUri;
 
     if (!code || !clientId || !clientSecret) {
       return res.status(400).send('Variables GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET requises dans Vercel.');
