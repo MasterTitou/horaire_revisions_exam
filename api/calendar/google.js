@@ -186,7 +186,15 @@ export default async function handler(req, res) {
 
   // ─── AUTH URL ───
   if (req.method === 'GET' && action === 'auth_url') {
-    const clientId = process.env.GOOGLE_CLIENT_ID || '1088274944931-e40n490e544m654q704m512p311a.apps.googleusercontent.com';
+    const clientId = process.env.GOOGLE_CLIENT_ID || req.query.client_id;
+    if (!clientId) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_CLIENT_ID',
+        message: 'GOOGLE_CLIENT_ID non configuré sur le serveur Vercel.'
+      });
+    }
+
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'horaire-revisions-exam.vercel.app';
     const proto = req.headers['x-forwarded-proto'] || 'https';
     const defaultRedirectUri = `${proto}://${host}/api/calendar/google?action=callback`;
@@ -201,8 +209,8 @@ export default async function handler(req, res) {
   // ─── OAUTH2 CALLBACK ───
   if (req.method === 'GET' && action === 'callback') {
     const { code } = req.query;
-    const clientId = process.env.GOOGLE_CLIENT_ID || '1088274944931-e40n490e544m654q704m512p311a.apps.googleusercontent.com';
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+    const clientId = process.env.GOOGLE_CLIENT_ID || req.query.client_id;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'horaire-revisions-exam.vercel.app';
     const proto = req.headers['x-forwarded-proto'] || 'https';
     const defaultRedirectUri = `${proto}://${host}/api/calendar/google?action=callback`;
