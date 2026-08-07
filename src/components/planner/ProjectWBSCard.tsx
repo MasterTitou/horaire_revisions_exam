@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Project, CognitiveLoad } from '../../types';
 import { Layers, Trash2, X, Link, Flame, ChevronDown, ChevronUp, Plus, Calendar, Clock } from 'lucide-react';
 
@@ -349,208 +350,214 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
       </div>
 
       {/* iOS BOTTOM SHEET MODAL — Nouveau Projet */}
-      <>
-        <div
-          className={`bottom-sheet-backdrop ${showProjModal ? 'active' : ''}`}
-          onClick={() => setShowProjModal(false)}
-        />
-        <div className={`bottom-sheet-modal ${showProjModal ? 'active' : ''}`}>
-          <div className="w-12 h-1.5 bg-black/15 dark:bg-white/20 rounded-full mx-auto mb-4"></div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text)' }}>
-              <Layers className="w-5 h-5" style={{ color: 'var(--terra)' }} />
-              Nouveau Projet Universel
-            </h3>
-            <button
-              onClick={() => setShowProjModal(false)}
-              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/5"
-              style={{ color: 'var(--muted)' }}
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+      {typeof document !== 'undefined' && createPortal(
+        <>
+          <div
+            className={`bottom-sheet-backdrop ${showProjModal ? 'active' : ''}`}
+            onClick={() => setShowProjModal(false)}
+          />
+          <div className={`bottom-sheet-modal ${showProjModal ? 'active' : ''}`}>
+            <div className="w-12 h-1.5 bg-black/15 dark:bg-white/20 rounded-full mx-auto mb-4"></div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text)' }}>
+                <Layers className="w-5 h-5" style={{ color: 'var(--terra)' }} />
+                Nouveau Projet Universel
+              </h3>
+              <button
+                onClick={() => setShowProjModal(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/5"
+                style={{ color: 'var(--muted)' }}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-          <form onSubmit={handleCreateProject} className="space-y-4">
-            <div className="grid grid-cols-3 gap-2">
-              <div className="col-span-2">
-                <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Nom du Projet</label>
+            <form onSubmit={handleCreateProject} className="space-y-4">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Nom du Projet</label>
+                  <input
+                    type="text"
+                    value={projName}
+                    onChange={e => setProjName(e.target.value)}
+                    placeholder="ex: Potager Bio, Financement"
+                    className="inp text-xs h-11"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Code (3-4 lettres)</label>
+                  <input
+                    type="text"
+                    value={projCode}
+                    onChange={e => setProjCode(e.target.value)}
+                    placeholder="AGRI"
+                    className="inp text-xs uppercase h-11"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Date de Début</label>
+                  <input
+                    type="date"
+                    value={projStartDate}
+                    onChange={e => setProjStartDate(e.target.value)}
+                    className="inp text-xs h-11"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Échéance Globale</label>
+                  <input
+                    type="date"
+                    value={projDeadline}
+                    onChange={e => setProjDeadline(e.target.value)}
+                    className="inp text-xs h-11"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Type d'Échéance</label>
+                <select
+                  value={projType}
+                  onChange={e => setProjType(e.target.value as 'hard' | 'soft')}
+                  className="inp text-xs font-bold h-11"
+                >
+                  <option value="hard">🔴 Ferme (Impérative - ex: examen, date limite de dépôt)</option>
+                  <option value="soft">🔵 Filée (Souple - ex: objectif personnel)</option>
+                </select>
+              </div>
+
+              <button type="submit" className="btn-main w-full text-sm h-12 font-extrabold mt-2 flex items-center justify-center gap-2">
+                <Plus className="w-5 h-5" />
+                Créer le Projet
+              </button>
+            </form>
+          </div>
+        </>,
+        document.body
+      )}
+
+      {/* iOS BOTTOM SHEET MODAL — Nouveau Jalon WBS */}
+      {typeof document !== 'undefined' && createPortal(
+        <>
+          <div
+            className={`bottom-sheet-backdrop ${activeProjForMs ? 'active' : ''}`}
+            onClick={() => setActiveProjForMs(null)}
+          />
+          <div className={`bottom-sheet-modal ${activeProjForMs ? 'active' : ''}`}>
+            <div className="w-12 h-1.5 bg-black/15 dark:bg-white/20 rounded-full mx-auto mb-4"></div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text)' }}>
+                  <Plus className="w-5 h-5" style={{ color: 'var(--terra)' }} />
+                  Ajouter un Jalon WBS
+                </h3>
+                <p className="text-xs font-bold" style={{ color: 'var(--terra)' }}>
+                  Projet : {activeProjForMs?.name} ({activeProjForMs?.code})
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveProjForMs(null)}
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/5"
+                style={{ color: 'var(--muted)' }}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateMilestone} className="space-y-4">
+              <div>
+                <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Intitulé du Jalon</label>
                 <input
                   type="text"
-                  value={projName}
-                  onChange={e => setProjName(e.target.value)}
-                  placeholder="ex: Potager Bio, Financement"
+                  value={msTitle}
+                  onChange={e => setMsTitle(e.target.value)}
+                  placeholder="ex: Système d'irrigation, Levée de fonds Série A"
                   className="inp text-xs h-11"
                   required
                 />
               </div>
-              <div>
-                <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Code (3-4 lettres)</label>
-                <input
-                  type="text"
-                  value={projCode}
-                  onChange={e => setProjCode(e.target.value)}
-                  placeholder="AGRI"
-                  className="inp text-xs uppercase h-11"
-                />
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Date Début</label>
+                  <input
+                    type="date"
+                    value={msStartDate}
+                    onChange={e => setMsStartDate(e.target.value)}
+                    className="inp text-xs h-11"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Date Échéance Jalon</label>
+                  <input
+                    type="date"
+                    value={msDate}
+                    onChange={e => setMsDate(e.target.value)}
+                    className="inp text-xs h-11"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Date de Début</label>
-                <input
-                  type="date"
-                  value={projStartDate}
-                  onChange={e => setProjStartDate(e.target.value)}
-                  className="inp text-xs h-11"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Charge Estimée (heures)</label>
+                  <input
+                    type="number"
+                    value={msHours}
+                    onChange={e => setMsHours(parseInt(e.target.value) || 10)}
+                    min="1"
+                    max="200"
+                    className="inp text-xs font-bold h-11"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Niveau d'Effort Requis</label>
+                  <select
+                    value={msCognitive}
+                    onChange={e => setMsCognitive(e.target.value as CognitiveLoad)}
+                    className="inp text-xs font-bold h-11"
+                  >
+                    <option value="high">🧠 Stratégie</option>
+                    <option value="medium">⚙️ Exécution</option>
+                    <option value="low">📝 Logistique</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Échéance Globale</label>
-                <input
-                  type="date"
-                  value={projDeadline}
-                  onChange={e => setProjDeadline(e.target.value)}
-                  className="inp text-xs h-11"
-                />
-              </div>
-            </div>
 
-            <div>
-              <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Type d'Échéance</label>
-              <select
-                value={projType}
-                onChange={e => setProjType(e.target.value as 'hard' | 'soft')}
-                className="inp text-xs font-bold h-11"
-              >
-                <option value="hard">🔴 Ferme (Impérative - ex: examen, date limite de dépôt)</option>
-                <option value="soft">🔵 Filée (Souple - ex: objectif personnel)</option>
-              </select>
-            </div>
+              {/* Séquençage / Dépendance DAG */}
+              {activeProjForMs && activeProjForMs.milestones.length > 0 && (
+                <div>
+                  <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>
+                    🔗 Dépendance obligatoire (Séquençage DAG) :
+                  </label>
+                  <select
+                    value={selectedParentId}
+                    onChange={e => setSelectedParentId(e.target.value)}
+                    className="inp text-xs font-bold h-11"
+                  >
+                    <option value="">Aucune (Démarre immédiatement)</option>
+                    {activeProjForMs.milestones.map(m => (
+                      <option key={m.id} value={m.id}>
+                        🔒 Après : {m.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-            <button type="submit" className="btn-main w-full text-sm h-12 font-extrabold mt-2 flex items-center justify-center gap-2">
-              <Plus className="w-5 h-5" />
-              Créer le Projet
-            </button>
-          </form>
-        </div>
-      </>
-
-      {/* iOS BOTTOM SHEET MODAL — Nouveau Jalon WBS */}
-      <>
-        <div
-          className={`bottom-sheet-backdrop ${activeProjForMs ? 'active' : ''}`}
-          onClick={() => setActiveProjForMs(null)}
-        />
-        <div className={`bottom-sheet-modal ${activeProjForMs ? 'active' : ''}`}>
-          <div className="w-12 h-1.5 bg-black/15 dark:bg-white/20 rounded-full mx-auto mb-4"></div>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text)' }}>
-                <Plus className="w-5 h-5" style={{ color: 'var(--terra)' }} />
-                Ajouter un Jalon WBS
-              </h3>
-              <p className="text-xs font-bold" style={{ color: 'var(--terra)' }}>
-                Projet : {activeProjForMs?.name} ({activeProjForMs?.code})
-              </p>
-            </div>
-            <button
-              onClick={() => setActiveProjForMs(null)}
-              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/5"
-              style={{ color: 'var(--muted)' }}
-            >
-              <X className="w-5 h-5" />
-            </button>
+              <button type="submit" className="btn-main w-full text-sm h-12 font-extrabold mt-2 flex items-center justify-center gap-2">
+                <Plus className="w-5 h-5" />
+                Enregistrer le Jalon
+              </button>
+            </form>
           </div>
-
-          <form onSubmit={handleCreateMilestone} className="space-y-4">
-            <div>
-              <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Intitulé du Jalon</label>
-              <input
-                type="text"
-                value={msTitle}
-                onChange={e => setMsTitle(e.target.value)}
-                placeholder="ex: Système d'irrigation, Levée de fonds Série A"
-                className="inp text-xs h-11"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Date Début</label>
-                <input
-                  type="date"
-                  value={msStartDate}
-                  onChange={e => setMsStartDate(e.target.value)}
-                  className="inp text-xs h-11"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Date Échéance Jalon</label>
-                <input
-                  type="date"
-                  value={msDate}
-                  onChange={e => setMsDate(e.target.value)}
-                  className="inp text-xs h-11"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Charge Estimée (heures)</label>
-                <input
-                  type="number"
-                  value={msHours}
-                  onChange={e => setMsHours(parseInt(e.target.value) || 10)}
-                  min="1"
-                  max="200"
-                  className="inp text-xs font-bold h-11"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>Niveau d'Effort Requis</label>
-                <select
-                  value={msCognitive}
-                  onChange={e => setMsCognitive(e.target.value as CognitiveLoad)}
-                  className="inp text-xs font-bold h-11"
-                >
-                  <option value="high">🧠 Stratégie</option>
-                  <option value="medium">⚙️ Exécution</option>
-                  <option value="low">📝 Logistique</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Séquençage / Dépendance DAG */}
-            {activeProjForMs && activeProjForMs.milestones.length > 0 && (
-              <div>
-                <label className="text-xs font-extrabold block mb-1" style={{ color: 'var(--muted)' }}>
-                  🔗 Dépendance obligatoire (Séquençage DAG) :
-                </label>
-                <select
-                  value={selectedParentId}
-                  onChange={e => setSelectedParentId(e.target.value)}
-                  className="inp text-xs font-bold h-11"
-                >
-                  <option value="">Aucune (Démarre immédiatement)</option>
-                  {activeProjForMs.milestones.map(m => (
-                    <option key={m.id} value={m.id}>
-                      🔒 Après : {m.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <button type="submit" className="btn-main w-full text-sm h-12 font-extrabold mt-2 flex items-center justify-center gap-2">
-              <Plus className="w-5 h-5" />
-              Enregistrer le Jalon
-            </button>
-          </form>
-        </div>
-      </>
+        </>,
+        document.body
+      )}
     </div>
   );
 };
