@@ -95,8 +95,11 @@ export const QuickTaskParserModal: React.FC<QuickTaskParserModalProps> = ({
         setQuotaInfo(data.quotaUsage);
       }
 
-      if (projects.length > 0) {
-        setSelectedProjectId(projects[0].id);
+      const matchingProj = projects.find(p => p.name.toLowerCase() === (data.data.project_name || '').toLowerCase());
+      if (matchingProj) {
+        setSelectedProjectId(matchingProj.id);
+      } else {
+        setSelectedProjectId('');
       }
     } catch (err) {
       console.error('Erreur QuickTaskParserModal:', err);
@@ -242,22 +245,23 @@ export const QuickTaskParserModal: React.FC<QuickTaskParserModalProps> = ({
             </div>
 
             {/* Choix du projet de destination */}
-            {projects.length > 0 && (
-              <div>
-                <label className="block text-xs font-bold mb-1">Rattacher au projet :</label>
-                <select
-                  value={selectedProjectId}
-                  onChange={e => setSelectedProjectId(e.target.value)}
-                  className="inp text-xs w-full p-2.5 rounded-xl border"
-                >
-                  {projects.map(p => (
-                    <option key={p.id} value={p.id}>
-                      [{p.code}] {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div>
+              <label className="block text-xs font-bold mb-1">Rattacher au projet :</label>
+              <select
+                value={selectedProjectId}
+                onChange={e => setSelectedProjectId(e.target.value)}
+                className="inp text-xs w-full p-2.5 rounded-xl border font-medium"
+              >
+                <option value="">
+                  ✨ + Créer un nouveau projet [{parsedResult.project_name || 'Projet Principal'}]
+                </option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>
+                    📁 [{p.code}] {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button

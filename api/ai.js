@@ -119,9 +119,6 @@ export default async function handler(req, res) {
 
       let parsedRaw = {};
       if (apiKey) {
-        const modelName = AI_MODELS.FAST_LITE;
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-
         const parseSystemInstruction = `Tu es un assistant expert en parsing sémantique de projets et révisions.
 CONTEXTE TEMPOREL OBLIGATOIRE : Nous sommes le ${dayName} ${todayStr} (Année ${now.getFullYear()}).
 
@@ -144,38 +141,53 @@ Extrais un objet JSON strict avec :
 - is_hard_deadline (boolean)
 - subtasks (array of string)`;
 
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: parseSystemInstruction }] },
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
-          })
-        });
+        const candidateModels = Array.from(new Set([
+          AI_MODELS.FAST_LITE,
+          'gemini-2.5-flash',
+          'gemini-1.5-flash',
+          'gemini-2.0-flash'
+        ]));
 
+        for (const modelName of candidateModels) {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+          try {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: parseSystemInstruction }] },
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+              })
+            });
 
-        if (response.ok) {
-          const data = await response.json().catch(() => ({}));
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (data.usageMetadata?.totalTokenCount) {
-            await recordTokensUsage(userKey, todayStr, 'lite', data.usageMetadata.totalTokenCount);
-          }
-          if (text) {
-            try {
-              const cleanedText = text.replace(/```json|```/gi, '').trim();
-              parsedRaw = JSON.parse(cleanedText);
-            } catch (e) {
-              try {
-                const match = text.match(/\{[\s\S]*\}/);
-                if (match) parsedRaw = JSON.parse(match[0]);
-              } catch (e2) {}
+            if (response.ok) {
+              const data = await response.json().catch(() => ({}));
+              const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (data.usageMetadata?.totalTokenCount) {
+                await recordTokensUsage(userKey, todayStr, 'lite', data.usageMetadata.totalTokenCount);
+              }
+              if (text) {
+                try {
+                  const cleanedText = text.replace(/```json|```/gi, '').trim();
+                  parsedRaw = JSON.parse(cleanedText);
+                } catch (e) {
+                  try {
+                    const match = text.match(/\{[\s\S]*\}/);
+                    if (match) parsedRaw = JSON.parse(match[0]);
+                  } catch (e2) {}
+                }
+              }
+              if (parsedRaw.title || parsedRaw.project_name) {
+                break; // Model success
+              }
+            } else {
+              const errData = await response.json().catch(() => ({}));
+              console.error(`Erreur API Gemini pour le modèle ${modelName}:`, errData);
             }
+          } catch (e) {
+            console.error(`Erreur réseau Gemini avec le modèle ${modelName}:`, e);
           }
-
-        } else {
-          const errData = await response.json().catch(() => ({}));
-          console.error('Erreur API Gemini 3.5 Flash-Lite:', errData);
         }
       }
 

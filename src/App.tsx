@@ -34,6 +34,7 @@ export const App: React.FC = () => {
     syncStatus,
     addProject,
     addMilestone,
+    addMilestones,
     deleteProject,
     deleteMilestone,
     toggleSession,
@@ -84,35 +85,52 @@ export const App: React.FC = () => {
   }) => {
     let targetProjectId = parsed.projectId;
 
+    const milestonesToAdd: Array<{
+      title: string;
+      dueDate: string;
+      estimatedHours: number;
+      cognitiveLoad: 'high' | 'medium' | 'low';
+    }> = [];
+
+    if (parsed.subtasks && parsed.subtasks.length > 0) {
+      const hoursPerSubtask = Math.max(1, Math.round((parsed.estimatedHours / parsed.subtasks.length) * 10) / 10);
+      parsed.subtasks.forEach(stTitle => {
+        milestonesToAdd.push({
+          title: stTitle,
+          dueDate: parsed.deadline,
+          estimatedHours: hoursPerSubtask,
+          cognitiveLoad: parsed.cognitiveLoad
+        });
+      });
+    } else {
+      milestonesToAdd.push({
+        title: parsed.title,
+        dueDate: parsed.deadline,
+        estimatedHours: parsed.estimatedHours,
+        cognitiveLoad: parsed.cognitiveLoad
+      });
+    }
+
     if (!targetProjectId) {
       const existingProj = projects.find(p => p.name.toLowerCase() === parsed.projectName.toLowerCase());
       if (existingProj) {
         targetProjectId = existingProj.id;
-      } else {
-        const newProjId = `prj_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-        const newProjCode = parsed.projectName.slice(0, 4).toUpperCase() || 'PRJ';
-        addProject(
-          parsed.projectName,
-          newProjCode,
-          parsed.deadline,
-          parsed.isHardDeadline,
-          undefined,
-          newProjId
-        );
-        targetProjectId = newProjId;
       }
     }
 
     if (targetProjectId) {
-      addMilestone(
-        targetProjectId,
-        parsed.title,
-        parsed.deadline,
-        parsed.estimatedHours,
-        parsed.cognitiveLoad
-      );
+      addMilestones(targetProjectId, milestonesToAdd);
     } else {
-      regenerateSchedule();
+      const newProjCode = parsed.projectName.slice(0, 4).toUpperCase() || 'PRJ';
+      addProject(
+        parsed.projectName,
+        newProjCode,
+        parsed.deadline,
+        parsed.isHardDeadline,
+        undefined,
+        undefined,
+        milestonesToAdd
+      );
     }
   };
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Project, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, StudyDomain, DomainCategory, DynamicQuest, ExternalEvent, UserSettings, CognitiveLoad } from '../types';
+import { Project, Milestone, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, StudyDomain, DomainCategory, DynamicQuest, ExternalEvent, UserSettings, CognitiveLoad } from '../types';
 
 
 import { generateSchedule, getStartOfWeek, HPH, DEFAULT_USER_SETTINGS, replanifyOnCalendarChange, getLocalDateString } from '../engine/scheduler';
@@ -247,45 +247,45 @@ export function useProjectStore() {
           setSyncStatus('synced');
         })
         .catch(err => {
-          console.log('Redis load skipped or offline:', err.message);
+          console.log('Redis load skipped or offline, using local iCal refresh:', err.message);
           setSyncStatus('synced');
-        });
-    }
 
-    // 3. Rafraîchissement automatique en arrière-plan des flux iCal locaux
-    const savedFeeds = localStorage.getItem('imported_ical_feeds');
-    if (savedFeeds) {
-      try {
-        const feeds = JSON.parse(savedFeeds);
-        if (Array.isArray(feeds) && feeds.length > 0) {
-          feeds.forEach((feed: any) => {
-            if (feed.url) {
-              fetch('/api/calendar/ical', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ icalUrl: feed.url })
-              })
-                .then(r => r.json())
-                .then(data => {
-                  if (data.success && data.events) {
-                    const tagged = data.events.map((ev: any) => ({
-                      ...ev,
-                      integrationId: feed.id,
-                      title: `[${feed.name}] ${ev.title}`
-                    }));
-                    setExternalEventsState(prev => [
-                      ...prev.filter(e => e.integrationId !== feed.id),
-                      ...tagged
-                    ]);
+          // Fallback: Rafraîchissement des flux iCal locaux si hors-ligne / sans cloud
+          const savedFeeds = localStorage.getItem('imported_ical_feeds');
+          if (savedFeeds) {
+            try {
+              const feeds = JSON.parse(savedFeeds);
+              if (Array.isArray(feeds) && feeds.length > 0) {
+                feeds.forEach((feed: any) => {
+                  if (feed.url) {
+                    fetch('/api/calendar/ical', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ icalUrl: feed.url })
+                    })
+                      .then(r => r.json())
+                      .then(data => {
+                        if (data.success && data.events) {
+                          const tagged = data.events.map((ev: any) => ({
+                            ...ev,
+                            integrationId: feed.id,
+                            title: `[${feed.name}] ${ev.title}`
+                          }));
+                          setExternalEventsState(prev => [
+                            ...prev.filter(e => e.integrationId !== feed.id),
+                            ...tagged
+                          ]);
+                        }
+                      })
+                      .catch(e => console.error(`iCal local auto-refresh err (${feed.name}):`, e.message));
                   }
-                })
-                .catch(e => console.error(`iCal auto-refresh err (${feed.name}):`, e.message));
+                });
+              }
+            } catch (e) {
+              console.error('Error parsing iCal feeds for auto-refresh:', e);
             }
-          });
-        }
-      } catch (err) {
-        console.error('Error parsing iCal feeds for auto-refresh:', err);
-      }
+          }
+        });
     }
   }, [applyStatePayload, isAuthenticated]);
 
@@ -360,19 +360,96 @@ export function useProjectStore() {
     });
   };
 
-  const addProject = (name: string, code: string, deadline: string, isHardDeadline: boolean, startDate?: string, customId?: string) => {
+  const addProject = (
+    name: string,
+    code: string,
+    deadline: string,
+    isHardDeadline: boolean,
+    startDate?: string,
+    customId?: string,
+    initialMilestones?: Array<{
+      title: string;
+      dueDate?: string;
+      estimatedHours: number;
+      cognitiveLoad: CognitiveLoad;
+      dependsOn?: string[];
+    }>
+  ) => {
     const todayStr = getLocalDateString(new Date());
+    const projId = customId || `prj_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    
+    const milestones: Milestone[] = (initialMilestones || []).map((m, idx) => ({
+      id: `ms_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
+      title: m.title,
+      estimatedHours: m.estimatedHours,
+      completedHours: 0,
+      startDate: startDate || todayStr,
+      dueDate: m.dueDate || deadline,
+      cognitiveLoad: m.cognitiveLoad,
+      isHardDeadline: isHardDeadline,
+      isCompleted: false,
+      dependsOn: m.dependsOn || []
+    }));
+
     const newProj: Project = {
-      id: customId || `prj_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      id: projId,
       name,
       code: code.toUpperCase() || 'PRJ',
       color: COLORS[projects.length % COLORS.length],
       startDate: startDate || todayStr,
       deadline,
       isHardDeadline,
-      milestones: []
+      milestones
     };
     const updatedProjects = [...projects, newProj];
+    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData, gamification.calibration, externalEvents, userSettings);
+    const updatedGamo = updateMetricsAndQuests(updatedSchedule, updatedProjects, gamification);
+
+    setProjects(updatedProjects);
+    setScheduleData(updatedSchedule);
+    setGamification(updatedGamo);
+    saveAll(updatedProjects, updatedSchedule, streak, updatedGamo, isDarkMode);
+
+    return projId;
+  };
+
+  const addMilestones = (
+    projId: string,
+    milestonesToAdd: Array<{
+      title: string;
+      dueDate?: string;
+      estimatedHours: number;
+      cognitiveLoad: CognitiveLoad;
+      dependsOn?: string[];
+      startDate?: string;
+    }>
+  ) => {
+    if (!milestonesToAdd || milestonesToAdd.length === 0) return;
+    const todayStr = getLocalDateString(new Date());
+
+    const updatedProjects = projects.map(p => {
+      if (p.id === projId) {
+        const newMsList: Milestone[] = milestonesToAdd.map((m, idx) => ({
+          id: `ms_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
+          title: m.title,
+          estimatedHours: m.estimatedHours,
+          completedHours: 0,
+          startDate: m.startDate || p.startDate || todayStr,
+          dueDate: m.dueDate || p.deadline,
+          cognitiveLoad: m.cognitiveLoad,
+          isHardDeadline: p.isHardDeadline,
+          isCompleted: false,
+          dependsOn: m.dependsOn || []
+        }));
+
+        return {
+          ...p,
+          milestones: [...p.milestones, ...newMsList]
+        };
+      }
+      return p;
+    });
+
     const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData, gamification.calibration, externalEvents, userSettings);
     const updatedGamo = updateMetricsAndQuests(updatedSchedule, updatedProjects, gamification);
 
@@ -387,44 +464,18 @@ export function useProjectStore() {
     title: string,
     dueDate: string,
     estimatedHours: number,
-    cognitiveLoad: 'high' | 'medium' | 'low',
+    cognitiveLoad: CognitiveLoad,
     dependsOn?: string[],
     startDate?: string
   ) => {
-    const todayStr = getLocalDateString(new Date());
-    const newMsId = `ms_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-
-    const updatedProjects = projects.map(p => {
-      if (p.id === projId) {
-        return {
-          ...p,
-          milestones: [
-            ...p.milestones,
-            {
-              id: newMsId,
-              title,
-              estimatedHours,
-              completedHours: 0,
-              startDate: startDate || p.startDate || todayStr,
-              dueDate: dueDate || p.deadline,
-              cognitiveLoad,
-              isHardDeadline: p.isHardDeadline,
-              isCompleted: false,
-              dependsOn: dependsOn || []
-            }
-          ]
-        };
-      }
-      return p;
-    });
-
-    const updatedSchedule = generateSchedule(updatedProjects, currentWeekStart, scheduleData, gamification.calibration, externalEvents, userSettings);
-    const updatedGamo = updateMetricsAndQuests(updatedSchedule, updatedProjects, gamification);
-
-    setProjects(updatedProjects);
-    setScheduleData(updatedSchedule);
-    setGamification(updatedGamo);
-    saveAll(updatedProjects, updatedSchedule, streak, updatedGamo, isDarkMode);
+    addMilestones(projId, [{
+      title,
+      dueDate,
+      estimatedHours,
+      cognitiveLoad,
+      dependsOn,
+      startDate
+    }]);
   };
 
   const deleteProject = (projId: string) => {
@@ -860,6 +911,7 @@ export function useProjectStore() {
     syncStatus,
     addProject,
     addMilestone,
+    addMilestones,
     deleteProject,
     deleteMilestone,
     toggleSession,

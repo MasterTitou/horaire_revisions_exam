@@ -1,9 +1,204 @@
 // api/calendar/google.js
 // Gestion de la synchronisation bidirectionnelle Google Calendar API v3 Multi-Agendas (École, Travail, Secondaires)
+// Avec persistance des tokens OAuth en BDD et souscription Webhook
+
+import { sql } from './db.js';
+
+function isPostgresConfigured() {
+  return Boolean(process.env.POSTGRES_URL || process.env.VERCEL_POSTGRES_URL || process.env.POSTGRES_PRISMA_URL);
+}
+
+// ─── Helpers Token Persistence ────────────────────────────────────
+
+async function storeGoogleTokens(userKey, accessToken, refreshToken) {
+  if (!isPostgresConfigured()) return;
+  try {
+    await sql`
+      INSERT INTO calendar_integrations (user_key, provider, access_token, refresh_token, last_synced_at)
+      VALUES (${userKey}, 'google', ${accessToken}, ${refreshToken}, NOW())
+      ON CONFLICT ON CONSTRAINT calendar_integrations_user_provider_uq
+      DO UPDATE SET
+        access_token = EXCLUDED.access_token,
+        refresh_token = CASE
+          WHEN EXCLUDED.refresh_token IS NOT NULL AND EXCLUDED.refresh_token != ''
+          THEN EXCLUDED.refresh_token
+          ELSE calendar_integrations.refresh_token
+        END,
+        last_synced_at = NOW();
+    `;
+  } catch (e) {
+    // Fallback: try without unique constraint (first run)
+    try {
+      const existing = await sql`
+        SELECT id FROM calendar_integrations WHERE user_key = ${userKey} AND provider = 'google' LIMIT 1;
+      `;
+      if (existing.rows.length > 0) {
+        await sql`
+          UPDATE calendar_integrations
+          SET access_token = ${accessToken},
+              refresh_token = CASE WHEN ${refreshToken} IS NOT NULL AND ${refreshToken} != '' THEN ${refreshToken} ELSE refresh_token END,
+              last_synced_at = NOW()
+          WHERE user_key = ${userKey} AND provider = 'google';
+        `;
+      } else {
+        await sql`
+          INSERT INTO calendar_integrations (user_key, provider, access_token, refresh_token, last_synced_at)
+          VALUES (${userKey}, 'google', ${accessToken}, ${refreshToken || null}, NOW());
+        `;
+      }
+    } catch (e2) {
+      console.error('[Google Auth] Erreur stockage token en BDD:', e2.message);
+    }
+  }
+}
+
+async function getStoredGoogleTokens(userKey) {
+  if (!isPostgresConfigured()) return null;
+  try {
+    const result = await sql`
+      SELECT access_token, refresh_token, webhook_channel_id, webhook_resource_id, webhook_expiration
+      FROM calendar_integrations
+      WHERE user_key = ${userKey} AND provider = 'google'
+      LIMIT 1;
+    `;
+    if (result.rows.length > 0) return result.rows[0];
+  } catch (e) {
+    console.error('[Google Auth] Erreur lecture tokens BDD:', e.message);
+  }
+  return null;
+}
+
+async function refreshAccessToken(userKey, refreshToken) {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret || !refreshToken) return null;
+
+  try {
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token'
+      })
+    });
+
+    const data = await res.json();
+    if (data.access_token) {
+      await storeGoogleTokens(userKey, data.access_token, null); // preserve existing refresh_token
+      return data.access_token;
+    }
+    console.error('[Google Refresh] Échec refresh token:', data.error);
+  } catch (e) {
+    console.error('[Google Refresh] Erreur réseau:', e.message);
+  }
+  return null;
+}
+
+async function getValidAccessToken(userKey) {
+  const stored = await getStoredGoogleTokens(userKey);
+  if (!stored) return null;
+
+  // Try current access_token first
+  if (stored.access_token) {
+    const testRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1', {
+      headers: { 'Authorization': `Bearer ${stored.access_token}` }
+    });
+    if (testRes.ok) return stored.access_token;
+  }
+
+  // Expired → refresh
+  if (stored.refresh_token) {
+    return await refreshAccessToken(userKey, stored.refresh_token);
+  }
+
+  return null;
+}
+
+async function updateWebhookInfo(userKey, channelId, resourceId, expiration) {
+  if (!isPostgresConfigured()) return;
+  try {
+    await sql`
+      UPDATE calendar_integrations
+      SET webhook_channel_id = ${channelId},
+          webhook_resource_id = ${resourceId},
+          webhook_expiration = ${expiration}
+      WHERE user_key = ${userKey} AND provider = 'google';
+    `;
+  } catch (e) {
+    console.error('[Webhook] Erreur MAJ webhook info:', e.message);
+  }
+}
+
+// ─── Google Calendar Event Fetching ───────────────────────────────
+
+async function fetchAllGoogleEvents(accessToken) {
+  const now = new Date();
+  const timeMin = new Date(now.getTime() - 7 * 86400000).toISOString();
+  const timeMax = new Date(now.getTime() + 30 * 86400000).toISOString();
+
+  // 1. Lister tous les agendas
+  const calListRes = await fetch(
+    'https://www.googleapis.com/calendar/v3/users/me/calendarList',
+    { headers: { 'Authorization': `Bearer ${accessToken}` } }
+  );
+
+  const calListData = await calListRes.json();
+  const calendars = calListData.items || [{ id: 'primary' }];
+
+  let allEvents = [];
+
+  // 2. Parcourir chaque agenda
+  for (const cal of calendars) {
+    try {
+      const gRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+
+      const data = await gRes.json();
+      if (data.items) {
+        const calName = cal.summary || 'Agenda';
+        const mapped = data.items.map(item => {
+          const isAllDay = !item.start?.dateTime;
+
+          let startTime, endTime;
+          if (isAllDay) {
+            // Événement all-day : borner de 00:00 à 23:59 en heure locale
+            startTime = `${item.start?.date}T00:00:00`;
+            endTime = `${item.end?.date || item.start?.date}T23:59:59`;
+          } else {
+            startTime = item.start.dateTime;
+            endTime = item.end.dateTime;
+          }
+
+          return {
+            id: `gcal_${item.id}`,
+            title: item.summary ? `[${calName}] ${item.summary}` : `[${calName}] Événement Occupé`,
+            startTime,
+            endTime,
+            isAllDay,
+            source: 'google'
+          };
+        });
+        allEvents = allEvents.concat(mapped);
+      }
+    } catch (calErr) {
+      console.error(`Erreur fetch agenda ${cal.id}:`, calErr.message);
+    }
+  }
+
+  return allEvents;
+}
+
+// ─── Main Handler ─────────────────────────────────────────────────
 
 export default async function handler(req, res) {
   const { action } = req.query;
 
+  // ─── AUTH URL ───
   if (req.method === 'GET' && action === 'auth_url') {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) {
@@ -21,7 +216,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ url: authUrl });
   }
 
-  // Callback OAuth2 d'échange de code contre Access Token
+  // ─── OAUTH2 CALLBACK ───
   if (req.method === 'GET' && action === 'callback') {
     const { code } = req.query;
     const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -47,6 +242,10 @@ export default async function handler(req, res) {
 
       const tokenData = await tokenRes.json();
       if (tokenData.access_token) {
+        // C3: Stocker les tokens en BDD
+        const userKey = 'default_user';
+        await storeGoogleTokens(userKey, tokenData.access_token, tokenData.refresh_token || null);
+
         return res.send(`
           <!DOCTYPE html>
           <html>
@@ -71,63 +270,37 @@ export default async function handler(req, res) {
     }
   }
 
-  // Récupération Multi-Agendas (Primary + Agendas Secondaires / École / Travail)
+  // ─── FETCH EVENTS (Multi-Agendas) ───
   if (req.method === 'POST' && action === 'fetch_events') {
-    const { accessToken } = req.body;
+    let accessToken = req.body?.accessToken;
+
+    // Si pas de token dans le body, essayer de le récupérer depuis la BDD
     if (!accessToken) {
-      return res.status(400).json({ error: 'Jeton d\'accès (accessToken) requis' });
+      const userKey = 'default_user';
+      accessToken = await getValidAccessToken(userKey);
+    }
+
+    if (!accessToken) {
+      return res.status(400).json({ error: 'Jeton d\'accès (accessToken) requis ou expiré.' });
     }
 
     try {
-      const now = new Date();
-      const timeMin = new Date(now.getTime() - 7 * 86400000).toISOString();
-      const timeMax = new Date(now.getTime() + 30 * 86400000).toISOString();
-
-      // 1. Lister tous les agendas liés au compte Google (Principal + École + Secondaires)
-      const calListRes = await fetch(
-        'https://www.googleapis.com/calendar/v3/users/me/calendarList',
-        { headers: { 'Authorization': `Bearer ${accessToken}` } }
-      );
-
-      const calListData = await calListRes.json();
-      const calendars = calListData.items || [{ id: 'primary' }];
-
-      let allEvents = [];
-
-      // 2. Parcourir chaque agenda (École, Travail, Personnel) pour extraire les événements
-      for (const cal of calendars) {
-        try {
-          const gRes = await fetch(
-            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`,
-            { headers: { 'Authorization': `Bearer ${accessToken}` } }
-          );
-
-          const data = await gRes.json();
-          if (data.items) {
-            const calName = cal.summary || 'Agenda';
-            const mapped = data.items.map(item => ({
-              id: `gcal_${item.id}`,
-              title: item.summary ? `[${calName}] ${item.summary}` : `[${calName}] Événement Occupé`,
-              startTime: item.start?.dateTime || item.start?.date || new Date().toISOString(),
-              endTime: item.end?.dateTime || item.end?.date || new Date().toISOString(),
-              isAllDay: !item.start?.dateTime,
-              source: 'google'
-            }));
-            allEvents = allEvents.concat(mapped);
-          }
-        } catch (calErr) {
-          console.error(`Erreur fetch agenda ${cal.id}:`, calErr.message);
-        }
-      }
-
+      const allEvents = await fetchAllGoogleEvents(accessToken);
       return res.status(200).json({ success: true, events: allEvents });
     } catch (err) {
       return res.status(500).json({ error: 'Erreur lors de la récupération des événements multi-agendas Google Calendar' });
     }
   }
 
+  // ─── SYNC SESSION TO GOOGLE ───
   if (req.method === 'POST' && action === 'sync_session') {
-    const { accessToken, session } = req.body;
+    let accessToken = req.body?.accessToken;
+    const session = req.body?.session;
+
+    if (!accessToken) {
+      accessToken = await getValidAccessToken('default_user');
+    }
+
     if (!accessToken || !session) {
       return res.status(400).json({ error: 'accessToken et session requis' });
     }
@@ -163,5 +336,73 @@ export default async function handler(req, res) {
     }
   }
 
+  // ─── C4: SUBSCRIBE WEBHOOK ───
+  if (req.method === 'POST' && action === 'subscribe_webhook') {
+    const userKey = 'default_user';
+    const accessToken = await getValidAccessToken(userKey);
+
+    if (!accessToken) {
+      return res.status(400).json({ error: 'Aucun token Google valide pour créer le webhook.' });
+    }
+
+    const webhookUrl = process.env.GOOGLE_WEBHOOK_URL || 'https://horaire-revisions-exam.vercel.app/api/webhooks/google-calendar';
+    const channelId = `cal_watch_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const expiration = new Date(Date.now() + 7 * 24 * 3600 * 1000); // 7 jours
+
+    try {
+      const watchRes = await fetch(
+        'https://www.googleapis.com/calendar/v3/calendars/primary/events/watch',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            id: channelId,
+            type: 'web_hook',
+            address: webhookUrl,
+            expiration: expiration.getTime()
+          })
+        }
+      );
+
+      const watchData = await watchRes.json();
+
+      if (watchRes.ok && watchData.id) {
+        await updateWebhookInfo(
+          userKey,
+          watchData.id,
+          watchData.resourceId,
+          new Date(parseInt(watchData.expiration)).toISOString()
+        );
+
+        return res.status(200).json({
+          success: true,
+          channelId: watchData.id,
+          resourceId: watchData.resourceId,
+          expiration: watchData.expiration
+        });
+      } else {
+        return res.status(400).json({ error: 'Échec création webhook Google', details: watchData });
+      }
+    } catch (err) {
+      return res.status(500).json({ error: 'Erreur réseau lors de la souscription webhook' });
+    }
+  }
+
+  // ─── REFRESH TOKEN ENDPOINT ───
+  if (req.method === 'POST' && action === 'refresh_token') {
+    const userKey = 'default_user';
+    const newToken = await getValidAccessToken(userKey);
+    if (newToken) {
+      return res.status(200).json({ success: true, accessToken: newToken });
+    }
+    return res.status(401).json({ error: 'Impossible de rafraîchir le token Google' });
+  }
+
   return res.status(400).json({ error: 'Action invalide' });
 }
+
+// Export for use by webhook and cron handlers
+export { getValidAccessToken, fetchAllGoogleEvents, getStoredGoogleTokens, updateWebhookInfo };

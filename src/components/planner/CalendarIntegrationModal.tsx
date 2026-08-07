@@ -54,19 +54,17 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
 
   // Conserver le state local en synchro avec userSettings.icalFeeds lors de chargements distants
 
+  // Sync local state when userSettings.icalFeeds changes from external sources
   useEffect(() => {
-    if (userSettings?.icalFeeds) {
+    if (userSettings?.icalFeeds && JSON.stringify(userSettings.icalFeeds) !== JSON.stringify(importedFeeds)) {
       setImportedFeeds(userSettings.icalFeeds);
     }
   }, [userSettings?.icalFeeds]);
 
-  // Sauvegarde de la liste des flux iCal importés dans localStorage ET userSettings (Cloud Sync)
+  // Save imported feeds to localStorage only (Cloud sync handled during add/delete)
   useEffect(() => {
     localStorage.setItem('imported_ical_feeds', JSON.stringify(importedFeeds));
-    if (JSON.stringify(userSettings?.icalFeeds || []) !== JSON.stringify(importedFeeds)) {
-      onUpdateSettings({ icalFeeds: importedFeeds });
-    }
-  }, [importedFeeds, onUpdateSettings, userSettings?.icalFeeds]);
+  }, [importedFeeds]);
 
   // Écoute de l'événement OAuth Google Success envoyé par la fenêtre popup
   useEffect(() => {
@@ -77,8 +75,7 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
         setIsGoogleConnected(true);
         onUpdateSettings({ googleConnected: true, googleAccessToken: token });
 
-
-        // Récupérer automatiquement les événements Google Calendar
+        // Récupérer automatiquement les événements Google Calendar et souscrire au webhook
         fetch('/api/calendar/google?action=fetch_events', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -87,16 +84,21 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
           .then(res => res.json())
           .then(data => {
             if (data.success && data.events) {
-              onSetExternalEvents([...externalEvents, ...data.events]);
+              // I1: Dédupliquer en conservant les événements non-Google et ajoutant les événements Google frais
+              const nonGoogleEvents = externalEvents.filter(ev => !ev.id?.startsWith('gcal_') && ev.source !== 'google');
+              onSetExternalEvents([...nonGoogleEvents, ...data.events]);
             }
           })
           .catch(err => console.error('Erreur GCal fetch:', err));
+
+        // Activer la souscription push webhook
+        fetch('/api/calendar/google?action=subscribe_webhook', { method: 'POST' }).catch(() => {});
       }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [externalEvents, onSetExternalEvents]);
+  }, [externalEvents, onSetExternalEvents, onUpdateSettings]);
 
   if (!isOpen) return null;
 
@@ -128,7 +130,9 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
           addedAt: new Date().toLocaleDateString()
         };
 
-        setImportedFeeds(prev => [...prev.filter(f => f.url !== icalUrl.trim()), newFeed]);
+        const updatedFeeds = [...importedFeeds.filter(f => f.url !== icalUrl.trim()), newFeed];
+        setImportedFeeds(updatedFeeds);
+        onUpdateSettings({ icalFeeds: updatedFeeds });
         onSetExternalEvents([...externalEvents, ...taggedEvents]);
 
         alert(`Succès : Agenda "${feedName}" importé avec ${taggedEvents.length} événements !`);
@@ -145,7 +149,9 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
   };
 
   const handleDeleteFeed = (feedId: string) => {
-    setImportedFeeds(prev => prev.filter(f => f.id !== feedId));
+    const updatedFeeds = importedFeeds.filter(f => f.id !== feedId);
+    setImportedFeeds(updatedFeeds);
+    onUpdateSettings({ icalFeeds: updatedFeeds });
     onSetExternalEvents(externalEvents.filter(ev => ev.integrationId !== feedId));
   };
 
@@ -166,6 +172,10 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
   const handleDisconnectGoogle = () => {
     localStorage.removeItem('google_access_token');
     setIsGoogleConnected(false);
+    onUpdateSettings({ googleConnected: false, googleAccessToken: undefined });
+    // I4: Purger les événements Google de la liste d'événements externes
+    const nonGoogleEvents = externalEvents.filter(ev => !ev.id?.startsWith('gcal_') && ev.source !== 'google');
+    onSetExternalEvents(nonGoogleEvents);
   };
 
   const handleAddManualEvent = (e: React.FormEvent) => {
