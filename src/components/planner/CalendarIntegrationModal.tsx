@@ -159,13 +159,13 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
     try {
       const res = await fetch('/api/calendar/google?action=auth_url');
       const data = await res.json();
-      if (data.url) {
+      if (res.ok && data.url) {
         window.open(data.url, '_blank', 'width=500,height=600');
       } else {
-        alert(data.message || 'Pour utiliser OAuth2 Google automatique, ajoutez GOOGLE_CLIENT_ID dans Vercel.\n\nSinon, utilisez simplement le bouton 📅 1-clic direct à côté de chaque créneau !');
+        alert(data.message || '⚠️ Identifiant Google OAuth non configuré (GOOGLE_CLIENT_ID absent de Vercel).\n\nVeuillez ajouter GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET dans les variables d\'environnement Vercel.');
       }
     } catch (e) {
-      alert('Utilisez le bouton 📅 1-clic direct sur chaque créneau du planning pour exporter vers Google Calendar sans configuration.');
+      alert('⚠️ Erreur de communication avec l\'API Google OAuth. Vérifiez votre connexion et les variables d\'environnement Vercel.');
     }
   };
 
