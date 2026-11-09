@@ -43,8 +43,12 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
   });
 
   const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(() => {
-    return !!(userSettings?.googleAccessToken || localStorage.getItem('google_access_token'));
+    return !!(userSettings?.googleConnected || userSettings?.googleAccessToken || localStorage.getItem('google_access_token'));
   });
+  const [isSyncingGoogle, setIsSyncingGoogle] = useState(false);
+  const [googleSyncMessage, setGoogleSyncMessage] = useState<string | null>(null);
+
+  const googleEventsCount = externalEvents.filter(ev => ev.id?.startsWith('gcal_') || ev.source === 'google').length;
 
   // Formulaire d'événement manuel
   const [manualTitle, setManualTitle] = useState('');
@@ -66,6 +70,52 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
     localStorage.setItem('imported_ical_feeds', JSON.stringify(importedFeeds));
   }, [importedFeeds]);
 
+  const syncGoogleEvents = async (tokenOverride?: string, silent = false) => {
+    const activeToken = tokenOverride || localStorage.getItem('google_access_token') || userSettings?.googleAccessToken || '';
+    setIsSyncingGoogle(true);
+    setGoogleSyncMessage(null);
+    try {
+      const res = await fetch('/api/calendar/google?action=fetch_events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: activeToken || undefined })
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success && Array.isArray(data.events)) {
+        if (data.accessToken) {
+          localStorage.setItem('google_access_token', data.accessToken);
+        }
+        setIsGoogleConnected(true);
+        const nonGoogleEvents = externalEvents.filter(ev => !ev.id?.startsWith('gcal_') && ev.source !== 'google');
+        onSetExternalEvents([...nonGoogleEvents, ...data.events]);
+        setGoogleSyncMessage(`✅ ${data.events.length} événement(s) Google importé(s)`);
+      } else if (res.status === 401 || data.tokenExpired) {
+        localStorage.removeItem('google_access_token');
+        setIsGoogleConnected(false);
+        onUpdateSettings({ googleConnected: false, googleAccessToken: undefined });
+        if (!silent) {
+          setGoogleSyncMessage('⚠️ Jeton Google expiré. Cliquez sur « Connecter Google Calendar » pour réautoriser.');
+        }
+      } else if (!silent) {
+        setGoogleSyncMessage(data.error || '⚠️ Aucun événement récupéré.');
+      }
+    } catch (err) {
+      if (!silent) {
+        setGoogleSyncMessage('⚠️ Erreur réseau lors de la synchronisation Google.');
+      }
+    } finally {
+      setIsSyncingGoogle(false);
+    }
+  };
+
+  // Auto-sync à l'ouverture de la modale si Google est connecté mais 0 événement présent
+  useEffect(() => {
+    if (isOpen && isGoogleConnected && googleEventsCount === 0 && !isSyncingGoogle) {
+      syncGoogleEvents(undefined, true);
+    }
+  }, [isOpen]);
+
   // Écoute de l'événement OAuth Google Success envoyé par la fenêtre popup
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -74,22 +124,7 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
         localStorage.setItem('google_access_token', token);
         setIsGoogleConnected(true);
         onUpdateSettings({ googleConnected: true, googleAccessToken: token });
-
-        // Récupérer automatiquement les événements Google Calendar et souscrire au webhook
-        fetch('/api/calendar/google?action=fetch_events', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accessToken: token })
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success && data.events) {
-              // I1: Dédupliquer en conservant les événements non-Google et ajoutant les événements Google frais
-              const nonGoogleEvents = externalEvents.filter(ev => !ev.id?.startsWith('gcal_') && ev.source !== 'google');
-              onSetExternalEvents([...nonGoogleEvents, ...data.events]);
-            }
-          })
-          .catch(err => console.error('Erreur GCal fetch:', err));
+        syncGoogleEvents(token, false);
 
         // Activer la souscription push webhook
         fetch('/api/calendar/google?action=subscribe_webhook', { method: 'POST' }).catch(() => {});
@@ -230,24 +265,56 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
               {/* Google OAuth */}
               <div className="p-4 bg-slate-800/60 rounded-xl border border-slate-700/60 flex flex-col justify-between">
                 <div>
-                  <h4 className="font-semibold text-sm flex items-center gap-2">
-                    <span>🔴</span> Google Calendar API
-                  </h4>
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="font-semibold text-sm flex items-center gap-2">
+                      <span>🔴</span> Google Calendar API
+                    </h4>
+                    {isGoogleConnected && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/20 text-blue-300 border border-blue-500/30 shrink-0">
+                        {googleEventsCount} événement{googleEventsCount > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-400 mt-1">Sync bidirectionnelle réactive pour vos créneaux persos</p>
+                  {googleSyncMessage && (
+                    <p className="text-[11px] font-semibold text-teal-300 mt-1.5">{googleSyncMessage}</p>
+                  )}
                 </div>
 
                 {isGoogleConnected ? (
                   <div className="mt-4 space-y-2">
-                    <div className="px-3 py-2 bg-emerald-500/20 border border-emerald-500/40 rounded-lg text-emerald-300 text-xs font-bold flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      <span>✅ Google Calendar Connecté &amp; Synchro</span>
+                    <div className="px-3 py-2 bg-emerald-500/20 border border-emerald-500/40 rounded-lg text-emerald-300 text-xs font-bold flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>✅ Google Calendar Connecté</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => syncGoogleEvents(undefined, false)}
+                        disabled={isSyncingGoogle}
+                        className="px-2 py-1 rounded bg-emerald-500/30 hover:bg-emerald-500/50 text-white text-[10px] font-extrabold flex items-center gap-1 transition disabled:opacity-50"
+                        title="Resynchroniser les événements Google Calendar"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isSyncingGoogle ? 'animate-spin' : ''}`} />
+                        <span>{isSyncingGoogle ? 'Synchro...' : 'Rafraîchir'}</span>
+                      </button>
                     </div>
-                    <button
-                      onClick={handleDisconnectGoogle}
-                      className="w-full py-1 text-[11px] text-slate-400 hover:text-red-400 transition"
-                    >
-                      Déconnecter
-                    </button>
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={handleConnectGoogle}
+                        className="w-1/2 py-1 text-[11px] text-teal-400 hover:text-teal-300 transition font-semibold"
+                      >
+                        Reconnecter
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDisconnectGoogle}
+                        className="w-1/2 py-1 text-[11px] text-slate-400 hover:text-red-400 transition"
+                      >
+                        Déconnecter
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <button

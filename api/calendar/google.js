@@ -118,56 +118,74 @@ export async function updateWebhookInfo(userKey, channelId, resourceId, expirati
 
 export async function fetchAllGoogleEvents(accessToken) {
   const now = new Date();
-  const timeMin = new Date(now.getTime() - 7 * 86400000).toISOString();
-  const timeMax = new Date(now.getTime() + 30 * 86400000).toISOString();
+  const timeMin = new Date(now.getTime() - 30 * 86400000).toISOString();
+  const timeMax = new Date(now.getTime() + 90 * 86400000).toISOString();
 
   const calListRes = await fetch(
     'https://www.googleapis.com/calendar/v3/users/me/calendarList',
     { headers: { 'Authorization': `Bearer ${accessToken}` } }
   );
 
-  const calListData = await calListRes.json();
-  const calendars = calListData.items || [{ id: 'primary' }];
+  if (calListRes.status === 401) {
+    const err = new Error('Google accessToken expired or invalid (401)');
+    err.status = 401;
+    throw err;
+  }
+
+  const calListData = await calListRes.json().catch(() => ({}));
+  const calendars = (calListData.items && calListData.items.length > 0)
+    ? calListData.items
+    : [{ id: 'primary', summary: 'Google Agenda' }];
 
   let allEvents = [];
 
   for (const cal of calendars) {
     try {
       const gRes = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`,
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${timeMin}&timeMax=${timeMax}&maxResults=250&singleEvents=true&orderBy=startTime`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
 
-      const data = await gRes.json();
-      if (data.items) {
-        const calName = cal.summary || 'Agenda';
-        const mapped = data.items.map(item => {
-          const isAllDay = !item.start?.dateTime;
-          let startTime, endTime;
-          if (isAllDay) {
-            startTime = `${item.start?.date}T00:00:00`;
-            endTime = `${item.end?.date || item.start?.date}T23:59:59`;
-          } else {
-            startTime = item.start.dateTime;
-            endTime = item.end.dateTime;
-          }
+      if (gRes.status === 401) {
+        const err = new Error('Google accessToken expired or invalid (401)');
+        err.status = 401;
+        throw err;
+      }
 
-          return {
-            id: `gcal_${item.id}`,
-            title: item.summary ? `[${calName}] ${item.summary}` : `[${calName}] Événement Occupé`,
-            startTime,
-            endTime,
-            isAllDay,
-            source: 'google'
-          };
-        });
+      const data = await gRes.json().catch(() => ({}));
+      if (data.items && Array.isArray(data.items)) {
+        const calName = cal.summary || 'Google Agenda';
+        const mapped = data.items
+          .filter(item => item.status !== 'cancelled')
+          .map(item => {
+            const isAllDay = !item.start?.dateTime;
+            let startTime, endTime;
+            if (isAllDay) {
+              startTime = `${item.start?.date}T00:00:00`;
+              endTime = `${item.end?.date || item.start?.date}T23:59:59`;
+            } else {
+              startTime = item.start.dateTime;
+              endTime = item.end?.dateTime || item.start.dateTime;
+            }
+
+            return {
+              id: `gcal_${item.id}`,
+              title: item.summary ? `[Google · ${calName}] ${item.summary}` : `[Google · ${calName}] Occupé`,
+              startTime,
+              endTime,
+              isAllDay,
+              source: 'google'
+            };
+          });
         allEvents = allEvents.concat(mapped);
       }
     } catch (calErr) {
+      if (calErr.status === 401) throw calErr;
       console.error(`Erreur fetch agenda ${cal.id}:`, calErr.message);
     }
   }
 
+  allEvents.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
   return allEvents;
 }
 
@@ -255,18 +273,48 @@ export default async function handler(req, res) {
   // ─── 3. FETCH EVENTS ───
   if (req.method === 'POST' && action === 'fetch_events') {
     let accessToken = req.body?.accessToken;
+    let refreshedToken = null;
+
     if (!accessToken) {
       accessToken = await getValidAccessToken('default_user');
+      refreshedToken = accessToken;
     }
 
     if (!accessToken) {
-      return res.status(400).json({ error: 'Jeton d\'accès (accessToken) requis' });
+      return res.status(401).json({
+        success: false,
+        tokenExpired: true,
+        error: 'Session Google expirée ou absente. Veuillez reconnecter Google Calendar.'
+      });
     }
 
     try {
       const allEvents = await fetchAllGoogleEvents(accessToken);
-      return res.status(200).json({ success: true, events: allEvents });
+      return res.status(200).json({
+        success: true,
+        events: allEvents,
+        accessToken: refreshedToken || accessToken
+      });
     } catch (err) {
+      if (err.status === 401) {
+        // Le token fourni par le client a expiré : tenter un refresh via la BDD
+        const dbToken = await getValidAccessToken('default_user');
+        if (dbToken && dbToken !== accessToken) {
+          try {
+            const allEvents = await fetchAllGoogleEvents(dbToken);
+            return res.status(200).json({
+              success: true,
+              events: allEvents,
+              accessToken: dbToken
+            });
+          } catch (retryErr) {}
+        }
+        return res.status(401).json({
+          success: false,
+          tokenExpired: true,
+          error: 'Votre jeton Google Calendar a expiré. Cliquez sur Reconnecter Google Calendar.'
+        });
+      }
       return res.status(500).json({ error: 'Erreur lors de la récupération des événements multi-agendas Google Calendar' });
     }
   }

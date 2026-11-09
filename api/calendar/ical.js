@@ -127,6 +127,7 @@ export function parseICalFeed(icsText) {
     }
   });
 
+  finalEvents.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
   return finalEvents;
 }
 

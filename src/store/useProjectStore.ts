@@ -243,12 +243,54 @@ export function useProjectStore() {
                 }
               });
             }
+            // Rafraîchir immédiatement Google Calendar si connecté
+            const gToken = cloudData.userSettings?.googleAccessToken || localStorage.getItem('google_access_token');
+            if (gToken || cloudData.userSettings?.googleConnected) {
+              if (gToken) localStorage.setItem('google_access_token', gToken);
+              fetch('/api/calendar/google?action=fetch_events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accessToken: gToken || undefined })
+              })
+                .then(r => r.json())
+                .then(gData => {
+                  if (gData.success && Array.isArray(gData.events)) {
+                    if (gData.accessToken) localStorage.setItem('google_access_token', gData.accessToken);
+                    setExternalEventsState(prev => [
+                      ...prev.filter(e => !e.id?.startsWith('gcal_') && e.source !== 'google'),
+                      ...gData.events
+                    ]);
+                  }
+                })
+                .catch(e => console.error('Google Calendar auto-refresh err:', e.message));
+            }
           }
           setSyncStatus('synced');
         })
         .catch(err => {
           console.log('Redis load skipped or offline, using local iCal refresh:', err.message);
           setSyncStatus('synced');
+
+          // Fallback: Rafraîchissement Google Calendar local
+          const localGToken = localStorage.getItem('google_access_token');
+          if (localGToken) {
+            fetch('/api/calendar/google?action=fetch_events', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ accessToken: localGToken })
+            })
+              .then(r => r.json())
+              .then(gData => {
+                if (gData.success && Array.isArray(gData.events)) {
+                  if (gData.accessToken) localStorage.setItem('google_access_token', gData.accessToken);
+                  setExternalEventsState(prev => [
+                    ...prev.filter(e => !e.id?.startsWith('gcal_') && e.source !== 'google'),
+                    ...gData.events
+                  ]);
+                }
+              })
+              .catch(e => console.error('Google Calendar local auto-refresh err:', e.message));
+          }
 
           // Fallback: Rafraîchissement des flux iCal locaux si hors-ligne / sans cloud
           const savedFeeds = localStorage.getItem('imported_ical_feeds');

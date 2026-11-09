@@ -101,24 +101,64 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
 
       {/* Calendar Days Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {projects.length === 0 ? (
+        {projects.length === 0 && externalEvents.length === 0 ? (
           <div className="col-span-full py-14 text-center rounded-3xl border-2 border-dashed" style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}>
             <div className="text-5xl mb-3">📅</div>
             <p className="font-bold">Ajoute un projet et des jalons pour générer ton planning sous contraintes</p>
           </div>
         ) : (
           [0, 1, 2, 3, 4, 5, 6].map(i => {
+            const userTz = userSettings?.timezone || 'Europe/Paris';
             const d = new Date(currentWeekStart);
             d.setDate(d.getDate() + i);
-            const dateStr = getLocalDateString(d);
+            const dateStr = getLocalDateString(d, userTz);
             const isToday = dateStr === todayStr;
             const sessions = scheduleData[dateStr] || [];
 
-            // Filtrer les événements externes du jour
-            const dayEvents = externalEvents.filter(ev => {
-              const evDateStr = getLocalDateString(new Date(ev.startTime));
-              return evDateStr === dateStr;
+            // Filtrer et trier chronologiquement les événements externes du jour
+            const dayEvents = externalEvents
+              .filter(ev => {
+                const evDateStr = getLocalDateString(new Date(ev.startTime), userTz);
+                return evDateStr === dateStr;
+              })
+              .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+
+            // Construire une timeline unifiée triée par heure de début (Événements externes + Sessions)
+            type TimelineItem =
+              | { kind: 'external'; sortMs: number; ev: ExternalEvent }
+              | { kind: 'session'; sortMs: number; session: typeof sessions[number]; sessionIndex: number };
+
+            const timelineItems: TimelineItem[] = [];
+
+            dayEvents.forEach(ev => {
+              timelineItems.push({
+                kind: 'external',
+                sortMs: new Date(ev.startTime).getTime(),
+                ev
+              });
             });
+
+            sessions.forEach((session, si) => {
+              let sortMs = 0;
+              if (session.startTime) {
+                sortMs = new Date(session.startTime).getTime();
+              } else {
+                const timeMatch = session.note?.match(/^(\d{2}):(\d{2})/);
+                if (timeMatch) {
+                  sortMs = new Date(`${dateStr}T${timeMatch[1]}:${timeMatch[2]}:00`).getTime();
+                } else {
+                  sortMs = new Date(`${dateStr}T08:00:00`).getTime() + si * 3600000;
+                }
+              }
+              timelineItems.push({
+                kind: 'session',
+                sortMs,
+                session,
+                sessionIndex: si
+              });
+            });
+
+            timelineItems.sort((a, b) => a.sortMs - b.sortMs);
 
             const completedCount = sessions.filter(s => s.isCompleted).length;
             const isDoneAll = sessions.length > 0 && completedCount === sessions.length;
@@ -139,29 +179,42 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
                 </div>
 
                 <div className="space-y-2 min-h-[30px]">
-                  {/* Blocs Indisponibles Externes (RDV / Personnels) */}
-                  {dayEvents.map(ev => {
-                    const startH = new Date(ev.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    const endH = new Date(ev.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    return (
-                      <div
-                        key={ev.id}
-                        className="p-2 rounded-xl border border-rose-900/40 bg-rose-950/20 text-rose-300 text-xs flex items-center gap-2"
-                        title={`Événement externe bloqué + ${userSettings.bufferMinutesBefore}m tampon`}
-                      >
-                        <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                        <div className="truncate flex-grow">
-                          <span className="font-bold block truncate">{ev.title}</span>
-                          <span className="text-[10px] text-rose-400 opacity-80">{startH} – {endH} (Occupé)</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {sessions.length === 0 && dayEvents.length === 0 ? (
+                  {timelineItems.length === 0 ? (
                     <p className="text-[10px] italic py-2 text-center" style={{ color: 'var(--muted)' }}>Repos / Pas de créneau</p>
                   ) : (
-                    sessions.map((session, si) => {
+                    timelineItems.map((item) => {
+                      if (item.kind === 'external') {
+                        const ev = item.ev;
+                        const isGoogle = ev.source === 'google' || ev.id?.startsWith('gcal_');
+                        const startH = ev.isAllDay
+                          ? 'Journée'
+                          : new Date(ev.startTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: userTz });
+                        const endH = ev.isAllDay
+                          ? 'entière'
+                          : new Date(ev.endTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: userTz });
+
+                        return (
+                          <div
+                            key={ev.id}
+                            className={`p-2.5 rounded-xl border text-xs flex items-center gap-2 ${
+                              isGoogle
+                                ? 'border-blue-500/35 bg-blue-500/10 text-blue-900 dark:text-blue-200'
+                                : 'border-rose-500/35 bg-rose-500/10 text-rose-900 dark:text-rose-200'
+                            }`}
+                            title={`Événement externe bloqué + ${userSettings.bufferMinutesBefore}m tampon`}
+                          >
+                            <ShieldAlert className={`w-3.5 h-3.5 shrink-0 ${isGoogle ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'}`} />
+                            <div className="truncate flex-grow">
+                              <span className="font-extrabold block truncate">{ev.title}</span>
+                              <span className={`text-[10px] font-bold ${isGoogle ? 'text-blue-700 dark:text-blue-300' : 'text-rose-700 dark:text-rose-300'}`}>
+                                {ev.isAllDay ? 'Journée entière (Occupé)' : `${startH} – ${endH} (Occupé)`}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const { session, sessionIndex: si } = item;
                       const proj = projects.find(p => p.id === session.projectId || p.id === session.subjectId) || { color: '#0E8478' };
                       const checked = session.isCompleted;
 
