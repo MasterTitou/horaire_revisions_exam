@@ -35,6 +35,39 @@ export const PomodoroDock: React.FC<PomodoroDockProps> = ({
   const [mode, setMode] = useState<'focus' | 'break'>('focus');
 
   const targetEndTimeRef = React.useRef<number | null>(null);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const currentSoundSrcRef = React.useRef<string>('');
+
+  // Gestion de l'audio d'ambiance (rain, forest, white, lofi)
+  useEffect(() => {
+    if (isRunning && mode === 'focus' && sound && sound !== 'none') {
+      const targetSrc = `/sounds/${sound}.mp3`;
+      if (!audioRef.current || currentSoundSrcRef.current !== targetSrc) {
+        if (audioRef.current) {
+          audioRef.current.pause();
+        }
+        const audio = new Audio(targetSrc);
+        audio.loop = true;
+        audio.volume = 0.5;
+        audioRef.current = audio;
+        currentSoundSrcRef.current = targetSrc;
+      }
+      audioRef.current.play().catch(() => {});
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    }
+  }, [isRunning, mode, sound]);
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
 
   // Update timer on settings change if not running
   useEffect(() => {
@@ -191,7 +224,10 @@ export const PomodoroDock: React.FC<PomodoroDockProps> = ({
         activeTaskTitle={activeTaskTitle}
         activeProjectCode={activeProjectCode}
         sound={sound}
-        onSoundChange={setSound}
+        onSoundChange={(newSound) => {
+          setSound(newSound);
+          localStorage.setItem('pomo_sound', newSound);
+        }}
         onCompleteSession={() => {
           if (onCompleteActiveSession) onCompleteActiveSession();
         }}

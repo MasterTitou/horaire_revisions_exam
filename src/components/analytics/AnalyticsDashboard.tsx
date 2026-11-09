@@ -32,12 +32,18 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ projects
   // Global stats calculation
   let totalSessions = 0;
   let completedSessions = 0;
+  let completedMinutes = 0;
   Object.values(scheduleData).forEach(sessions => {
     totalSessions += sessions.length;
-    completedSessions += sessions.filter(s => s.isCompleted).length;
+    sessions.forEach(s => {
+      if (s.isCompleted) {
+        completedSessions += 1;
+        completedMinutes += s.durationMinutes || 60;
+      }
+    });
   });
 
-  const totalHours = Math.round(completedSessions * (10 / 3));
+  const totalHours = Math.round((completedMinutes / 60) * 10) / 10;
   const completionPct = totalSessions > 0 ? Math.round((completedSessions / totalSessions) * 100) : 0;
 
   // Calculate total WBS estimated workload vs remaining

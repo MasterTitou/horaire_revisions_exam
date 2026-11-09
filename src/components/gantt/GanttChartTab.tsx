@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Project } from '../../types';
+import { computeCriticalPath } from '../../engine/scheduler';
 import { Layers, Flame, Link, Calendar, CheckCircle2 } from 'lucide-react';
 
 interface GanttChartTabProps {
@@ -7,6 +8,8 @@ interface GanttChartTabProps {
 }
 
 export const GanttChartTab: React.FC<GanttChartTabProps> = ({ projects }) => {
+  const criticalMap = useMemo(() => computeCriticalPath(projects), [projects]);
+
   // Collect all milestones across projects
   interface GanttItem {
     project: Project;
@@ -92,7 +95,7 @@ export const GanttChartTab: React.FC<GanttChartTabProps> = ({ projects }) => {
                   <div className="space-y-2.5 pt-1">
                     {proj.milestones.map(ms => {
                       const pct = Math.min(100, Math.round(((ms.completedHours || 0) / (ms.estimatedHours || 10)) * 100));
-                      const isCritical = ms.isCriticalPath;
+                      const isCritical = ms.isCriticalPath ?? criticalMap[ms.id];
                       const hasParent = ms.dependsOn && ms.dependsOn.length > 0;
                       const parentMs = hasParent ? proj.milestones.find(p => p.id === ms.dependsOn![0]) : null;
 

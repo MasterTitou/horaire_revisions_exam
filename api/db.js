@@ -32,6 +32,89 @@ export async function initSchema() {
   if (!isPostgresConfigured()) return false;
   try {
     await safeSql(() => sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`, 1500);
+
+    await safeSql(() => sql`
+      CREATE TABLE IF NOT EXISTS projects (
+        id VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        code VARCHAR(50) NOT NULL,
+        color VARCHAR(50) DEFAULT '#0E8478',
+        start_date DATE,
+        deadline DATE,
+        is_hard_deadline BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `, 1500);
+
+    await safeSql(() => sql`
+      CREATE TABLE IF NOT EXISTS milestones (
+        id VARCHAR(255) PRIMARY KEY,
+        project_id VARCHAR(255) REFERENCES projects(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        estimated_hours NUMERIC(5,2) DEFAULT 10.00,
+        completed_hours NUMERIC(5,2) DEFAULT 0.00,
+        start_date DATE,
+        due_date DATE,
+        cognitive_load VARCHAR(20) DEFAULT 'medium',
+        is_hard_deadline BOOLEAN DEFAULT TRUE,
+        is_completed BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `, 1500);
+
+    await safeSql(() => sql`
+      CREATE TABLE IF NOT EXISTS milestone_dependencies (
+        parent_milestone_id VARCHAR(255) REFERENCES milestones(id) ON DELETE CASCADE,
+        child_milestone_id VARCHAR(255) REFERENCES milestones(id) ON DELETE CASCADE,
+        PRIMARY KEY (parent_milestone_id, child_milestone_id)
+      );
+    `, 1500);
+
+    await safeSql(() => sql`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id VARCHAR(255) PRIMARY KEY,
+        milestone_id VARCHAR(255) REFERENCES milestones(id) ON DELETE CASCADE,
+        session_date DATE NOT NULL,
+        slot_index INT DEFAULT 0,
+        start_time TIMESTAMP WITH TIME ZONE,
+        end_time TIMESTAMP WITH TIME ZONE,
+        duration_minutes INT DEFAULT 60,
+        note TEXT,
+        is_completed BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `, 1500);
+
+    await safeSql(() => sql`
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS duration_minutes INT DEFAULT 60;
+    `, 1000);
+
+    await safeSql(() => sql`
+      CREATE TABLE IF NOT EXISTS calendar_integrations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_key VARCHAR(255) DEFAULT 'default_user',
+        provider VARCHAR(20) NOT NULL,
+        calendar_id VARCHAR(255),
+        ical_url TEXT,
+        access_token TEXT,
+        refresh_token TEXT,
+        webhook_channel_id VARCHAR(255),
+        webhook_resource_id VARCHAR(255),
+        webhook_expiration TIMESTAMP WITH TIME ZONE,
+        last_synced_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        UNIQUE (user_key, provider)
+      );
+    `, 1500);
+
+    await safeSql(() => sql`
+      ALTER TABLE calendar_integrations ADD COLUMN IF NOT EXISTS user_key VARCHAR(255) DEFAULT 'default_user';
+    `, 1000);
+
+    await safeSql(() => sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_calendar_integrations_user_provider ON calendar_integrations(user_key, provider);
+    `, 1000);
+
     await safeSql(() => sql`
       CREATE TABLE IF NOT EXISTS ai_daily_quotas (
         user_key VARCHAR(255) NOT NULL,

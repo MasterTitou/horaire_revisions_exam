@@ -2,7 +2,7 @@
 // Gestion de la synchronisation bidirectionnelle Google Calendar API v3 Multi-Agendas (École, Travail, Secondaires)
 // Avec persistance des tokens OAuth en BDD, souscription Webhook et exportations nommées pour Cron & Webhooks
 
-import { sql } from './db.js';
+import { sql, initSchema } from '../db.js';
 
 function isPostgresConfigured() {
   return Boolean(process.env.POSTGRES_URL || process.env.VERCEL_POSTGRES_URL || process.env.POSTGRES_PRISMA_URL);
@@ -13,6 +13,7 @@ function isPostgresConfigured() {
 export async function storeGoogleTokens(userKey, accessToken, refreshToken) {
   if (!isPostgresConfigured()) return;
   try {
+    await initSchema();
     if (refreshToken) {
       await sql`
         INSERT INTO calendar_integrations (user_key, provider, access_token, refresh_token, last_synced_at)
@@ -177,7 +178,7 @@ export default async function handler(req, res) {
 
   // ─── 1. AUTH URL ───
   if (req.method === 'GET' && action === 'auth_url') {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '');
     if (!clientId) {
       return res.status(400).json({
         error: 'GOOGLE_CLIENT_ID non configuré',
@@ -185,10 +186,13 @@ export default async function handler(req, res) {
       });
     }
 
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://horaire-revisions-exam.vercel.app/api/calendar/google?action=callback';
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'horaire-revisions-exam.vercel.app';
+    const proto = req.headers['x-forwarded-proto'] || 'https';
+    const defaultRedirectUri = `${proto}://${host}/api/calendar/google?action=callback`;
+    const redirectUri = (process.env.GOOGLE_REDIRECT_URI || defaultRedirectUri).trim().replace(/^["']|["']$/g, '');
     const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly');
 
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&access_type=offline&prompt=consent`;
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&access_type=offline&prompt=consent`;
 
     return res.status(200).json({ url: authUrl });
   }
@@ -196,9 +200,12 @@ export default async function handler(req, res) {
   // ─── 2. OAUTH2 CALLBACK ───
   if (req.method === 'GET' && action === 'callback') {
     const { code } = req.query;
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://horaire-revisions-exam.vercel.app/api/calendar/google?action=callback';
+    const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim().replace(/^["']|["']$/g, '');
+    const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim().replace(/^["']|["']$/g, '');
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'horaire-revisions-exam.vercel.app';
+    const proto = req.headers['x-forwarded-proto'] || 'https';
+    const defaultRedirectUri = `${proto}://${host}/api/calendar/google?action=callback`;
+    const redirectUri = (process.env.GOOGLE_REDIRECT_URI || defaultRedirectUri).trim().replace(/^["']|["']$/g, '');
 
     if (!code || !clientId || !clientSecret) {
       return res.status(400).send('Variables GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET requises dans Vercel.');

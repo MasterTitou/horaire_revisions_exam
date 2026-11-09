@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Project, CognitiveLoad } from '../../types';
+import { computeCriticalPath } from '../../engine/scheduler';
 import { Layers, Trash2, X, Link, Flame, ChevronDown, ChevronUp, Plus, Calendar, Clock } from 'lucide-react';
 
 const todayISO = new Date().toISOString().split('T')[0];
@@ -84,6 +85,9 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
     low: <span className="px-2 py-0.5 rounded-full text-[10px] font-black shrink-0" style={{ background: 'var(--sage-l)', color: 'var(--sage)' }}>📝 Logistique</span>
   };
 
+  // Calcul du chemin critique global
+  const criticalMap = useMemo(() => computeCriticalPath(projects), [projects]);
+
   // Filtrage des projets
   const filteredProjects = selectedFilterProjectId === 'all'
     ? projects
@@ -163,8 +167,12 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
 
             // Calcul du taux de réussite/progression
             const totalMs = proj.milestones.length;
-            const completedCount = 0;
-            const progressPercent = totalMs > 0 ? Math.round((completedCount / totalMs) * 100) : 0;
+            const totalEstHours = proj.milestones.reduce((sum, m) => sum + (m.estimatedHours || 10), 0);
+            const totalDoneHours = proj.milestones.reduce((sum, m) => sum + (m.isCompleted ? (m.estimatedHours || 10) : (m.completedHours || 0)), 0);
+            const completedCount = proj.milestones.filter(m => m.isCompleted).length;
+            const progressPercent = totalEstHours > 0
+              ? Math.min(100, Math.round((totalDoneHours / totalEstHours) * 100))
+              : (totalMs > 0 ? Math.round((completedCount / totalMs) * 100) : 0);
 
             const hardBadge = proj.isHardDeadline ? (
               <span className="px-1.5 py-0.5 rounded text-[9px] font-black shrink-0" style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444' }}>🔴 Ferme</span>
@@ -267,7 +275,7 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
                         <div className="absolute left-[15px] top-3 bottom-3 w-0.5 bg-teal-500/20 rounded-full"></div>
 
                         {proj.milestones.map((ms, index) => {
-                          const isCritical = ms.isCriticalPath;
+                          const isCritical = ms.isCriticalPath ?? criticalMap[ms.id];
                           const hasParent = ms.dependsOn && ms.dependsOn.length > 0;
                           const parentMs = hasParent ? proj.milestones.find(p => p.id === ms.dependsOn![0]) : null;
 

@@ -215,34 +215,47 @@ Extrais un objet JSON strict avec :
         });
       }
 
-      const modelName = AI_MODELS.HEAVY_STRATEGIST;
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const heavyCandidateModels = Array.from(new Set([
+        AI_MODELS.HEAVY_STRATEGIST,
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-1.5-pro'
+      ]));
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0.3 }
-        })
-      });
+      let lastErrData = null;
+      for (const modelName of heavyCandidateModels) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemInstruction }] },
+              contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+              generationConfig: { temperature: 0.3 }
+            })
+          });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        console.error('Erreur API Gemini 3.6 Flash:', errData);
-        return res.status(500).json({ error: 'Erreur d\'arbitrage Gemini 3.6 Flash', details: errData });
+          if (response.ok) {
+            const data = await response.json().catch(() => ({}));
+            if (data.usageMetadata?.totalTokenCount) {
+              await recordTokensUsage(userKey, todayStr, 'heavy', data.usageMetadata.totalTokenCount);
+            }
+            const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Aucune recommandation générée.";
+            return res.status(200).json({ success: true, source: modelName, strategicAdvice: replyText, quotaUsage: { used: quotaResult.current, limit: quotaResult.maxLimit } });
+          } else {
+            lastErrData = await response.json().catch(() => ({}));
+            console.error(`Erreur API Arbitrage (${modelName}):`, lastErrData);
+          }
+        } catch (err) {
+          console.error(`Erreur réseau Arbitrage (${modelName}):`, err);
+        }
       }
 
-      const data = await response.json().catch(() => ({}));
-      if (data.usageMetadata?.totalTokenCount) {
-        await recordTokensUsage(userKey, todayStr, 'heavy', data.usageMetadata.totalTokenCount);
-      }
-      const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Aucune recommandation générée.";
-      return res.status(200).json({ success: true, source: modelName, strategicAdvice: replyText, quotaUsage: { used: quotaResult.current, limit: quotaResult.maxLimit } });
+      return res.status(500).json({ error: 'Erreur d\'arbitrage Gemini', details: lastErrData });
     }
 
-    // ROUTE 4: POST / Chat (Strictement Gemini 3.5 Flash-Lite)
+    // ROUTE 4: POST / Chat (Gemini Flash-Lite avec repli résilient)
     if (!apiKey) {
       return res.status(400).json({ error: 'Clé GEMINI_API_KEY non configurée sur Vercel.' });
     }
@@ -278,29 +291,46 @@ Extrais un objet JSON strict avec :
       sanitizedContents.shift();
     }
 
-    const modelName = AI_MODELS.FAST_LITE;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    const chatCandidateModels = Array.from(new Set([
+      AI_MODELS.FAST_LITE,
+      'gemini-2.5-flash-lite',
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash'
+    ]));
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: sanitizedContents, systemInstruction, generationConfig })
+    let lastChatData = {};
+    let lastChatStatus = 500;
+
+    for (const modelName of chatCandidateModels) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: sanitizedContents, systemInstruction, generationConfig })
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          if (data.usageMetadata?.totalTokenCount) {
+            await recordTokensUsage(userKey, todayStr, 'lite', data.usageMetadata.totalTokenCount);
+          }
+          return res.status(200).json(data);
+        }
+
+        lastChatData = data;
+        lastChatStatus = response.status || 500;
+        console.error(`Erreur API Chat (${modelName}):`, data);
+      } catch (err) {
+        console.error(`Erreur réseau Chat (${modelName}):`, err);
+      }
+    }
+
+    return res.status(lastChatStatus).json({
+      error: lastChatData.error?.message || lastChatData.error || 'Erreur API Google Gemini',
+      details: lastChatData
     });
-
-    const data = await response.json().catch(() => ({}));
-    if (data.usageMetadata?.totalTokenCount) {
-      await recordTokensUsage(userKey, todayStr, 'lite', data.usageMetadata.totalTokenCount);
-    }
-
-    if (!response.ok) {
-      console.error('Erreur API Chat Gemini 3.5 Flash-Lite:', data);
-      return res.status(response.status || 500).json({
-        error: data.error?.message || data.error || 'Erreur API Google Gemini',
-        details: data
-      });
-    }
-
-    return res.status(200).json(data);
   } catch (globalErr) {
     console.error('Erreur serveur API /api/ai unhandled:', globalErr);
     return res.status(500).json({

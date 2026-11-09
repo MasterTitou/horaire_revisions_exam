@@ -40,6 +40,7 @@ export const App: React.FC = () => {
     toggleSession,
     changeWeek,
     regenerateSchedule,
+    updateProjects,
     toggleTheme,
     resetAllData,
     exportDataJSON,
@@ -243,6 +244,7 @@ export const App: React.FC = () => {
               chatHistory={chatHistory}
               setChatHistory={setChatHistory}
               authToken="auth_active"
+              onUpdateProjects={updateProjects}
               gamification={gamification}
               scheduleData={scheduleData}
             />

@@ -14,6 +14,7 @@ const MONTHS_SHORT = ["Janv.", "Févr.", "Mars", "Avril", "Mai", "Juin", "Juil."
 export const StatWidgets: React.FC<StatWidgetsProps> = ({ projects, scheduleData, currentWeekStart }) => {
   let total = 0;
   let completed = 0;
+  let totalMinutes = 0;
 
   for (let i = 0; i < 7; i++) {
     const d = new Date(currentWeekStart);
@@ -22,9 +23,12 @@ export const StatWidgets: React.FC<StatWidgetsProps> = ({ projects, scheduleData
     const s = scheduleData[dateStr] || [];
     total += s.length;
     completed += s.filter(x => x.isCompleted).length;
+    s.forEach(sess => {
+      totalMinutes += sess.durationMinutes || 60;
+    });
   }
 
-  const hours = Math.round(total * 10 / 3);
+  const hours = Math.round((totalMinutes / 60) * 10) / 10;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   let nextDeliveryText = '--';

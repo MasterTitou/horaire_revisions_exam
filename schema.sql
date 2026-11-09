@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   slot_index INT DEFAULT 0,
   start_time TIMESTAMP WITH TIME ZONE,
   end_time TIMESTAMP WITH TIME ZONE,
+  duration_minutes INT DEFAULT 60,
   note TEXT,
   is_completed BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -89,6 +90,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
 CREATE TABLE IF NOT EXISTS calendar_integrations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  user_key VARCHAR(255) DEFAULT 'default_user',
   provider VARCHAR(20) NOT NULL, -- 'google' | 'ical'
   calendar_id VARCHAR(255),
   ical_url TEXT,
@@ -98,7 +100,8 @@ CREATE TABLE IF NOT EXISTS calendar_integrations (
   webhook_resource_id VARCHAR(255),
   webhook_expiration TIMESTAMP WITH TIME ZONE,
   last_synced_at TIMESTAMP WITH TIME ZONE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (user_key, provider)
 );
 
 -- 10. Table des Événements Indisponibles Personnels / Professionnels

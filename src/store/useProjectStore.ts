@@ -725,12 +725,34 @@ export function useProjectStore() {
 
 
 
-    updatedGamification = updateMetricsAndQuests(updatedSchedule, projects, updatedGamification);
+    const sessionHoursDelta = ((s.durationMinutes || 60) / 60) * (s.isCompleted ? 1 : -1);
+    const updatedProjects = projects.map(p => {
+      if (p.id !== s.projectId) return p;
+      return {
+        ...p,
+        milestones: p.milestones.map(m => {
+          if (m.id !== s.milestoneId) return m;
+          const nextHours = Math.max(0, Math.round(((m.completedHours || 0) + sessionHoursDelta) * 10) / 10);
+          return {
+            ...m,
+            completedHours: nextHours,
+            isCompleted: nextHours >= (m.estimatedHours || 10)
+          };
+        })
+      };
+    });
 
+    if (updatedStreak.count > (updatedGamification.bestStreak || 0)) {
+      updatedGamification.bestStreak = updatedStreak.count;
+    }
+
+    updatedGamification = updateMetricsAndQuests(updatedSchedule, updatedProjects, updatedGamification);
+
+    setProjects(updatedProjects);
     setScheduleData(updatedSchedule);
     setStreak(updatedStreak);
     setGamification(updatedGamification);
-    saveAll(projects, updatedSchedule, updatedStreak, updatedGamification, isDarkMode);
+    saveAll(updatedProjects, updatedSchedule, updatedStreak, updatedGamification, isDarkMode);
   };
 
 
@@ -751,6 +773,15 @@ export function useProjectStore() {
     const updatedSchedule = replanifyOnCalendarChange(projects, currentWeekStart, scheduleData, externalEvents, userSettings, gamification.calibration);
     setScheduleData(updatedSchedule);
     saveAll(projects, updatedSchedule, streak, gamification, isDarkMode);
+  };
+
+  const updateProjects = (updatedProjects: Project[]) => {
+    const updatedSchedule = replanifyOnCalendarChange(updatedProjects, currentWeekStart, scheduleData, externalEvents, userSettings, gamification.calibration);
+    const updatedGamo = updateMetricsAndQuests(updatedSchedule, updatedProjects, gamification);
+    setProjects(updatedProjects);
+    setScheduleData(updatedSchedule);
+    setGamification(updatedGamo);
+    saveAll(updatedProjects, updatedSchedule, streak, updatedGamo, isDarkMode);
   };
 
   const toggleTheme = () => {
@@ -917,6 +948,7 @@ export function useProjectStore() {
     toggleSession,
     changeWeek,
     regenerateSchedule,
+    updateProjects,
     toggleTheme,
     resetAllData,
     exportDataJSON,
