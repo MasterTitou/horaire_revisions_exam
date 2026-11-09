@@ -17,6 +17,10 @@ function verifyToken(token) {
 }
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -34,131 +38,115 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Payload manquant' });
   }
 
-  // Stamp current save time
-  payload.updatedAt = new Date().toISOString();
+  const incomingUpdatedAt = new Date().toISOString();
+  payload.updatedAt = incomingUpdatedAt;
 
   // 1. Sauvegarde dans PostgreSQL si POSTGRES_URL est configuré
-  if (process.env.POSTGRES_URL) {
+  if (process.env.POSTGRES_URL || process.env.VERCEL_POSTGRES_URL || process.env.POSTGRES_PRISMA_URL) {
     try {
       await initSchema();
 
-      const { projects = [], scheduleData = {} } = payload;
-      const activeProjIds = projects.map(p => p.id);
-      const activeMilestoneIds = [];
-      const activeSessionIds = [];
-
-      // Upsert all projects first
-      for (const p of projects) {
-        await sql`
-          INSERT INTO projects (id, name, code, color, start_date, deadline, is_hard_deadline)
-          VALUES (${p.id}, ${p.name}, ${p.code}, ${p.color}, ${p.startDate || null}, ${p.deadline || null}, ${p.isHardDeadline})
-          ON CONFLICT (id) DO UPDATE SET
-            name = EXCLUDED.name,
-            code = EXCLUDED.code,
-            color = EXCLUDED.color,
-            start_date = EXCLUDED.start_date,
-            deadline = EXCLUDED.deadline,
-            is_hard_deadline = EXCLUDED.is_hard_deadline;
-        `;
-
-        for (const m of p.milestones || []) {
-          activeMilestoneIds.push(m.id);
-          await sql`
-            INSERT INTO milestones (id, project_id, title, estimated_hours, completed_hours, start_date, due_date, cognitive_load, is_hard_deadline, is_completed)
-            VALUES (${m.id}, ${p.id}, ${m.title}, ${m.estimatedHours}, ${m.completedHours}, ${m.startDate || null}, ${m.dueDate || null}, ${m.cognitiveLoad}, ${m.isHardDeadline}, ${m.isCompleted})
-            ON CONFLICT (id) DO UPDATE SET
-              title = EXCLUDED.title,
-              estimated_hours = EXCLUDED.estimated_hours,
-              completed_hours = EXCLUDED.completed_hours,
-              start_date = EXCLUDED.start_date,
-              due_date = EXCLUDED.due_date,
-              cognitive_load = EXCLUDED.cognitive_load,
-              is_hard_deadline = EXCLUDED.is_hard_deadline,
-              is_completed = EXCLUDED.is_completed;
-          `;
-
-          // Clean old dependencies for this milestone before re-inserting
-          await sql`DELETE FROM milestone_dependencies WHERE child_milestone_id = ${m.id}`;
-
-          for (const parentId of m.dependsOn || []) {
-            await sql`
-              INSERT INTO milestone_dependencies (parent_milestone_id, child_milestone_id)
-              VALUES (${parentId}, ${m.id})
-              ON CONFLICT DO NOTHING;
-            `;
-          }
-        }
-      }
-
-      // Purge des sessions d'abord (dépend de milestones via FK)
-      for (const [dateStr, sessions] of Object.entries(scheduleData)) {
-        for (const s of (sessions || [])) {
-          if (s.milestoneId && activeMilestoneIds.includes(s.milestoneId)) {
-            activeSessionIds.push(s.id);
-            await sql`
-              INSERT INTO sessions (id, milestone_id, session_date, slot_index, start_time, end_time, duration_minutes, note, is_completed)
-              VALUES (${s.id}, ${s.milestoneId}, ${dateStr}, 0, ${s.startTime || null}, ${s.endTime || null}, ${s.durationMinutes || 60}, ${s.note}, ${s.isCompleted})
-              ON CONFLICT (id) DO UPDATE SET
-                session_date = EXCLUDED.session_date,
-                start_time = EXCLUDED.start_time,
-                end_time = EXCLUDED.end_time,
-                duration_minutes = EXCLUDED.duration_minutes,
-                is_completed = EXCLUDED.is_completed,
-                note = EXCLUDED.note;
-            `;
-          }
-        }
-      }
-
-      // Purger les séances supprimées (AVANT milestones à cause de la FK)
-      if (activeSessionIds.length > 0) {
-        // @vercel/postgres tagged templates: utilise ANY() pour le IN dynamique
-        await sql`DELETE FROM sessions WHERE id != ALL(${activeSessionIds})`;
-      } else {
-        await sql`DELETE FROM sessions`;
-      }
-
-      // Purger les jalons supprimés (AVANT projets à cause de la FK)
-      if (activeMilestoneIds.length > 0) {
-        await sql`DELETE FROM milestones WHERE id != ALL(${activeMilestoneIds})`;
-      } else {
-        await sql`DELETE FROM milestones`;
-      }
-
-      // Purger les projets supprimés
-      if (activeProjIds.length > 0) {
-        await sql`DELETE FROM projects WHERE id != ALL(${activeProjIds})`;
-      } else {
-        await sql`DELETE FROM projects`;
-      }
-
-      // Sauvegarder les métadonnées globales (gamification, streak, settings, etc.)
-      const metaPayload = JSON.stringify({
+      // A. Sauvegarde atomique immédiate de l'état complet dans app_metadata (garantit 100% de synchro PC <-> Mobile en 1 requête)
+      const fullStatePayload = JSON.stringify({
+        projects: payload.projects || [],
+        scheduleData: payload.scheduleData || {},
         streak: payload.streak || { count: 0, lastDate: '' },
         gamification: payload.gamification || null,
         chatHistory: payload.chatHistory || [],
         externalEvents: payload.externalEvents || [],
         userSettings: payload.userSettings || null,
         icalFeeds: payload.icalFeeds || payload.userSettings?.icalFeeds || [],
-        isDarkMode: !!payload.isDarkMode
+        isDarkMode: !!payload.isDarkMode,
+        updatedAt: incomingUpdatedAt
       });
-
-
-      const incomingUpdatedAt = payload.updatedAt || new Date().toISOString();
 
       await sql`
         INSERT INTO app_metadata (id, payload, updated_at)
-        VALUES ('global_state', ${metaPayload}::jsonb, ${incomingUpdatedAt}::timestamptz)
+        VALUES ('global_state', ${fullStatePayload}::jsonb, ${incomingUpdatedAt}::timestamptz)
         ON CONFLICT (id) DO UPDATE SET
-          payload = CASE WHEN EXCLUDED.updated_at >= app_metadata.updated_at THEN EXCLUDED.payload ELSE app_metadata.payload END,
-          updated_at = CASE WHEN EXCLUDED.updated_at >= app_metadata.updated_at THEN EXCLUDED.updated_at ELSE app_metadata.updated_at END;
+          payload = EXCLUDED.payload,
+          updated_at = EXCLUDED.updated_at;
       `;
 
+      // B. Synchronisation relationnelle en second plan (sans bloquer ni annuler app_metadata)
+      try {
+        const { projects = [], scheduleData = {} } = payload;
+        const activeMilestoneIds = new Set();
+
+        await sql`DELETE FROM sessions`;
+        await sql`DELETE FROM milestone_dependencies`;
+        await sql`DELETE FROM milestones`;
+        await sql`DELETE FROM projects`;
+
+        for (const p of projects) {
+          await sql`
+            INSERT INTO projects (id, name, code, color, start_date, deadline, is_hard_deadline)
+            VALUES (${p.id}, ${p.name}, ${p.code}, ${p.color}, ${p.startDate || null}, ${p.deadline || null}, ${p.isHardDeadline})
+            ON CONFLICT (id) DO UPDATE SET
+              name = EXCLUDED.name,
+              code = EXCLUDED.code,
+              color = EXCLUDED.color,
+              start_date = EXCLUDED.start_date,
+              deadline = EXCLUDED.deadline,
+              is_hard_deadline = EXCLUDED.is_hard_deadline;
+          `;
+
+          for (const m of p.milestones || []) {
+            activeMilestoneIds.add(m.id);
+            await sql`
+              INSERT INTO milestones (id, project_id, title, estimated_hours, completed_hours, start_date, due_date, cognitive_load, is_hard_deadline, is_completed)
+              VALUES (${m.id}, ${p.id}, ${m.title}, ${m.estimatedHours}, ${m.completedHours}, ${m.startDate || null}, ${m.dueDate || null}, ${m.cognitiveLoad}, ${m.isHardDeadline}, ${m.isCompleted})
+              ON CONFLICT (id) DO UPDATE SET
+                title = EXCLUDED.title,
+                estimated_hours = EXCLUDED.estimated_hours,
+                completed_hours = EXCLUDED.completed_hours,
+                start_date = EXCLUDED.start_date,
+                due_date = EXCLUDED.due_date,
+                cognitive_load = EXCLUDED.cognitive_load,
+                is_hard_deadline = EXCLUDED.is_hard_deadline,
+                is_completed = EXCLUDED.is_completed;
+            `;
+          }
+        }
+
+        for (const p of projects) {
+          for (const m of p.milestones || []) {
+            for (const parentId of m.dependsOn || []) {
+              if (activeMilestoneIds.has(parentId)) {
+                await sql`
+                  INSERT INTO milestone_dependencies (parent_milestone_id, child_milestone_id)
+                  VALUES (${parentId}, ${m.id})
+                  ON CONFLICT DO NOTHING;
+                `;
+              }
+            }
+          }
+        }
+
+        for (const [dateStr, sessions] of Object.entries(scheduleData)) {
+          for (const s of (sessions || [])) {
+            if (s.milestoneId && activeMilestoneIds.has(s.milestoneId)) {
+              await sql`
+                INSERT INTO sessions (id, milestone_id, session_date, slot_index, start_time, end_time, duration_minutes, note, is_completed)
+                VALUES (${s.id}, ${s.milestoneId}, ${dateStr}, 0, ${s.startTime || null}, ${s.endTime || null}, ${s.durationMinutes || 60}, ${s.note}, ${s.isCompleted})
+                ON CONFLICT (id) DO UPDATE SET
+                  session_date = EXCLUDED.session_date,
+                  start_time = EXCLUDED.start_time,
+                  end_time = EXCLUDED.end_time,
+                  duration_minutes = EXCLUDED.duration_minutes,
+                  is_completed = EXCLUDED.is_completed,
+                  note = EXCLUDED.note;
+              `;
+            }
+          }
+        }
+      } catch (relErr) {
+        console.warn('Sync tables relationnelles secondaire ignorée:', relErr.message);
+      }
     } catch (pgError) {
       console.error('Erreur Save PostgreSQL:', pgError.message);
     }
   }
-
 
   // 2. Sauvegarde miroir dans Redis KV
   const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -176,5 +164,5 @@ export default async function handler(req, res) {
     }
   }
 
-  return res.status(200).json({ success: true, updatedAt: payload.updatedAt });
+  return res.status(200).json({ success: true, updatedAt: incomingUpdatedAt });
 }

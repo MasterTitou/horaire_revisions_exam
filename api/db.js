@@ -90,6 +90,14 @@ export async function initSchema() {
     `, 1000);
 
     await safeSql(() => sql`
+      ALTER TABLE projects ADD COLUMN IF NOT EXISTS start_date DATE;
+    `, 1000);
+
+    await safeSql(() => sql`
+      ALTER TABLE milestones ADD COLUMN IF NOT EXISTS start_date DATE;
+    `, 1000);
+
+    await safeSql(() => sql`
       CREATE TABLE IF NOT EXISTS calendar_integrations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_key VARCHAR(255) DEFAULT 'default_user',

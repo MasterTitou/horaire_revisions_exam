@@ -53,7 +53,8 @@ export const App: React.FC = () => {
     addCustomDomain,
     updateDomain,
     archiveDomain,
-    restoreDomain
+    restoreDomain,
+    forceCloudSync
   } = useProjectStore();
 
 
@@ -158,6 +159,7 @@ export const App: React.FC = () => {
           isDarkMode={isDarkMode}
           toggleTheme={toggleTheme}
           syncStatus={syncStatus}
+          onForceSync={forceCloudSync}
           onOpenQuickParser={() => setIsQuickParserOpen(true)}
         />
 

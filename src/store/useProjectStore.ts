@@ -166,9 +166,14 @@ export function useProjectStore() {
       setUserSettingsState(d.userSettings);
     }
 
-    // Régénérer dynamiquement les créneaux futurs pour appliquer les pauses de tampon 15 min
+    // Conserver le planning exact s'il existe déjà pour garantir la parité PC / Téléphone
     const weekStart = getStartOfWeek(new Date());
-    const freshSchedule = replanifyOnCalendarChange(projs, weekStart, d.scheduleData || {}, extEvts, settings, initialGamo.calibration);
+    const hasExistingSchedule = d.scheduleData && Object.keys(d.scheduleData).length > 0;
+    const freshSchedule = hasExistingSchedule
+      ? d.scheduleData
+      : (projs.length > 0
+          ? replanifyOnCalendarChange(projs, weekStart, {}, extEvts, settings, initialGamo.calibration)
+          : {});
 
     const updatedGamo = updateMetricsAndQuests(freshSchedule, projs, initialGamo);
 
@@ -180,12 +185,183 @@ export function useProjectStore() {
     setIsDarkMode(!!d.isDarkMode);
     if (d.isDarkMode) {
       document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
     }
   }, []);
 
-  // Dual Load: 1. LocalStorage Cache, 2. Cloud Redis API (/api/load)
+  const isSyncingRef = useRef<boolean>(false);
+
+  const pushSnapshotToCloud = useCallback(async (snapshot: any) => {
+    const token = localStorage.getItem('authToken') || 'auth_token_active';
+    const payloadToPush = {
+      ...snapshot,
+      updatedAt: snapshot.updatedAt || new Date().toISOString()
+    };
+    localStorage.setItem('revisionCalendarData', JSON.stringify(payloadToPush));
+    localStorage.setItem('horaire_revisions_backup', JSON.stringify(payloadToPush));
+    try {
+      setSyncStatus('saving');
+      const res = await fetch('/api/save', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payloadToPush)
+      });
+      setSyncStatus(res.ok ? 'synced' : 'error');
+    } catch {
+      setSyncStatus('error');
+    }
+  }, []);
+
+  const refreshExternalCalendars = useCallback((sourceData: any) => {
+    const rawFeeds = sourceData?.icalFeeds || sourceData?.userSettings?.icalFeeds || (() => {
+      try {
+        const s = localStorage.getItem('imported_ical_feeds');
+        return s ? JSON.parse(s) : [];
+      } catch {
+        return [];
+      }
+    })();
+
+    if (Array.isArray(rawFeeds) && rawFeeds.length > 0) {
+      rawFeeds.forEach((feed: any) => {
+        if (feed.url) {
+          fetch('/api/calendar/ical', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ icalUrl: feed.url })
+          })
+            .then(r => r.json())
+            .then(data => {
+              if (data.success && Array.isArray(data.events)) {
+                const tagged = data.events.map((ev: any) => ({
+                  ...ev,
+                  integrationId: feed.id,
+                  title: ev.title?.startsWith(`[${feed.name}]`) ? ev.title : `[${feed.name}] ${ev.title}`
+                }));
+                setExternalEventsState(prev => {
+                  const next = [
+                    ...prev.filter(e => e.integrationId !== feed.id),
+                    ...tagged
+                  ];
+                  return next;
+                });
+              }
+            })
+            .catch(e => console.error(`iCal auto-refresh err (${feed.name}):`, e.message));
+        }
+      });
+    }
+
+    const gToken = sourceData?.userSettings?.googleAccessToken || localStorage.getItem('google_access_token');
+    if (gToken || sourceData?.userSettings?.googleConnected) {
+      if (gToken) localStorage.setItem('google_access_token', gToken);
+      fetch('/api/calendar/google?action=fetch_events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: gToken || undefined })
+      })
+        .then(r => r.json())
+        .then(gData => {
+          if (gData.success && Array.isArray(gData.events)) {
+            if (gData.accessToken) localStorage.setItem('google_access_token', gData.accessToken);
+            setExternalEventsState(prev => [
+              ...prev.filter(e => !e.id?.startsWith('gcal_') && e.source !== 'google'),
+              ...gData.events
+            ]);
+          }
+        })
+        .catch(e => console.error('Google Calendar auto-refresh err:', e.message));
+    }
+  }, []);
+
+  const syncFromCloud = useCallback(async (isBackground = false) => {
+    if (isSyncingRef.current || saveTimerRef.current) return;
+    isSyncingRef.current = true;
+    if (!isBackground) setSyncStatus('loading');
+
+    let localData: any = null;
+    try {
+      const saved = localStorage.getItem('revisionCalendarData');
+      if (saved) localData = JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to read local revisionCalendarData:', e);
+    }
+
+    const token = localStorage.getItem('authToken') || 'auth_token_active';
+    try {
+      const res = await fetch(`/api/load?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      if (!res.ok) throw new Error('No Cloud data');
+      const cloudData = await res.json();
+
+      if (cloudData && typeof cloudData === 'object') {
+        const cloudProjCount = Array.isArray(cloudData.projects) ? cloudData.projects.length : 0;
+        const localProjCount = Array.isArray(localData?.projects) ? localData.projects.length : 0;
+        const cloudExtCount = Array.isArray(cloudData.externalEvents) ? cloudData.externalEvents.length : 0;
+        const localExtCount = Array.isArray(localData?.externalEvents) ? localData.externalEvents.length : 0;
+
+        const cloudTime = cloudData.updatedAt ? new Date(cloudData.updatedAt).getTime() : 0;
+        const localTime = localData?.updatedAt ? new Date(localData.updatedAt).getTime() : 0;
+
+        const isLocalRicherThanLegacyCloud =
+          localData &&
+          ((cloudProjCount === 0 && localProjCount > 0) ||
+           (!cloudData.updatedAt && (localProjCount > cloudProjCount || localExtCount > cloudExtCount)));
+
+        const isLocalNewer = localData && localTime > 0 && cloudTime > 0 && localTime > cloudTime;
+
+        if (isLocalRicherThanLegacyCloud || isLocalNewer) {
+          await pushSnapshotToCloud(localData);
+          if (!isBackground) refreshExternalCalendars(localData);
+        } else {
+          const hasChanged =
+            !isBackground ||
+            !localData ||
+            cloudData.updatedAt !== localData.updatedAt ||
+            cloudProjCount !== localProjCount ||
+            cloudExtCount !== localExtCount;
+
+          if (hasChanged) {
+            applyStatePayload(cloudData);
+            localStorage.setItem('revisionCalendarData', JSON.stringify(cloudData));
+            localStorage.setItem('horaire_revisions_backup', JSON.stringify(cloudData));
+          }
+          setSyncStatus('synced');
+          if (!isBackground) refreshExternalCalendars(cloudData);
+        }
+      } else if (localData && (localData.projects?.length > 0 || localData.externalEvents?.length > 0)) {
+        await pushSnapshotToCloud(localData);
+        if (!isBackground) refreshExternalCalendars(localData);
+      } else {
+        setSyncStatus('synced');
+      }
+    } catch (err: any) {
+      console.log('Cloud sync skipped or offline:', err?.message || err);
+      if (localData && (localData.projects?.length > 0 || localData.externalEvents?.length > 0)) {
+        await pushSnapshotToCloud(localData);
+      } else {
+        setSyncStatus('synced');
+      }
+      if (!isBackground) refreshExternalCalendars(localData);
+    } finally {
+      isSyncingRef.current = false;
+    }
+  }, [applyStatePayload, pushSnapshotToCloud, refreshExternalCalendars]);
+
+  // Dual Load: 1. LocalStorage Cache, 2. Cloud API (/api/load) + Re-sync on focus/visibility/interval
   useEffect(() => {
-    // 1. LocalStorage Initial Load
     const saved = localStorage.getItem('revisionCalendarData');
     if (saved) {
       try {
@@ -196,140 +372,31 @@ export function useProjectStore() {
       }
     }
 
-    // 2. Fetch from Cloud Redis API if authenticated
-    const token = localStorage.getItem('authToken');
-    if (token || isAuthenticated) {
-      setSyncStatus('loading');
-      fetch('/api/load', {
-        headers: {
-          'Authorization': `Bearer ${token || 'auth_token_active'}`
-        }
-      })
-        .then(res => {
-          if (res.ok) return res.json();
-          throw new Error('No Cloud Redis data');
-        })
-        .then(cloudData => {
-          if (cloudData && typeof cloudData === 'object') {
-            applyStatePayload(cloudData);
-            localStorage.setItem('revisionCalendarData', JSON.stringify(cloudData));
-            localStorage.setItem('horaire_revisions_backup', JSON.stringify(cloudData));
+    syncFromCloud(false);
 
-            // Rafraîchir immédiatement les flux iCal distants après synchronisation cloud
-            const rawFeeds = cloudData.icalFeeds || cloudData.userSettings?.icalFeeds;
-            if (Array.isArray(rawFeeds) && rawFeeds.length > 0) {
-              rawFeeds.forEach((feed: any) => {
-                if (feed.url) {
-                  fetch('/api/calendar/ical', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ icalUrl: feed.url })
-                  })
-                    .then(r => r.json())
-                    .then(data => {
-                      if (data.success && data.events) {
-                        const tagged = data.events.map((ev: any) => ({
-                          ...ev,
-                          integrationId: feed.id,
-                          title: `[${feed.name}] ${ev.title}`
-                        }));
-                        setExternalEventsState(prev => [
-                          ...prev.filter(e => e.integrationId !== feed.id),
-                          ...tagged
-                        ]);
-                      }
-                    })
-                    .catch(e => console.error(`iCal auto-refresh err (${feed.name}):`, e.message));
-                }
-              });
-            }
-            // Rafraîchir immédiatement Google Calendar si connecté
-            const gToken = cloudData.userSettings?.googleAccessToken || localStorage.getItem('google_access_token');
-            if (gToken || cloudData.userSettings?.googleConnected) {
-              if (gToken) localStorage.setItem('google_access_token', gToken);
-              fetch('/api/calendar/google?action=fetch_events', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accessToken: gToken || undefined })
-              })
-                .then(r => r.json())
-                .then(gData => {
-                  if (gData.success && Array.isArray(gData.events)) {
-                    if (gData.accessToken) localStorage.setItem('google_access_token', gData.accessToken);
-                    setExternalEventsState(prev => [
-                      ...prev.filter(e => !e.id?.startsWith('gcal_') && e.source !== 'google'),
-                      ...gData.events
-                    ]);
-                  }
-                })
-                .catch(e => console.error('Google Calendar auto-refresh err:', e.message));
-            }
-          }
-          setSyncStatus('synced');
-        })
-        .catch(err => {
-          console.log('Redis load skipped or offline, using local iCal refresh:', err.message);
-          setSyncStatus('synced');
+    const handleVisibilityOrFocus = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        syncFromCloud(true);
+      }
+    };
 
-          // Fallback: Rafraîchissement Google Calendar local
-          const localGToken = localStorage.getItem('google_access_token');
-          if (localGToken) {
-            fetch('/api/calendar/google?action=fetch_events', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ accessToken: localGToken })
-            })
-              .then(r => r.json())
-              .then(gData => {
-                if (gData.success && Array.isArray(gData.events)) {
-                  if (gData.accessToken) localStorage.setItem('google_access_token', gData.accessToken);
-                  setExternalEventsState(prev => [
-                    ...prev.filter(e => !e.id?.startsWith('gcal_') && e.source !== 'google'),
-                    ...gData.events
-                  ]);
-                }
-              })
-              .catch(e => console.error('Google Calendar local auto-refresh err:', e.message));
-          }
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    window.addEventListener('online', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
-          // Fallback: Rafraîchissement des flux iCal locaux si hors-ligne / sans cloud
-          const savedFeeds = localStorage.getItem('imported_ical_feeds');
-          if (savedFeeds) {
-            try {
-              const feeds = JSON.parse(savedFeeds);
-              if (Array.isArray(feeds) && feeds.length > 0) {
-                feeds.forEach((feed: any) => {
-                  if (feed.url) {
-                    fetch('/api/calendar/ical', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ icalUrl: feed.url })
-                    })
-                      .then(r => r.json())
-                      .then(data => {
-                        if (data.success && data.events) {
-                          const tagged = data.events.map((ev: any) => ({
-                            ...ev,
-                            integrationId: feed.id,
-                            title: `[${feed.name}] ${ev.title}`
-                          }));
-                          setExternalEventsState(prev => [
-                            ...prev.filter(e => e.integrationId !== feed.id),
-                            ...tagged
-                          ]);
-                        }
-                      })
-                      .catch(e => console.error(`iCal local auto-refresh err (${feed.name}):`, e.message));
-                  }
-                });
-              }
-            } catch (e) {
-              console.error('Error parsing iCal feeds for auto-refresh:', e);
-            }
-          }
-        });
-    }
-  }, [applyStatePayload, isAuthenticated]);
+    const intervalId = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        syncFromCloud(true);
+      }
+    }, 20000);
+
+    return () => {
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      window.removeEventListener('online', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      clearInterval(intervalId);
+    };
+  }, [applyStatePayload, syncFromCloud]);
 
   // Dual Save: 1. LocalStorage, 2. Cloud Redis API (/api/save)
   const saveAll = useCallback((
@@ -359,7 +426,8 @@ export function useProjectStore() {
       isDarkMode: newDark,
       externalEvents: newEvents !== undefined ? newEvents : externalEvents,
       userSettings: mergedSettings,
-      icalFeeds: mergedSettings.icalFeeds
+      icalFeeds: mergedSettings.icalFeeds,
+      updatedAt: new Date().toISOString()
     };
 
 
@@ -369,29 +437,29 @@ export function useProjectStore() {
     localStorage.setItem('revisionCalendarData', JSON.stringify(payload));
     localStorage.setItem('horaire_revisions_backup', JSON.stringify(payload));
 
-    // Sync to Cloud Redis (/api/save)
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      setSyncStatus('saving');
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    // Sync to Cloud (/api/save)
+    const token = localStorage.getItem('authToken') || 'auth_token_active';
+    setSyncStatus('saving');
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
 
-      saveTimerRef.current = setTimeout(() => {
-        const payloadToSend = latestPayloadRef.current || payload;
-        fetch('/api/save', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(payloadToSend)
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      const payloadToSend = latestPayloadRef.current || payload;
+      fetch('/api/save', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payloadToSend)
+      })
+        .then(res => {
+          if (res.ok) setSyncStatus('synced');
+          else setSyncStatus('error');
         })
-          .then(res => {
-            if (res.ok) setSyncStatus('synced');
-            else setSyncStatus('error');
-          })
-          .catch(() => setSyncStatus('error'));
-      }, 600);
-    }
+        .catch(() => setSyncStatus('error'));
+    }, 400);
   }, [chatHistory, externalEvents, userSettings]);
 
   const updateChatHistory = (action: React.SetStateAction<ChatMessage[]>) => {
@@ -1003,7 +1071,8 @@ export function useProjectStore() {
     addCustomDomain,
     updateDomain,
     archiveDomain,
-    restoreDomain
+    restoreDomain,
+    forceCloudSync: () => syncFromCloud(false)
   };
 }
 

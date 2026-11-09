@@ -1,4 +1,4 @@
-const CACHE_NAME = 'revision-planner-v29';
+const CACHE_NAME = 'revision-planner-v30';
 
 
 
@@ -58,7 +58,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   // Ne pas cacher les appels API
   if (event.request.url.includes('/api/')) {
-    return event.respondWith(fetch(event.request));
+    return event.respondWith(fetch(event.request, { cache: 'no-store' }));
   }
 
   // Network-First pour la Navigation / HTML afin de toujours appliquer les mises à jour

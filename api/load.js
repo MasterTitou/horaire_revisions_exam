@@ -17,6 +17,10 @@ function verifyToken(token) {
 }
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -31,10 +35,33 @@ export default async function handler(req, res) {
   }
 
   // 1. Essai de chargement depuis PostgreSQL si POSTGRES_URL est présent
-  if (process.env.POSTGRES_URL) {
+  if (process.env.POSTGRES_URL || process.env.VERCEL_POSTGRES_URL || process.env.POSTGRES_PRISMA_URL) {
     try {
-      await initSchema(); // Auto-création automatique si absente
+      await initSchema();
 
+      // Charger d'abord le snapshot atomique complet depuis app_metadata
+      const metaRes = await sql`SELECT payload, updated_at FROM app_metadata WHERE id = 'global_state'`;
+      const metaRow = (metaRes && metaRes.rows && metaRes.rows.length > 0) ? metaRes.rows[0] : null;
+      const metaData = metaRow ? (metaRow.payload || {}) : {};
+
+      // Si app_metadata contient déjà le snapshot complet (projects + scheduleData), le servir directement
+      if (Array.isArray(metaData.projects) && metaData.scheduleData && typeof metaData.scheduleData === 'object') {
+        return res.status(200).json({
+          projects: metaData.projects,
+          scheduleData: metaData.scheduleData,
+          streak: metaData.streak || { count: 0, lastDate: '' },
+          gamification: metaData.gamification || null,
+          chatHistory: metaData.chatHistory || [],
+          externalEvents: metaData.externalEvents || [],
+          userSettings: metaData.userSettings || null,
+          icalFeeds: metaData.icalFeeds || metaData.userSettings?.icalFeeds || [],
+          isDarkMode: !!metaData.isDarkMode,
+          updatedAt: metaData.updatedAt || (metaRow?.updated_at ? new Date(metaRow.updated_at).toISOString() : new Date().toISOString()),
+          source: 'PostgreSQL Atomic Snapshot'
+        });
+      }
+
+      // Fallback relationnel (si anciennes données uniquement dans projects/milestones/sessions)
       const projectsRes = await sql`SELECT * FROM projects ORDER BY created_at ASC`;
       const milestonesRes = await sql`SELECT * FROM milestones ORDER BY created_at ASC`;
       const depsRes = await sql`SELECT * FROM milestone_dependencies`;
@@ -105,10 +132,6 @@ export default async function handler(req, res) {
         });
       });
 
-      // Charger les métadonnées globales (gamification, streak, chatHistory, etc.)
-      const metaRes = await sql`SELECT payload FROM app_metadata WHERE id = 'global_state'`;
-      const metaData = (metaRes && metaRes.rows && metaRes.rows.length > 0) ? (metaRes.rows[0].payload || {}) : {};
-
       return res.status(200).json({
         projects,
         scheduleData,
@@ -119,14 +142,13 @@ export default async function handler(req, res) {
         userSettings: metaData.userSettings || null,
         icalFeeds: metaData.icalFeeds || metaData.userSettings?.icalFeeds || [],
         isDarkMode: !!metaData.isDarkMode,
-
+        updatedAt: metaRow?.updated_at ? new Date(metaRow.updated_at).toISOString() : undefined,
         source: 'PostgreSQL Relational DB'
       });
     } catch (pgError) {
       console.log('PostgreSQL fallback vers Redis KV:', pgError.message);
     }
   }
-
 
   // 2. Fallback vers Redis KV / Upstash Redis REST
   const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -135,7 +157,8 @@ export default async function handler(req, res) {
   if (kvUrl && kvToken) {
     try {
       const response = await fetch(`${kvUrl}/get/user_data`, {
-        headers: { Authorization: `Bearer ${kvToken}` }
+        headers: { Authorization: `Bearer ${kvToken}` },
+        cache: 'no-store'
       });
       if (response.ok) {
         const kvData = await response.json();

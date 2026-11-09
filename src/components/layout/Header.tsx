@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, Moon, Sun, Leaf, Bell } from 'lucide-react';
+import { Zap, Moon, Sun, Bell, RefreshCw } from 'lucide-react';
 import { Gamification, Streak } from '../../types';
 import { requestNotificationPermission, sendPushNotification } from '../../notifications/pwaNotifications';
 
@@ -9,6 +9,7 @@ interface HeaderProps {
   isDarkMode: boolean;
   toggleTheme: () => void;
   syncStatus: string;
+  onForceSync?: () => void;
   onOpenQuickParser?: () => void;
 }
 
@@ -17,6 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   isDarkMode,
   toggleTheme,
   syncStatus,
+  onForceSync,
   onOpenQuickParser
 }) => {
   const velocity = gamification.velocityIndex || 100;
@@ -62,9 +64,28 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2 text-xs font-bold" style={{ color: 'var(--muted)' }}>
-          <span id="syncIndicator">
-            {syncStatus === 'saving' ? '☁️ Synchro…' : 'Synchronisé'}
-          </span>
+          <button
+            id="syncIndicator"
+            type="button"
+            onClick={onForceSync}
+            title="Forcer la synchronisation Cloud (PC ↔ Téléphone)"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-all hover:opacity-80 active:scale-95"
+            style={{
+              background: syncStatus === 'error' ? 'rgba(225, 29, 72, 0.12)' : 'rgba(14, 132, 120, 0.1)',
+              color: syncStatus === 'error' ? '#E11D48' : 'var(--teal)'
+            }}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${(syncStatus === 'saving' || syncStatus === 'loading') ? 'animate-spin' : ''}`} />
+            <span>
+              {syncStatus === 'saving'
+                ? 'Enregistrement Cloud…'
+                : syncStatus === 'loading'
+                ? 'Synchronisation…'
+                : syncStatus === 'error'
+                ? 'Hors-ligne — Toucher pour synchroniser'
+                : 'Synchronisé (PC ↔ Tél)'}
+            </span>
+          </button>
         </div>
       </div>
 
