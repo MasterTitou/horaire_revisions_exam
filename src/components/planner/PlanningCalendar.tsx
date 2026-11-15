@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Project, ScheduleData, ExternalEvent, UserSettings } from '../../types';
+import { Project, ScheduleData, ExternalEvent, UserSettings, Session } from '../../types';
 import { getLocalDateString } from '../../engine/scheduler';
 import { ChevronLeft, ChevronRight, RotateCw, Check, Calendar as CalendarIcon, ShieldAlert, ExternalLink } from 'lucide-react';
 import { CalendarIntegrationModal } from './CalendarIntegrationModal';
@@ -42,18 +42,31 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
   const todayStr = getLocalDateString(new Date());
 
   // Google Calendar 1-Click Export Link Generator
-  const openGoogleCalendarTemplate = (e: React.MouseEvent, sessionNote: string, dateStr: string, slotIdx: number) => {
+  const openGoogleCalendarTemplate = (e: React.MouseEvent, session: Session, dateStr: string, slotIdx: number) => {
     e.stopPropagation();
 
-    // Estimate start & end times based on slotIdx (0: 08h-11h20, 1: 14h-17h20, 2: 20h-23h20)
-    const startHour = slotIdx === 0 ? '080000' : (slotIdx === 1 ? '140000' : '200000');
-    const endHour = slotIdx === 0 ? '112000' : (slotIdx === 1 ? '172000' : '232000');
+    let startISO = '';
+    let endISO = '';
 
-    const cleanDate = dateStr.replace(/-/g, '');
-    const startISO = `${cleanDate}T${startHour}`;
-    const endISO = `${cleanDate}T${endHour}`;
+    if (session.startTime && session.endTime) {
+      const startD = new Date(session.startTime);
+      const endD = new Date(session.endTime);
+      if (!isNaN(startD.getTime()) && !isNaN(endD.getTime())) {
+        const toGCalUtc = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+        startISO = toGCalUtc(startD);
+        endISO = toGCalUtc(endD);
+      }
+    }
 
-    const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(sessionNote)}&dates=${startISO}/${endISO}&details=${encodeURIComponent('Créneau de travail planifié par votre SaaS Project Engine.')}`;
+    if (!startISO || !endISO) {
+      const startHour = slotIdx === 0 ? '080000' : (slotIdx === 1 ? '140000' : '200000');
+      const endHour = slotIdx === 0 ? '112000' : (slotIdx === 1 ? '172000' : '232000');
+      const cleanDate = dateStr.replace(/-/g, '');
+      startISO = `${cleanDate}T${startHour}`;
+      endISO = `${cleanDate}T${endHour}`;
+    }
+
+    const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(session.note)}&dates=${startISO}/${endISO}&details=${encodeURIComponent('Créneau de travail planifié par votre SaaS Project Engine.')}`;
 
     window.open(gcalUrl, '_blank');
   };
@@ -234,7 +247,7 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
                           <div className="flex items-center gap-1.5 shrink-0">
                             {/* 1-Click Export to Google Calendar Button */}
                             <button
-                              onClick={(e) => openGoogleCalendarTemplate(e, session.note, dateStr, si)}
+                              onClick={(e) => openGoogleCalendarTemplate(e, session, dateStr, si)}
                               className="p-1 rounded bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 text-[10px] font-extrabold flex items-center gap-1 transition-colors"
                               title="Ajouter ce créneau dans Google Calendar"
                             >

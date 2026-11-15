@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ExternalEvent, UserSettings } from '../../types';
-import { CheckCircle2, ShieldCheck, Trash2, RefreshCw, Calendar as CalendarIcon, Plus } from 'lucide-react';
+import { ShieldCheck, Trash2, RefreshCw, Calendar as CalendarIcon, Plus, ExternalLink, AlertTriangle } from 'lucide-react';
 
 interface ICalFeed {
   id: string;
@@ -47,6 +47,7 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
   });
   const [isSyncingGoogle, setIsSyncingGoogle] = useState(false);
   const [googleSyncMessage, setGoogleSyncMessage] = useState<string | null>(null);
+  const [googleActivationUrl, setGoogleActivationUrl] = useState<string | null>(null);
 
   const googleEventsCount = externalEvents.filter(ev => ev.id?.startsWith('gcal_') || ev.source === 'google').length;
 
@@ -56,7 +57,11 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
   const [manualStartTime, setManualStartTime] = useState('14:00');
   const [manualEndTime, setManualEndTime] = useState('15:00');
 
-  // Conserver le state local en synchro avec userSettings.icalFeeds lors de chargements distants
+  // Synchroniser l'état local avec userSettings lorsqu'un chargement Cloud arrive
+  useEffect(() => {
+    const connected = !!(userSettings?.googleConnected || userSettings?.googleAccessToken || localStorage.getItem('google_access_token'));
+    setIsGoogleConnected(connected);
+  }, [userSettings?.googleConnected, userSettings?.googleAccessToken]);
 
   // Sync local state when userSettings.icalFeeds changes from external sources
   useEffect(() => {
@@ -70,7 +75,7 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
     localStorage.setItem('imported_ical_feeds', JSON.stringify(importedFeeds));
   }, [importedFeeds]);
 
-  const syncGoogleEvents = async (tokenOverride?: string, silent = false) => {
+  const syncGoogleEvents = useCallback(async (tokenOverride?: string, silent = false) => {
     const activeToken = tokenOverride || localStorage.getItem('google_access_token') || userSettings?.googleAccessToken || '';
     setIsSyncingGoogle(true);
     setGoogleSyncMessage(null);
@@ -86,12 +91,20 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
         if (data.accessToken) {
           localStorage.setItem('google_access_token', data.accessToken);
         }
+        setGoogleActivationUrl(null);
         setIsGoogleConnected(true);
         const nonGoogleEvents = externalEvents.filter(ev => !ev.id?.startsWith('gcal_') && ev.source !== 'google');
         onSetExternalEvents([...nonGoogleEvents, ...data.events]);
         setGoogleSyncMessage(`✅ ${data.events.length} événement(s) Google importé(s)`);
+      } else if (res.status === 403 || data.serviceDisabled) {
+        setIsGoogleConnected(true);
+        setGoogleActivationUrl(
+          data.activationUrl || 'https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview'
+        );
+        setGoogleSyncMessage("⚠️ L'API Google Calendar n'est pas encore activée dans votre projet Google Cloud.");
       } else if (res.status === 401 || data.tokenExpired) {
         localStorage.removeItem('google_access_token');
+        setGoogleActivationUrl(null);
         setIsGoogleConnected(false);
         onUpdateSettings({ googleConnected: false, googleAccessToken: undefined });
         if (!silent) {
@@ -107,7 +120,7 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
     } finally {
       setIsSyncingGoogle(false);
     }
-  };
+  }, [externalEvents, onSetExternalEvents, onUpdateSettings, userSettings?.googleAccessToken]);
 
   // Auto-sync à l'ouverture de la modale si Google est connecté mais 0 événement présent
   useEffect(() => {
@@ -115,6 +128,16 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
       syncGoogleEvents(undefined, true);
     }
   }, [isOpen]);
+
+  // Re-sync automatique quand l'utilisateur revient après avoir activé l'API Google Cloud
+  useEffect(() => {
+    if (!isOpen || !googleActivationUrl) return;
+    const handleFocusAfterActivation = () => {
+      syncGoogleEvents(undefined, false);
+    };
+    window.addEventListener('focus', handleFocusAfterActivation);
+    return () => window.removeEventListener('focus', handleFocusAfterActivation);
+  }, [isOpen, googleActivationUrl, syncGoogleEvents]);
 
   // Écoute de l'événement OAuth Google Success envoyé par la fenêtre popup
   useEffect(() => {
@@ -138,15 +161,17 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
   if (!isOpen) return null;
 
   const handleFetchICal = async () => {
-    if (!icalUrl.trim()) return;
-    const feedName = icalName.trim() || '🏫 Agenda iCal';
+    const trimmedUrl = icalUrl.trim();
+    if (!trimmedUrl) return;
+    const isGoogleICal = trimmedUrl.includes('calendar.google.com/calendar/ical/');
+    const feedName = icalName.trim() || (isGoogleICal ? '🔴 Google Agenda (iCal)' : '🏫 Agenda iCal');
     setIsLoadingICal(true);
 
     try {
       const res = await fetch('/api/calendar/ical', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ icalUrl })
+        body: JSON.stringify({ icalUrl: trimmedUrl })
       });
       const data = await res.json();
       if (data.success && data.events) {
@@ -160,12 +185,12 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
         const newFeed: ICalFeed = {
           id: feedId,
           name: feedName,
-          url: icalUrl.trim(),
+          url: trimmedUrl,
           eventCount: taggedEvents.length,
           addedAt: new Date().toLocaleDateString()
         };
 
-        const updatedFeeds = [...importedFeeds.filter(f => f.url !== icalUrl.trim()), newFeed];
+        const updatedFeeds = [...importedFeeds.filter(f => f.url !== trimmedUrl), newFeed];
         setImportedFeeds(updatedFeeds);
         onUpdateSettings({ icalFeeds: updatedFeeds });
         onSetExternalEvents([...externalEvents, ...taggedEvents]);
@@ -277,7 +302,29 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
                   </div>
                   <p className="text-xs text-slate-400 mt-1">Sync bidirectionnelle réactive pour vos créneaux persos</p>
                   {googleSyncMessage && (
-                    <p className="text-[11px] font-semibold text-teal-300 mt-1.5">{googleSyncMessage}</p>
+                    <p className={`text-[11px] font-semibold mt-1.5 ${googleActivationUrl ? 'text-amber-300' : 'text-teal-300'}`}>
+                      {googleSyncMessage}
+                    </p>
+                  )}
+                  {googleActivationUrl && (
+                    <div className="mt-2.5 p-2.5 rounded-lg bg-amber-500/15 border border-amber-500/40 space-y-2 text-[11px]">
+                      <div className="flex items-start gap-1.5 text-amber-200 font-semibold">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" />
+                        <span>Votre compte Google est bien lié, il reste uniquement à activer l&apos;API Google Calendar dans Google Cloud (1 clic).</span>
+                      </div>
+                      <a
+                        href={googleActivationUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-1.5 px-2.5 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[11px] flex items-center justify-center gap-1.5 transition"
+                      >
+                        <span>⚡ Activer Google Calendar API (1 clic dans Google Cloud)</span>
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                      </a>
+                      <p className="text-[10px] text-slate-300 leading-snug">
+                        Astuce : sans toucher à Google Cloud, vous pouvez aussi coller l&apos;adresse secrète au format iCal (<code>.ics</code>) de votre Google Agenda dans le bloc iCal juste à côté.
+                      </p>
+                    </div>
                   )}
                 </div>
 

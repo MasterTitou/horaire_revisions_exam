@@ -44,6 +44,43 @@ export default async function handler(req, res) {
       const metaRow = (metaRes && metaRes.rows && metaRes.rows.length > 0) ? metaRes.rows[0] : null;
       const metaData = metaRow ? (metaRow.payload || {}) : {};
 
+      // Vérifier aussi si Google Calendar est connecté dans calendar_integrations
+      let googleRow = null;
+      try {
+        const gRes = await sql`
+          SELECT access_token, refresh_token, last_synced_at
+          FROM calendar_integrations
+          WHERE user_key = 'default_user' AND provider = 'google'
+          LIMIT 1;
+        `;
+        if (gRes && gRes.rows && gRes.rows.length > 0) {
+          const row = gRes.rows[0];
+          if (row.access_token || row.refresh_token) {
+            googleRow = row;
+          }
+        }
+      } catch (gErr) {
+        console.warn('Lecture calendar_integrations ignorée:', gErr.message);
+      }
+
+      const mergeGoogleSettings = (baseSettings) => {
+        if (!googleRow) return baseSettings || null;
+        const defaults = {
+          timezone: 'Europe/Paris',
+          bufferMinutesBefore: 15,
+          bufferMinutesAfter: 15,
+          dayStartHour: 8,
+          dayEndHour: 23,
+          slotDurationMinutes: 60
+        };
+        return {
+          ...defaults,
+          ...(baseSettings || {}),
+          googleConnected: true,
+          googleAccessToken: googleRow.access_token || baseSettings?.googleAccessToken
+        };
+      };
+
       // Si app_metadata contient déjà le snapshot complet (projects + scheduleData), le servir directement
       if (Array.isArray(metaData.projects) && metaData.scheduleData && typeof metaData.scheduleData === 'object') {
         return res.status(200).json({
@@ -53,7 +90,7 @@ export default async function handler(req, res) {
           gamification: metaData.gamification || null,
           chatHistory: metaData.chatHistory || [],
           externalEvents: metaData.externalEvents || [],
-          userSettings: metaData.userSettings || null,
+          userSettings: mergeGoogleSettings(metaData.userSettings),
           icalFeeds: metaData.icalFeeds || metaData.userSettings?.icalFeeds || [],
           isDarkMode: !!metaData.isDarkMode,
           updatedAt: metaData.updatedAt || (metaRow?.updated_at ? new Date(metaRow.updated_at).toISOString() : new Date().toISOString()),
@@ -139,7 +176,7 @@ export default async function handler(req, res) {
         gamification: metaData.gamification || null,
         chatHistory: metaData.chatHistory || [],
         externalEvents: metaData.externalEvents || [],
-        userSettings: metaData.userSettings || null,
+        userSettings: mergeGoogleSettings(metaData.userSettings),
         icalFeeds: metaData.icalFeeds || metaData.userSettings?.icalFeeds || [],
         isDarkMode: !!metaData.isDarkMode,
         updatedAt: metaRow?.updated_at ? new Date(metaRow.updated_at).toISOString() : undefined,

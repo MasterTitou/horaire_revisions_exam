@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Project, Milestone, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, StudyDomain, DomainCategory, DynamicQuest, ExternalEvent, UserSettings, CognitiveLoad } from '../types';
 
 
-import { generateSchedule, getStartOfWeek, HPH, DEFAULT_USER_SETTINGS, replanifyOnCalendarChange, getLocalDateString } from '../engine/scheduler';
+import { generateSchedule, getStartOfWeek, HPH, DEFAULT_USER_SETTINGS, replanifyOnCalendarChange, getLocalDateString, isSlotBlockedByExternalEvent } from '../engine/scheduler';
 
 import {
   calculateSessionXP,
@@ -89,6 +89,29 @@ export function useProjectStore() {
 
   const saveTimerRef = useRef<any>(null);
   const latestPayloadRef = useRef<any>(null);
+  const currentWeekStartRef = useRef<Date>(currentWeekStart);
+  currentWeekStartRef.current = currentWeekStart;
+
+  const stateRef = useRef({
+    projects,
+    scheduleData,
+    externalEvents,
+    userSettings,
+    streak,
+    gamification,
+    chatHistory,
+    isDarkMode
+  });
+  stateRef.current = {
+    projects,
+    scheduleData,
+    externalEvents,
+    userSettings,
+    streak,
+    gamification,
+    chatHistory,
+    isDarkMode
+  };
 
 
 
@@ -151,23 +174,39 @@ export function useProjectStore() {
     };
 
 
-    const extEvts = (d.externalEvents && Array.isArray(d.externalEvents)) ? d.externalEvents : [];
-    const settings = d.userSettings || DEFAULT_USER_SETTINGS;
+    const extEvtsIncoming = (d.externalEvents && Array.isArray(d.externalEvents)) ? d.externalEvents : [];
+    const baseSettings = d.userSettings ? { ...DEFAULT_USER_SETTINGS, ...d.userSettings } : { ...DEFAULT_USER_SETTINGS };
 
-    const rawFeeds = d.icalFeeds || d.userSettings?.icalFeeds;
-    if (Array.isArray(rawFeeds) && rawFeeds.length > 0) {
+    const rawFeeds = (Array.isArray(d.icalFeeds) && d.icalFeeds.length > 0)
+      ? d.icalFeeds
+      : (Array.isArray(baseSettings.icalFeeds) ? baseSettings.icalFeeds : []);
+
+    const settings: UserSettings = {
+      ...baseSettings,
+      icalFeeds: rawFeeds
+    };
+
+    if (rawFeeds.length > 0) {
       localStorage.setItem('imported_ical_feeds', JSON.stringify(rawFeeds));
     }
+    if (settings.googleAccessToken) {
+      localStorage.setItem('google_access_token', settings.googleAccessToken);
+    }
+
+    const hasConfiguredExtCalendars = rawFeeds.length > 0 || Boolean(settings.googleConnected || settings.googleAccessToken);
+    const extEvts = (extEvtsIncoming.length === 0 && hasConfiguredExtCalendars && stateRef.current.externalEvents.length > 0)
+      ? stateRef.current.externalEvents
+      : extEvtsIncoming;
 
     if (d.externalEvents && Array.isArray(d.externalEvents)) {
-      setExternalEventsState(d.externalEvents);
+      setExternalEventsState(extEvts);
     }
-    if (d.userSettings) {
-      setUserSettingsState(d.userSettings);
+    if (d.userSettings || rawFeeds.length > 0) {
+      setUserSettingsState(settings);
     }
 
     // Conserver le planning exact s'il existe déjà pour garantir la parité PC / Téléphone
-    const weekStart = getStartOfWeek(new Date());
+    const weekStart = getStartOfWeek(new Date(), settings.timezone || 'Europe/Paris');
     const hasExistingSchedule = d.scheduleData && Object.keys(d.scheduleData).length > 0;
     const freshSchedule = hasExistingSchedule
       ? d.scheduleData
@@ -176,14 +215,28 @@ export function useProjectStore() {
           : {});
 
     const updatedGamo = updateMetricsAndQuests(freshSchedule, projs, initialGamo);
+    const nextStreak = d.streak || { count: 0, lastDate: '' };
+    const nextChat = d.chatHistory || [];
+    const nextDark = !!d.isDarkMode;
+
+    stateRef.current = {
+      projects: projs,
+      scheduleData: freshSchedule,
+      externalEvents: extEvts,
+      userSettings: settings,
+      streak: nextStreak,
+      gamification: updatedGamo,
+      chatHistory: nextChat,
+      isDarkMode: nextDark
+    };
 
     setProjects(projs);
     setScheduleData(freshSchedule);
-    setStreak(d.streak || { count: 0, lastDate: '' });
+    setStreak(nextStreak);
     setGamification(updatedGamo);
-    setChatHistory(d.chatHistory || []);
-    setIsDarkMode(!!d.isDarkMode);
-    if (d.isDarkMode) {
+    setChatHistory(nextChat);
+    setIsDarkMode(nextDark);
+    if (nextDark) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
@@ -192,12 +245,97 @@ export function useProjectStore() {
 
   const isSyncingRef = useRef<boolean>(false);
 
+  const getHydratedLocalData = useCallback(() => {
+    let localData: any = null;
+    try {
+      const saved = localStorage.getItem('revisionCalendarData');
+      if (saved) localData = JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to read local revisionCalendarData:', e);
+    }
+
+    let orphanFeeds: any[] = [];
+    try {
+      const savedFeedsRaw = localStorage.getItem('imported_ical_feeds');
+      if (savedFeedsRaw) {
+        const parsedFeeds = JSON.parse(savedFeedsRaw);
+        if (Array.isArray(parsedFeeds)) orphanFeeds = parsedFeeds;
+      }
+    } catch {}
+
+    const orphanGToken = localStorage.getItem('google_access_token');
+
+    if (!localData && (orphanFeeds.length > 0 || orphanGToken)) {
+      localData = {
+        projects: [],
+        scheduleData: {},
+        streak: { count: 0, lastDate: '' },
+        gamification: DEFAULT_GAMIFICATION,
+        chatHistory: [],
+        externalEvents: [],
+        userSettings: { ...DEFAULT_USER_SETTINGS },
+        icalFeeds: [],
+        isDarkMode: false
+      };
+    }
+
+    if (!localData) return null;
+
+    let mutated = false;
+    const baseFeeds: any[] = Array.isArray(localData.icalFeeds) && localData.icalFeeds.length > 0
+      ? localData.icalFeeds
+      : (Array.isArray(localData.userSettings?.icalFeeds) ? localData.userSettings.icalFeeds : []);
+
+    const mergedFeeds = [...baseFeeds];
+    orphanFeeds.forEach(feed => {
+      if (feed && (feed.url || feed.id)) {
+        const exists = mergedFeeds.some(f => (feed.id && f.id === feed.id) || (feed.url && f.url === feed.url));
+        if (!exists) {
+          mergedFeeds.push(feed);
+          mutated = true;
+        }
+      }
+    });
+
+    if (mergedFeeds.length > 0 && (!Array.isArray(localData.icalFeeds) || localData.icalFeeds.length !== mergedFeeds.length)) {
+      mutated = true;
+    }
+
+    const baseSettings: UserSettings = {
+      ...DEFAULT_USER_SETTINGS,
+      ...(localData.userSettings || {}),
+      icalFeeds: mergedFeeds
+    };
+
+    if (orphanGToken && (!baseSettings.googleConnected || !baseSettings.googleAccessToken)) {
+      baseSettings.googleConnected = true;
+      baseSettings.googleAccessToken = orphanGToken;
+      mutated = true;
+    }
+
+    if (mutated) {
+      localData = {
+        ...localData,
+        icalFeeds: mergedFeeds,
+        userSettings: baseSettings,
+        updatedAt: localData.updatedAt || new Date().toISOString()
+      };
+      try {
+        localStorage.setItem('revisionCalendarData', JSON.stringify(localData));
+        localStorage.setItem('horaire_revisions_backup', JSON.stringify(localData));
+      } catch {}
+    }
+
+    return localData;
+  }, []);
+
   const pushSnapshotToCloud = useCallback(async (snapshot: any) => {
     const token = localStorage.getItem('authToken') || 'auth_token_active';
     const payloadToPush = {
       ...snapshot,
       updatedAt: snapshot.updatedAt || new Date().toISOString()
     };
+    latestPayloadRef.current = payloadToPush;
     localStorage.setItem('revisionCalendarData', JSON.stringify(payloadToPush));
     localStorage.setItem('horaire_revisions_backup', JSON.stringify(payloadToPush));
     try {
@@ -217,8 +355,10 @@ export function useProjectStore() {
     }
   }, []);
 
-  const refreshExternalCalendars = useCallback((sourceData: any) => {
-    const rawFeeds = sourceData?.icalFeeds || sourceData?.userSettings?.icalFeeds || (() => {
+  const refreshExternalCalendars = useCallback(async (sourceData: any) => {
+    const rawFeeds: any[] = (() => {
+      if (Array.isArray(sourceData?.icalFeeds) && sourceData.icalFeeds.length > 0) return sourceData.icalFeeds;
+      if (Array.isArray(sourceData?.userSettings?.icalFeeds) && sourceData.userSettings.icalFeeds.length > 0) return sourceData.userSettings.icalFeeds;
       try {
         const s = localStorage.getItem('imported_ical_feeds');
         return s ? JSON.parse(s) : [];
@@ -227,72 +367,200 @@ export function useProjectStore() {
       }
     })();
 
-    if (Array.isArray(rawFeeds) && rawFeeds.length > 0) {
+    const gToken = sourceData?.userSettings?.googleAccessToken || localStorage.getItem('google_access_token');
+    const shouldFetchGoogle = Boolean(gToken || sourceData?.userSettings?.googleConnected);
+
+    if ((!Array.isArray(rawFeeds) || rawFeeds.length === 0) && !shouldFetchGoogle) {
+      return;
+    }
+
+    if (gToken) localStorage.setItem('google_access_token', gToken);
+
+    const tasks: Array<Promise<{ kind: 'ical'; feedId: string; events: ExternalEvent[] } | { kind: 'google'; events: ExternalEvent[]; accessToken?: string }>> = [];
+
+    if (Array.isArray(rawFeeds)) {
       rawFeeds.forEach((feed: any) => {
-        if (feed.url) {
-          fetch('/api/calendar/ical', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ icalUrl: feed.url })
-          })
-            .then(r => r.json())
-            .then(data => {
-              if (data.success && Array.isArray(data.events)) {
-                const tagged = data.events.map((ev: any) => ({
+        if (feed?.url) {
+          tasks.push(
+            fetch('/api/calendar/ical', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ icalUrl: feed.url })
+            })
+              .then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+              })
+              .then(data => {
+                if (!data.success || !Array.isArray(data.events)) {
+                  throw new Error(data.error || 'Flux iCal invalide');
+                }
+                const tagged: ExternalEvent[] = data.events.map((ev: any) => ({
                   ...ev,
                   integrationId: feed.id,
                   title: ev.title?.startsWith(`[${feed.name}]`) ? ev.title : `[${feed.name}] ${ev.title}`
                 }));
-                setExternalEventsState(prev => {
-                  const next = [
-                    ...prev.filter(e => e.integrationId !== feed.id),
-                    ...tagged
-                  ];
-                  return next;
-                });
-              }
-            })
-            .catch(e => console.error(`iCal auto-refresh err (${feed.name}):`, e.message));
+                return { kind: 'ical' as const, feedId: feed.id, events: tagged };
+              })
+          );
         }
       });
     }
 
-    const gToken = sourceData?.userSettings?.googleAccessToken || localStorage.getItem('google_access_token');
-    if (gToken || sourceData?.userSettings?.googleConnected) {
-      if (gToken) localStorage.setItem('google_access_token', gToken);
-      fetch('/api/calendar/google?action=fetch_events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: gToken || undefined })
-      })
-        .then(r => r.json())
-        .then(gData => {
-          if (gData.success && Array.isArray(gData.events)) {
-            if (gData.accessToken) localStorage.setItem('google_access_token', gData.accessToken);
-            setExternalEventsState(prev => [
-              ...prev.filter(e => !e.id?.startsWith('gcal_') && e.source !== 'google'),
-              ...gData.events
-            ]);
-          }
+    if (shouldFetchGoogle) {
+      tasks.push(
+        fetch('/api/calendar/google?action=fetch_events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: gToken || undefined })
         })
-        .catch(e => console.error('Google Calendar auto-refresh err:', e.message));
+          .then(async r => {
+            const gData = await r.json().catch(() => ({}));
+            if (!r.ok || !gData.success || !Array.isArray(gData.events)) {
+              throw new Error(gData.error || `Google HTTP ${r.status}`);
+            }
+            if (gData.accessToken) {
+              localStorage.setItem('google_access_token', gData.accessToken);
+            }
+            return { kind: 'google' as const, events: gData.events as ExternalEvent[], accessToken: gData.accessToken };
+          })
+      );
     }
-  }, []);
+
+    if (tasks.length === 0) return;
+
+    const settled = await Promise.allSettled(tasks);
+    const prevEvents = stateRef.current.externalEvents || [];
+    let nextEvents = [...prevEvents];
+    let updatedGoogleToken: string | undefined;
+
+    settled.forEach(res => {
+      if (res.status === 'fulfilled') {
+        const val = res.value;
+        if (val.kind === 'ical') {
+          nextEvents = [
+            ...nextEvents.filter(e => e.integrationId !== val.feedId),
+            ...val.events
+          ];
+        } else if (val.kind === 'google') {
+          if (val.accessToken) updatedGoogleToken = val.accessToken;
+          nextEvents = [
+            ...nextEvents.filter(e => !e.id?.startsWith('gcal_') && e.source !== 'google'),
+            ...val.events
+          ];
+        }
+      } else {
+        console.warn('Auto-refresh calendrier partiel:', res.reason?.message || res.reason);
+      }
+    });
+
+    const sig = (list: ExternalEvent[]) =>
+      [...list]
+        .map(e => `${e.integrationId || ''}|${e.title}|${e.startTime}|${e.endTime}|${e.source}`)
+        .sort()
+        .join(';;');
+
+    const eventsChanged = sig(prevEvents) !== sig(nextEvents);
+    const tokenChanged = Boolean(updatedGoogleToken && updatedGoogleToken !== stateRef.current.userSettings?.googleAccessToken);
+
+    if (!eventsChanged && !tokenChanged) {
+      return;
+    }
+
+    const curState = stateRef.current;
+    const nextSettings: UserSettings = {
+      ...curState.userSettings,
+      icalFeeds: rawFeeds,
+      ...(updatedGoogleToken ? { googleConnected: true, googleAccessToken: updatedGoogleToken } : {})
+    };
+
+    let nextSchedule = curState.scheduleData;
+    let nextGamo = curState.gamification;
+
+    if (eventsChanged) {
+      setExternalEventsState(nextEvents);
+      const tz = nextSettings.timezone || 'Europe/Paris';
+      const todayStr = getLocalDateString(new Date(), tz);
+      let hasConflict = false;
+
+      for (const [dateStr, sessions] of Object.entries(curState.scheduleData || {})) {
+        if (dateStr < todayStr) continue;
+        for (const s of (sessions || [])) {
+          if (s.isCompleted || !s.startTime || !s.endTime) continue;
+          if (
+            isSlotBlockedByExternalEvent(
+              new Date(s.startTime),
+              new Date(s.endTime),
+              nextEvents,
+              nextSettings.bufferMinutesBefore ?? 15,
+              nextSettings.bufferMinutesAfter ?? 15
+            )
+          ) {
+            hasConflict = true;
+            break;
+          }
+        }
+        if (hasConflict) break;
+      }
+
+      if (hasConflict && curState.projects.length > 0) {
+        const weekStart = currentWeekStartRef.current || getStartOfWeek(new Date(), tz);
+        nextSchedule = replanifyOnCalendarChange(
+          curState.projects,
+          weekStart,
+          curState.scheduleData,
+          nextEvents,
+          nextSettings,
+          curState.gamification.calibration
+        );
+        nextGamo = updateMetricsAndQuests(nextSchedule, curState.projects, curState.gamification);
+        setScheduleData(nextSchedule);
+        setGamification(nextGamo);
+      }
+    }
+
+    if (tokenChanged) {
+      setUserSettingsState(nextSettings);
+    }
+
+    stateRef.current = {
+      ...curState,
+      externalEvents: nextEvents,
+      userSettings: nextSettings,
+      scheduleData: nextSchedule,
+      gamification: nextGamo
+    };
+
+    await pushSnapshotToCloud({
+      projects: curState.projects,
+      scheduleData: nextSchedule,
+      streak: curState.streak,
+      gamification: nextGamo,
+      chatHistory: curState.chatHistory,
+      isDarkMode: curState.isDarkMode,
+      externalEvents: nextEvents,
+      userSettings: nextSettings,
+      icalFeeds: nextSettings.icalFeeds || rawFeeds,
+      updatedAt: new Date().toISOString()
+    });
+  }, [pushSnapshotToCloud]);
 
   const syncFromCloud = useCallback(async (isBackground = false) => {
     if (isSyncingRef.current || saveTimerRef.current) return;
     isSyncingRef.current = true;
     if (!isBackground) setSyncStatus('loading');
 
-    let localData: any = null;
-    try {
-      const saved = localStorage.getItem('revisionCalendarData');
-      if (saved) localData = JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to read local revisionCalendarData:', e);
-    }
-
+    const localData = getHydratedLocalData();
     const token = localStorage.getItem('authToken') || 'auth_token_active';
+
+    const localProjCount = Array.isArray(localData?.projects) ? localData.projects.length : 0;
+    const localExtCount = Array.isArray(localData?.externalEvents) ? localData.externalEvents.length : 0;
+    const localFeedsCount = Array.isArray(localData?.icalFeeds)
+      ? localData.icalFeeds.length
+      : (Array.isArray(localData?.userSettings?.icalFeeds) ? localData.userSettings.icalFeeds.length : 0);
+    const localGoogle = Boolean(localData?.userSettings?.googleConnected || localData?.userSettings?.googleAccessToken);
+    const hasAnyLocalContent = localProjCount > 0 || localExtCount > 0 || localFeedsCount > 0 || localGoogle;
+
     try {
       const res = await fetch(`/api/load?t=${Date.now()}`, {
         cache: 'no-store',
@@ -308,30 +576,41 @@ export function useProjectStore() {
 
       if (cloudData && typeof cloudData === 'object') {
         const cloudProjCount = Array.isArray(cloudData.projects) ? cloudData.projects.length : 0;
-        const localProjCount = Array.isArray(localData?.projects) ? localData.projects.length : 0;
         const cloudExtCount = Array.isArray(cloudData.externalEvents) ? cloudData.externalEvents.length : 0;
-        const localExtCount = Array.isArray(localData?.externalEvents) ? localData.externalEvents.length : 0;
+        const cloudFeedsCount = Array.isArray(cloudData.icalFeeds)
+          ? cloudData.icalFeeds.length
+          : (Array.isArray(cloudData.userSettings?.icalFeeds) ? cloudData.userSettings.icalFeeds.length : 0);
+        const cloudGoogle = Boolean(cloudData.userSettings?.googleConnected || cloudData.userSettings?.googleAccessToken);
 
         const cloudTime = cloudData.updatedAt ? new Date(cloudData.updatedAt).getTime() : 0;
         const localTime = localData?.updatedAt ? new Date(localData.updatedAt).getTime() : 0;
 
         const isLocalRicherThanLegacyCloud =
-          localData &&
+          Boolean(localData) &&
           ((cloudProjCount === 0 && localProjCount > 0) ||
-           (!cloudData.updatedAt && (localProjCount > cloudProjCount || localExtCount > cloudExtCount)));
+           (cloudFeedsCount === 0 && localFeedsCount > 0) ||
+           (!cloudData.updatedAt && (
+             localProjCount > cloudProjCount ||
+             localExtCount > cloudExtCount ||
+             localFeedsCount > cloudFeedsCount ||
+             (localGoogle && !cloudGoogle)
+           )));
 
-        const isLocalNewer = localData && localTime > 0 && cloudTime > 0 && localTime > cloudTime;
+        const isLocalNewer = Boolean(localData) && localTime > 0 && cloudTime > 0 && localTime > cloudTime;
 
         if (isLocalRicherThanLegacyCloud || isLocalNewer) {
+          applyStatePayload(localData);
           await pushSnapshotToCloud(localData);
-          if (!isBackground) refreshExternalCalendars(localData);
+          if (!isBackground) await refreshExternalCalendars(localData);
         } else {
           const hasChanged =
             !isBackground ||
             !localData ||
             cloudData.updatedAt !== localData.updatedAt ||
             cloudProjCount !== localProjCount ||
-            cloudExtCount !== localExtCount;
+            cloudExtCount !== localExtCount ||
+            cloudFeedsCount !== localFeedsCount ||
+            cloudGoogle !== localGoogle;
 
           if (hasChanged) {
             applyStatePayload(cloudData);
@@ -339,37 +618,37 @@ export function useProjectStore() {
             localStorage.setItem('horaire_revisions_backup', JSON.stringify(cloudData));
           }
           setSyncStatus('synced');
-          if (!isBackground) refreshExternalCalendars(cloudData);
+          if (!isBackground) await refreshExternalCalendars(cloudData);
         }
-      } else if (localData && (localData.projects?.length > 0 || localData.externalEvents?.length > 0)) {
+      } else if (hasAnyLocalContent) {
         await pushSnapshotToCloud(localData);
-        if (!isBackground) refreshExternalCalendars(localData);
+        if (!isBackground) await refreshExternalCalendars(localData);
       } else {
         setSyncStatus('synced');
       }
     } catch (err: any) {
       console.log('Cloud sync skipped or offline:', err?.message || err);
-      if (localData && (localData.projects?.length > 0 || localData.externalEvents?.length > 0)) {
+      if (hasAnyLocalContent) {
         await pushSnapshotToCloud(localData);
       } else {
         setSyncStatus('synced');
       }
-      if (!isBackground) refreshExternalCalendars(localData);
+      if (!isBackground) await refreshExternalCalendars(localData);
     } finally {
       isSyncingRef.current = false;
     }
-  }, [applyStatePayload, pushSnapshotToCloud, refreshExternalCalendars]);
+  }, [applyStatePayload, getHydratedLocalData, pushSnapshotToCloud, refreshExternalCalendars]);
 
   // Dual Load: 1. LocalStorage Cache, 2. Cloud API (/api/load) + Re-sync on focus/visibility/interval
   useEffect(() => {
-    const saved = localStorage.getItem('revisionCalendarData');
-    if (saved) {
-      try {
-        const d = JSON.parse(saved);
-        applyStatePayload(d);
-      } catch (e) {
-        console.error('Failed to parse revisionCalendarData:', e);
-      }
+    const initialLocal = getHydratedLocalData();
+    if (initialLocal) {
+      applyStatePayload(initialLocal);
+    }
+
+    if (typeof window !== 'undefined' && window.location.search.includes('google_connected=')) {
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, '', cleanUrl);
     }
 
     syncFromCloud(false);
@@ -380,8 +659,12 @@ export function useProjectStore() {
       }
     };
 
+    const handleOnline = () => {
+      syncFromCloud(false);
+    };
+
     window.addEventListener('focus', handleVisibilityOrFocus);
-    window.addEventListener('online', handleVisibilityOrFocus);
+    window.addEventListener('online', handleOnline);
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
     const intervalId = setInterval(() => {
@@ -392,13 +675,13 @@ export function useProjectStore() {
 
     return () => {
       window.removeEventListener('focus', handleVisibilityOrFocus);
-      window.removeEventListener('online', handleVisibilityOrFocus);
+      window.removeEventListener('online', handleOnline);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       clearInterval(intervalId);
     };
-  }, [applyStatePayload, syncFromCloud]);
+  }, [applyStatePayload, getHydratedLocalData, syncFromCloud]);
 
-  // Dual Save: 1. LocalStorage, 2. Cloud Redis API (/api/save)
+  // Dual Save: 1. LocalStorage, 2. Cloud API (/api/save)
   const saveAll = useCallback((
     newProjects: Project[],
     newSchedule: ScheduleData,
@@ -409,12 +692,32 @@ export function useProjectStore() {
     newSettings?: UserSettings,
     newChatHistory?: ChatMessage[]
   ) => {
+    const cur = stateRef.current;
     const savedFeedsRaw = localStorage.getItem('imported_ical_feeds');
-    const localFeeds = savedFeedsRaw ? JSON.parse(savedFeedsRaw) : [];
-    const currentSettings = newSettings !== undefined ? newSettings : userSettings;
-    const mergedSettings = {
+    let localFeeds: any[] = [];
+    try {
+      localFeeds = savedFeedsRaw ? JSON.parse(savedFeedsRaw) : [];
+    } catch {}
+
+    const currentSettings = newSettings !== undefined ? newSettings : cur.userSettings;
+    const mergedFeeds = currentSettings.icalFeeds !== undefined ? currentSettings.icalFeeds : localFeeds;
+    const mergedSettings: UserSettings = {
       ...currentSettings,
-      icalFeeds: currentSettings.icalFeeds || localFeeds
+      icalFeeds: mergedFeeds
+    };
+
+    const resolvedEvents = newEvents !== undefined ? newEvents : cur.externalEvents;
+    const resolvedChat = newChatHistory !== undefined ? newChatHistory : cur.chatHistory;
+
+    stateRef.current = {
+      projects: newProjects,
+      scheduleData: newSchedule,
+      streak: newStreak,
+      gamification: newGamification,
+      isDarkMode: newDark,
+      externalEvents: resolvedEvents,
+      userSettings: mergedSettings,
+      chatHistory: resolvedChat
     };
 
     const payload = {
@@ -422,20 +725,20 @@ export function useProjectStore() {
       scheduleData: newSchedule,
       streak: newStreak,
       gamification: newGamification,
-      chatHistory: newChatHistory !== undefined ? newChatHistory : chatHistory,
+      chatHistory: resolvedChat,
       isDarkMode: newDark,
-      externalEvents: newEvents !== undefined ? newEvents : externalEvents,
+      externalEvents: resolvedEvents,
       userSettings: mergedSettings,
       icalFeeds: mergedSettings.icalFeeds,
       updatedAt: new Date().toISOString()
     };
-
 
     latestPayloadRef.current = payload;
 
     // Save to LocalStorage immediately
     localStorage.setItem('revisionCalendarData', JSON.stringify(payload));
     localStorage.setItem('horaire_revisions_backup', JSON.stringify(payload));
+    localStorage.setItem('imported_ical_feeds', JSON.stringify(mergedSettings.icalFeeds || []));
 
     // Sync to Cloud (/api/save)
     const token = localStorage.getItem('authToken') || 'auth_token_active';
@@ -460,7 +763,7 @@ export function useProjectStore() {
         })
         .catch(() => setSyncStatus('error'));
     }, 400);
-  }, [chatHistory, externalEvents, userSettings]);
+  }, []);
 
   const updateChatHistory = (action: React.SetStateAction<ChatMessage[]>) => {
     setChatHistory(prev => {
@@ -958,22 +1261,42 @@ export function useProjectStore() {
   };
 
   const updateUserSettings = (newSettings: Partial<UserSettings>) => {
-    const updated = { ...userSettings, ...newSettings };
+    const cur = stateRef.current;
+    const updated = { ...cur.userSettings, ...newSettings };
+    stateRef.current = { ...cur, userSettings: updated };
     setUserSettingsState(updated);
-    const updatedSchedule = replanifyOnCalendarChange(projects, currentWeekStart, scheduleData, externalEvents, updated, gamification.calibration);
+    const updatedSchedule = replanifyOnCalendarChange(
+      cur.projects,
+      currentWeekStart,
+      cur.scheduleData,
+      cur.externalEvents,
+      updated,
+      cur.gamification.calibration
+    );
+    stateRef.current = { ...stateRef.current, scheduleData: updatedSchedule };
     setScheduleData(updatedSchedule);
-    saveAll(projects, updatedSchedule, streak, gamification, isDarkMode, externalEvents, updated);
+    saveAll(cur.projects, updatedSchedule, cur.streak, cur.gamification, cur.isDarkMode, cur.externalEvents, updated, cur.chatHistory);
   };
 
   const setExternalEvents = (events: ExternalEvent[]) => {
+    const cur = stateRef.current;
+    stateRef.current = { ...cur, externalEvents: events };
     setExternalEventsState(events);
-    const updatedSchedule = replanifyOnCalendarChange(projects, currentWeekStart, scheduleData, events, userSettings, gamification.calibration);
+    const updatedSchedule = replanifyOnCalendarChange(
+      cur.projects,
+      currentWeekStart,
+      cur.scheduleData,
+      events,
+      cur.userSettings,
+      cur.gamification.calibration
+    );
+    stateRef.current = { ...stateRef.current, scheduleData: updatedSchedule };
     setScheduleData(updatedSchedule);
-    saveAll(projects, updatedSchedule, streak, gamification, isDarkMode, events, userSettings);
+    saveAll(cur.projects, updatedSchedule, cur.streak, cur.gamification, cur.isDarkMode, events, cur.userSettings, cur.chatHistory);
   };
 
   const addExternalEvent = (event: ExternalEvent) => {
-    const updatedEvents = [...externalEvents, event];
+    const updatedEvents = [...stateRef.current.externalEvents, event];
     setExternalEvents(updatedEvents);
   };
 
