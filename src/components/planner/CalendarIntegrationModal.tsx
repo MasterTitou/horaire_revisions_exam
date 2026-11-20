@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ExternalEvent, UserSettings } from '../../types';
+import { cleanEventTitle } from '../../engine/scheduler';
 import { ShieldCheck, Trash2, RefreshCw, Calendar as CalendarIcon, Plus, ExternalLink, AlertTriangle } from 'lucide-react';
 
 interface ICalFeed {
@@ -179,7 +180,8 @@ export const CalendarIntegrationModal: React.FC<CalendarIntegrationModalProps> =
         const taggedEvents: ExternalEvent[] = data.events.map((ev: any) => ({
           ...ev,
           integrationId: feedId,
-          title: `[${feedName}] ${ev.title}`
+          calendarName: feedName,
+          title: cleanEventTitle(ev.title, [feedName])
         }));
 
         const newFeed: ICalFeed = {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Project, ScheduleData, ExternalEvent, UserSettings, Session } from '../../types';
-import { getLocalDateString } from '../../engine/scheduler';
+import { getLocalDateString, cleanEventTitle, deduplicateExternalEvents } from '../../engine/scheduler';
 import { ChevronLeft, ChevronRight, RotateCw, Check, Calendar as CalendarIcon, ShieldAlert, ExternalLink } from 'lucide-react';
 import { CalendarIntegrationModal } from './CalendarIntegrationModal';
 
@@ -127,13 +127,16 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
             const dateStr = getLocalDateString(d, userTz);
             const isToday = dateStr === todayStr;
             const sessions = scheduleData[dateStr] || [];
+            const knownFeedNames = (userSettings?.icalFeeds || []).map(f => f.name).filter(Boolean);
 
-            // Filtrer et trier chronologiquement les événements externes du jour
-            const dayEvents = externalEvents
+            // Filtrer, dédupliquer et trier chronologiquement les événements externes du jour
+            const rawDayEvents = externalEvents
               .filter(ev => {
                 const evDateStr = getLocalDateString(new Date(ev.startTime), userTz);
                 return evDateStr === dateStr;
-              })
+              });
+
+            const dayEvents = deduplicateExternalEvents(rawDayEvents, knownFeedNames)
               .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
 
             // Construire une timeline unifiée triée par heure de début (Événements externes + Sessions)
@@ -198,6 +201,7 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
                     timelineItems.map((item) => {
                       if (item.kind === 'external') {
                         const ev = item.ev;
+                        const cleanTitle = cleanEventTitle(ev.title, knownFeedNames);
                         const isGoogle = ev.source === 'google' || ev.id?.startsWith('gcal_');
                         const startH = ev.isAllDay
                           ? 'Journée'
@@ -209,17 +213,19 @@ export const PlanningCalendar: React.FC<PlanningCalendarProps> = ({
                         return (
                           <div
                             key={ev.id}
-                            className={`p-2.5 rounded-xl border text-xs flex items-center gap-2 ${
+                            className={`p-2.5 rounded-xl border text-xs flex items-center gap-2.5 transition-all ${
                               isGoogle
                                 ? 'border-blue-500/35 bg-blue-500/10 text-blue-900 dark:text-blue-200'
                                 : 'border-rose-500/35 bg-rose-500/10 text-rose-900 dark:text-rose-200'
                             }`}
-                            title={`Événement externe bloqué + ${userSettings.bufferMinutesBefore}m tampon`}
+                            title={`${cleanTitle} (${startH} – ${endH})`}
                           >
-                            <ShieldAlert className={`w-3.5 h-3.5 shrink-0 ${isGoogle ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'}`} />
-                            <div className="truncate flex-grow">
-                              <span className="font-extrabold block truncate">{ev.title}</span>
-                              <span className={`text-[10px] font-bold ${isGoogle ? 'text-blue-700 dark:text-blue-300' : 'text-rose-700 dark:text-rose-300'}`}>
+                            <ShieldAlert className={`w-4 h-4 shrink-0 ${isGoogle ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'}`} />
+                            <div className="min-w-0 flex-grow">
+                              <span className="font-extrabold block text-xs leading-snug line-clamp-2 break-words" title={cleanTitle}>
+                                {cleanTitle}
+                              </span>
+                              <span className={`text-[10px] font-bold block mt-0.5 ${isGoogle ? 'text-blue-700 dark:text-blue-300' : 'text-rose-700 dark:text-rose-300'}`}>
                                 {ev.isAllDay ? 'Journée entière (Occupé)' : `${startH} – ${endH} (Occupé)`}
                               </span>
                             </div>

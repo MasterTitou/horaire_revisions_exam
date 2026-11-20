@@ -288,6 +288,91 @@ export function isSlotBlockedByExternalEvent(
   return false;
 }
 
+/**
+ * Nettoie le titre d'un événement externe en supprimant les préfixes polluants
+ * tels que [Google · ...], [Agenda ...], [https://...], etc., afin de mettre
+ * en valeur l'intitulé réel du cours ou du créneau.
+ */
+export function cleanEventTitle(rawTitle?: string, knownFeedNames: string[] = []): string {
+  if (!rawTitle) return 'Occupé';
+  let title = rawTitle.trim();
+
+  // 1. Nettoyage des noms de flux personnalisés passés en paramètre
+  for (const fn of knownFeedNames) {
+    if (fn && fn.trim()) {
+      const trimmed = fn.trim();
+      if (title.toLowerCase().startsWith(`[${trimmed.toLowerCase()}]`)) {
+        title = title.substring(trimmed.length + 2).trim();
+      }
+    }
+  }
+
+  // 2. Nettoyage récursif des préfixes entre crochets (Google, Agenda, URLs, emails, etc.)
+  const prefixRegex = /^\[(Google[\s\S]*?|Agenda[\s\S]*?|Flux[\s\S]*?|https?:\/\/[\s\S]*?|Calendrier[\s\S]*?|.*@.*)\]\s*/i;
+  while (prefixRegex.test(title)) {
+    title = title.replace(prefixRegex, '').trim();
+  }
+
+  // 3. Si le titre résiduel est vide ou n'est qu'une URL
+  if (!title || /^https?:\/\//i.test(title)) {
+    return 'Occupé';
+  }
+
+  return title.replace(/\s+/g, ' ');
+}
+
+/**
+ * Déduplique les événements externes survenus sur le même créneau horaire
+ * (par ex. le même cours importé à la fois via le flux iCal école et via Google Calendar).
+ */
+export function deduplicateExternalEvents(events: ExternalEvent[], knownFeedNames: string[] = []): ExternalEvent[] {
+  const result: ExternalEvent[] = [];
+
+  for (const ev of events) {
+    const cleanTitle = cleanEventTitle(ev.title, knownFeedNames);
+    const startMs = new Date(ev.startTime).getTime();
+    const endMs = new Date(ev.endTime).getTime();
+
+    const existingIdx = result.findIndex(other => {
+      const oStartMs = new Date(other.startTime).getTime();
+      const oEndMs = new Date(other.endTime).getTime();
+      // Même créneau horaire (tolérance 5 minutes)
+      const sameTime = Math.abs(startMs - oStartMs) <= 300000 && Math.abs(endMs - oEndMs) <= 300000;
+      if (!sameTime) return false;
+
+      const oClean = other.title;
+      const t1 = cleanTitle.toLowerCase();
+      const t2 = oClean.toLowerCase();
+
+      // Doublon si même titre, ou si l'un est générique ("Occupé"), ou si l'un contient l'autre
+      return t1 === t2 || t1 === 'occupé' || t2 === 'occupé' || t1.includes(t2) || t2.includes(t1);
+    });
+
+    if (existingIdx === -1) {
+      result.push({
+        ...ev,
+        title: cleanTitle
+      });
+    } else {
+      const existing = result[existingIdx];
+      // Si l'existant était simplement "Occupé" ou plus court, remplacer par le titre plus précis
+      if (existing.title === 'Occupé' && cleanTitle !== 'Occupé') {
+        result[existingIdx] = {
+          ...ev,
+          title: cleanTitle
+        };
+      } else if (cleanTitle !== 'Occupé' && cleanTitle.length > existing.title.length && !existing.title.toLowerCase().includes(cleanTitle.toLowerCase())) {
+        result[existingIdx] = {
+          ...ev,
+          title: cleanTitle
+        };
+      }
+    }
+  }
+
+  return result;
+}
+
 export function generateSchedule(
   projects: Project[],
   currentWeekStart: Date,

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Project, Milestone, ScheduleData, Streak, Gamification, ChatMessage, DomainSkill, StudyDomain, DomainCategory, DynamicQuest, ExternalEvent, UserSettings, CognitiveLoad } from '../types';
 
 
-import { generateSchedule, getStartOfWeek, HPH, DEFAULT_USER_SETTINGS, replanifyOnCalendarChange, getLocalDateString, isSlotBlockedByExternalEvent } from '../engine/scheduler';
+import { generateSchedule, getStartOfWeek, HPH, DEFAULT_USER_SETTINGS, replanifyOnCalendarChange, getLocalDateString, isSlotBlockedByExternalEvent, cleanEventTitle, deduplicateExternalEvents } from '../engine/scheduler';
 
 import {
   calculateSessionXP,
@@ -174,12 +174,19 @@ export function useProjectStore() {
     };
 
 
-    const extEvtsIncoming = (d.externalEvents && Array.isArray(d.externalEvents)) ? d.externalEvents : [];
     const baseSettings = d.userSettings ? { ...DEFAULT_USER_SETTINGS, ...d.userSettings } : { ...DEFAULT_USER_SETTINGS };
 
     const rawFeeds = (Array.isArray(d.icalFeeds) && d.icalFeeds.length > 0)
       ? d.icalFeeds
       : (Array.isArray(baseSettings.icalFeeds) ? baseSettings.icalFeeds : []);
+    const knownFeedNames = rawFeeds.map((f: any) => f?.name).filter(Boolean);
+
+    const extEvtsIncoming = (d.externalEvents && Array.isArray(d.externalEvents))
+      ? d.externalEvents.map((ev: ExternalEvent) => ({
+          ...ev,
+          title: cleanEventTitle(ev.title, knownFeedNames)
+        }))
+      : [];
 
     const settings: UserSettings = {
       ...baseSettings,
@@ -313,9 +320,23 @@ export function useProjectStore() {
       mutated = true;
     }
 
+    if (Array.isArray(localData.externalEvents)) {
+      const knownFeedNames = mergedFeeds.map(f => f?.name).filter(Boolean);
+      const cleaned = localData.externalEvents.map((ev: ExternalEvent) => ({
+        ...ev,
+        title: cleanEventTitle(ev.title, knownFeedNames)
+      }));
+      const hasTitleChanged = cleaned.some((ev: ExternalEvent, idx: number) => ev.title !== localData.externalEvents[idx]?.title);
+      if (hasTitleChanged) {
+        localData.externalEvents = cleaned;
+        mutated = true;
+      }
+    }
+
     if (mutated) {
       localData = {
         ...localData,
+        externalEvents: localData.externalEvents,
         icalFeeds: mergedFeeds,
         userSettings: baseSettings,
         updatedAt: localData.updatedAt || new Date().toISOString()
@@ -398,7 +419,8 @@ export function useProjectStore() {
                 const tagged: ExternalEvent[] = data.events.map((ev: any) => ({
                   ...ev,
                   integrationId: feed.id,
-                  title: ev.title?.startsWith(`[${feed.name}]`) ? ev.title : `[${feed.name}] ${ev.title}`
+                  calendarName: feed.name,
+                  title: cleanEventTitle(ev.title, [feed.name])
                 }));
                 return { kind: 'ical' as const, feedId: feed.id, events: tagged };
               })
@@ -444,9 +466,13 @@ export function useProjectStore() {
           ];
         } else if (val.kind === 'google') {
           if (val.accessToken) updatedGoogleToken = val.accessToken;
+          const cleanedGoogle = val.events.map((e: ExternalEvent) => ({
+            ...e,
+            title: cleanEventTitle(e.title)
+          }));
           nextEvents = [
             ...nextEvents.filter(e => !e.id?.startsWith('gcal_') && e.source !== 'google'),
-            ...val.events
+            ...cleanedGoogle
           ];
         }
       } else {

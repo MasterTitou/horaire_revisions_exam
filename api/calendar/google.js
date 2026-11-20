@@ -41,6 +41,17 @@ function buildGoogleApiError(status, errData, fallbackMsg) {
   return err;
 }
 
+export function cleanEventSummary(rawSummary) {
+  if (!rawSummary) return 'Occupé';
+  let t = String(rawSummary).trim();
+  const prefixRegex = /^\[(Google[\s\S]*?|Agenda[\s\S]*?|Flux[\s\S]*?|https?:\/\/[\s\S]*?|Calendrier[\s\S]*?|.*@.*)\]\s*/i;
+  while (prefixRegex.test(t)) {
+    t = t.replace(prefixRegex, '').trim();
+  }
+  if (!t || /^https?:\/\//i.test(t)) return 'Occupé';
+  return t.replace(/\s+/g, ' ');
+}
+
 // ─── Helpers Token Persistence & Webhooks ─────────────────────────
 
 export async function storeGoogleTokens(userKey, accessToken, refreshToken) {
@@ -284,7 +295,8 @@ export async function fetchAllGoogleEvents(accessToken) {
 
           return {
             id: `gcal_${item.id}`,
-            title: item.summary ? `[Google · ${calName}] ${item.summary}` : `[Google · ${calName}] Occupé`,
+            title: cleanEventSummary(item.summary),
+            calendarName: calName,
             startTime,
             endTime,
             isAllDay,

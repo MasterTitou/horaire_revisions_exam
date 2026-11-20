@@ -45,6 +45,7 @@ export interface Session {
 export interface ExternalEvent {
   id: string;
   integrationId?: string;
+  calendarName?: string;
   title: string;
   startTime: string; // ISO string TIMESTAMPTZ
   endTime: string;   // ISO string TIMESTAMPTZ
