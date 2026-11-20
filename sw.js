@@ -1,4 +1,4 @@
-const CACHE_NAME = 'revision-planner-v32';
+const CACHE_NAME = 'revision-planner-v33';
 
 
 
@@ -56,19 +56,35 @@ self.addEventListener('activate', event => {
 
 // Fetch : Network First for navigation, Cache First for static assets
 self.addEventListener('fetch', event => {
+  // Ignorer les requêtes non-GET et les schémas non-HTTP(S) (ex: chrome-extension://, data:, blob:)
+  if (event.request.method !== 'GET') return;
+
+  let requestUrl;
+  try {
+    requestUrl = new URL(event.request.url);
+  } catch {
+    return;
+  }
+
+  if (requestUrl.protocol !== 'http:' && requestUrl.protocol !== 'https:') {
+    return;
+  }
+
   // Ne pas cacher les appels API
-  if (event.request.url.includes('/api/')) {
+  if (requestUrl.pathname.startsWith('/api/')) {
     return event.respondWith(fetch(event.request, { cache: 'no-store' }));
   }
 
   // Network-First pour la Navigation / HTML afin de toujours appliquer les mises à jour
-  if (event.request.mode === 'navigate' || event.request.url.endsWith('/index.html') || event.request.url.endsWith('/')) {
+  if (event.request.mode === 'navigate' || requestUrl.pathname.endsWith('/index.html') || requestUrl.pathname === '/') {
     event.respondWith(
       fetch(event.request)
         .then(response => {
           if (response.status === 200) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+            caches.open(CACHE_NAME)
+              .then(cache => cache.put(event.request, clone))
+              .catch(() => {});
           }
           return response;
         })
@@ -85,9 +101,11 @@ self.addEventListener('fetch', event => {
     caches.match(event.request).then(cached => {
       if (cached) return cached;
       return fetch(event.request).then(response => {
-        if (response.status === 200) {
+        if (response.status === 200 && (response.type === 'basic' || response.type === 'cors')) {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          caches.open(CACHE_NAME)
+            .then(cache => cache.put(event.request, clone))
+            .catch(() => {});
         }
         return response;
       });

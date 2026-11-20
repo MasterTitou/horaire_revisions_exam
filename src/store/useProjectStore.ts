@@ -67,11 +67,23 @@ export function useProjectStore() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getStartOfWeek(new Date()));
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
+  const persistActiveToken = useCallback((token = 'auth_token_active') => {
+    try {
+      localStorage.setItem('authToken', token);
+      if (typeof document !== 'undefined') {
+        document.cookie = `authToken=${token}; max-age=315360000; path=/; SameSite=Lax`;
+      }
+    } catch {}
+    return token;
+  }, []);
+
   const getPersistentToken = () => {
     const local = localStorage.getItem('authToken');
-    if (local) return local;
+    if (local && local !== 'null' && local !== 'undefined') return local;
     const cookieMatch = typeof document !== 'undefined' ? document.cookie.match(/authToken=([^;]+)/) : null;
-    if (cookieMatch) return cookieMatch[1];
+    if (cookieMatch && cookieMatch[1] && cookieMatch[1] !== 'null' && cookieMatch[1] !== 'undefined') {
+      return cookieMatch[1];
+    }
     const defaultToken = 'auth_token_active';
     try {
       localStorage.setItem('authToken', defaultToken);
@@ -351,7 +363,7 @@ export function useProjectStore() {
   }, []);
 
   const pushSnapshotToCloud = useCallback(async (snapshot: any) => {
-    const token = localStorage.getItem('authToken') || 'auth_token_active';
+    let token = localStorage.getItem('authToken') || 'auth_token_active';
     const payloadToPush = {
       ...snapshot,
       updatedAt: snapshot.updatedAt || new Date().toISOString()
@@ -359,22 +371,30 @@ export function useProjectStore() {
     latestPayloadRef.current = payloadToPush;
     localStorage.setItem('revisionCalendarData', JSON.stringify(payloadToPush));
     localStorage.setItem('horaire_revisions_backup', JSON.stringify(payloadToPush));
-    try {
-      setSyncStatus('saving');
-      const res = await fetch('/api/save', {
+    const sendSave = (authTok: string) =>
+      fetch('/api/save', {
         method: 'POST',
         cache: 'no-store',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${authTok}`
         },
         body: JSON.stringify(payloadToPush)
       });
+
+    try {
+      setSyncStatus('saving');
+      let res = await sendSave(token);
+      if (res.status === 401 && token !== 'auth_token_active') {
+        token = persistActiveToken('auth_token_active');
+        setAuthToken(token);
+        res = await sendSave(token);
+      }
       setSyncStatus(res.ok ? 'synced' : 'error');
     } catch {
       setSyncStatus('error');
     }
-  }, []);
+  }, [persistActiveToken]);
 
   const refreshExternalCalendars = useCallback(async (sourceData: any) => {
     const rawFeeds: any[] = (() => {
@@ -577,7 +597,7 @@ export function useProjectStore() {
     if (!isBackground) setSyncStatus('loading');
 
     const localData = getHydratedLocalData();
-    const token = localStorage.getItem('authToken') || 'auth_token_active';
+    let token = localStorage.getItem('authToken') || 'auth_token_active';
 
     const localProjCount = Array.isArray(localData?.projects) ? localData.projects.length : 0;
     const localExtCount = Array.isArray(localData?.externalEvents) ? localData.externalEvents.length : 0;
@@ -587,15 +607,29 @@ export function useProjectStore() {
     const localGoogle = Boolean(localData?.userSettings?.googleConnected || localData?.userSettings?.googleAccessToken);
     const hasAnyLocalContent = localProjCount > 0 || localExtCount > 0 || localFeedsCount > 0 || localGoogle;
 
-    try {
-      const res = await fetch(`/api/load?t=${Date.now()}`, {
+    const fetchCloud = (authTok: string) =>
+      fetch(`/api/load?t=${Date.now()}`, {
         cache: 'no-store',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${authTok}`,
           'Pragma': 'no-cache',
           'Cache-Control': 'no-cache'
         }
       });
+
+    try {
+      let res = await fetchCloud(token);
+
+      if (res.status === 401 && token !== 'auth_token_active') {
+        token = persistActiveToken('auth_token_active');
+        setAuthToken(token);
+        res = await fetchCloud(token);
+      }
+
+      if (res.status === 401) {
+        setSyncStatus('error');
+        return;
+      }
 
       if (!res.ok) throw new Error('No Cloud data');
       const cloudData = await res.json();
@@ -663,7 +697,7 @@ export function useProjectStore() {
     } finally {
       isSyncingRef.current = false;
     }
-  }, [applyStatePayload, getHydratedLocalData, pushSnapshotToCloud, refreshExternalCalendars]);
+  }, [applyStatePayload, getHydratedLocalData, persistActiveToken, pushSnapshotToCloud, refreshExternalCalendars]);
 
   // Dual Load: 1. LocalStorage Cache, 2. Cloud API (/api/load) + Re-sync on focus/visibility/interval
   useEffect(() => {
@@ -767,29 +801,37 @@ export function useProjectStore() {
     localStorage.setItem('imported_ical_feeds', JSON.stringify(mergedSettings.icalFeeds || []));
 
     // Sync to Cloud (/api/save)
-    const token = localStorage.getItem('authToken') || 'auth_token_active';
     setSyncStatus('saving');
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
 
-    saveTimerRef.current = setTimeout(() => {
+    saveTimerRef.current = setTimeout(async () => {
       saveTimerRef.current = null;
       const payloadToSend = latestPayloadRef.current || payload;
-      fetch('/api/save', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payloadToSend)
-      })
-        .then(res => {
-          if (res.ok) setSyncStatus('synced');
-          else setSyncStatus('error');
-        })
-        .catch(() => setSyncStatus('error'));
+      let token = localStorage.getItem('authToken') || 'auth_token_active';
+      const sendSave = (authTok: string) =>
+        fetch('/api/save', {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authTok}`
+          },
+          body: JSON.stringify(payloadToSend)
+        });
+
+      try {
+        let res = await sendSave(token);
+        if (res.status === 401 && token !== 'auth_token_active') {
+          token = persistActiveToken('auth_token_active');
+          setAuthToken(token);
+          res = await sendSave(token);
+        }
+        setSyncStatus(res.ok ? 'synced' : 'error');
+      } catch {
+        setSyncStatus('error');
+      }
     }, 400);
-  }, []);
+  }, [persistActiveToken]);
 
   const updateChatHistory = (action: React.SetStateAction<ChatMessage[]>) => {
     setChatHistory(prev => {
