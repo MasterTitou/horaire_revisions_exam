@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Project, CognitiveLoad } from '../../types';
+import { Project, CognitiveLoad, ExternalEvent, UserSettings, CalibrationLoop } from '../../types';
 import { computeCriticalPath } from '../../engine/scheduler';
 import { Layers, Trash2, X, Link, Flame, ChevronDown, ChevronUp, Plus, Calendar, Clock } from 'lucide-react';
 
@@ -8,6 +8,9 @@ const todayISO = new Date().toISOString().split('T')[0];
 
 interface ProjectWBSCardProps {
   projects: Project[];
+  externalEvents?: ExternalEvent[];
+  userSettings?: UserSettings;
+  calibration?: CalibrationLoop;
   onAddProject: (name: string, code: string, deadline: string, isHardDeadline: boolean, startDate?: string) => void;
   onAddMilestone: (projId: string, title: string, dueDate: string, estimatedHours: number, cognitiveLoad: CognitiveLoad, dependsOn?: string[], startDate?: string) => void;
   onDeleteProject: (projId: string) => void;
@@ -16,6 +19,9 @@ interface ProjectWBSCardProps {
 
 export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
   projects,
+  externalEvents = [],
+  userSettings,
+  calibration,
   onAddProject,
   onAddMilestone,
   onDeleteProject,
@@ -85,8 +91,11 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
     low: <span className="px-2 py-0.5 rounded-full text-[10px] font-black shrink-0" style={{ background: 'var(--sage-l)', color: 'var(--sage)' }}>📝 Logistique</span>
   };
 
-  // Calcul du chemin critique global
-  const criticalMap = useMemo(() => computeCriticalPath(projects), [projects]);
+  // Calcul du chemin critique global (marge réelle + dépendances + événements externes)
+  const criticalMap = useMemo(
+    () => computeCriticalPath(projects, calibration, externalEvents, userSettings),
+    [projects, calibration, externalEvents, userSettings]
+  );
 
   // Filtrage des projets
   const filteredProjects = selectedFilterProjectId === 'all'
@@ -275,7 +284,7 @@ export const ProjectWBSCard: React.FC<ProjectWBSCardProps> = ({
                         <div className="absolute left-[15px] top-3 bottom-3 w-0.5 bg-teal-500/20 rounded-full"></div>
 
                         {proj.milestones.map((ms, index) => {
-                          const isCritical = ms.isCriticalPath ?? criticalMap[ms.id];
+                          const isCritical = !!criticalMap[ms.id];
                           const hasParent = ms.dependsOn && ms.dependsOn.length > 0;
                           const parentMs = hasParent ? proj.milestones.find(p => p.id === ms.dependsOn![0]) : null;
 

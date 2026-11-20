@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Project, ChatMessage, ChatThread, Gamification, ScheduleData } from '../../types';
+import { Project, ChatMessage, ChatThread, Gamification, ScheduleData, ExternalEvent, UserSettings } from '../../types';
 import {
   Send, Bot, Sliders, Zap, ShieldAlert, Cpu, CheckCircle,
   Plus, Trash2, Edit3, MessageSquare, Copy, RotateCcw,
@@ -15,6 +15,8 @@ interface AICoachTabProps {
   onUpdateProjects?: (updated: Project[]) => void;
   gamification?: Gamification;
   scheduleData?: ScheduleData;
+  externalEvents?: ExternalEvent[];
+  userSettings?: UserSettings;
 }
 
 export const AICoachTab: React.FC<AICoachTabProps> = ({
@@ -24,7 +26,9 @@ export const AICoachTab: React.FC<AICoachTabProps> = ({
   authToken,
   onUpdateProjects,
   gamification,
-  scheduleData
+  scheduleData,
+  externalEvents = [],
+  userSettings
 }) => {
   // Multi-threads State
   const [threads, setThreads] = useState<ChatThread[]>(() => {
@@ -385,7 +389,7 @@ ${projectsContext}`;
     setArbitrating(true);
     setLastArbitrageNotice(null);
 
-    const report = evaluatePlanningConflicts(projects, {});
+    const report = evaluatePlanningConflicts(projects, scheduleData || {}, userSettings, externalEvents);
     
     try {
       const res = await fetch('/api/ai?action=arbitrate', {

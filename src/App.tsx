@@ -173,6 +173,9 @@ export const App: React.FC = () => {
               <div className="lg:col-span-5 space-y-5">
                 <ProjectWBSCard
                   projects={projects}
+                  externalEvents={externalEvents}
+                  userSettings={userSettings}
+                  calibration={gamification.calibration}
                   onAddProject={addProject}
                   onAddMilestone={addMilestone}
                   onDeleteProject={deleteProject}
@@ -249,6 +252,8 @@ export const App: React.FC = () => {
               onUpdateProjects={updateProjects}
               gamification={gamification}
               scheduleData={scheduleData}
+              externalEvents={externalEvents}
+              userSettings={userSettings}
             />
           </div>
         )}

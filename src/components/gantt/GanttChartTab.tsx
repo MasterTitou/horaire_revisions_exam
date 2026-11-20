@@ -1,14 +1,25 @@
 import React, { useMemo } from 'react';
-import { Project } from '../../types';
+import { Project, ExternalEvent, UserSettings, CalibrationLoop } from '../../types';
 import { computeCriticalPath } from '../../engine/scheduler';
 import { Layers, Flame, Link, Calendar, CheckCircle2 } from 'lucide-react';
 
 interface GanttChartTabProps {
   projects: Project[];
+  externalEvents?: ExternalEvent[];
+  userSettings?: UserSettings;
+  calibration?: CalibrationLoop;
 }
 
-export const GanttChartTab: React.FC<GanttChartTabProps> = ({ projects }) => {
-  const criticalMap = useMemo(() => computeCriticalPath(projects), [projects]);
+export const GanttChartTab: React.FC<GanttChartTabProps> = ({
+  projects,
+  externalEvents = [],
+  userSettings,
+  calibration
+}) => {
+  const criticalMap = useMemo(
+    () => computeCriticalPath(projects, calibration, externalEvents, userSettings),
+    [projects, calibration, externalEvents, userSettings]
+  );
 
   // Collect all milestones across projects
   interface GanttItem {
@@ -33,7 +44,7 @@ export const GanttChartTab: React.FC<GanttChartTabProps> = ({ projects }) => {
         estimatedHours: m.estimatedHours || 10,
         completedHours: m.completedHours || 0,
         dueDate: m.dueDate || p.deadline || '',
-        isCriticalPath: !!m.isCriticalPath,
+        isCriticalPath: !!criticalMap[m.id],
         isCompleted: m.isCompleted,
         dependsOn: m.dependsOn
       });
@@ -95,7 +106,7 @@ export const GanttChartTab: React.FC<GanttChartTabProps> = ({ projects }) => {
                   <div className="space-y-2.5 pt-1">
                     {proj.milestones.map(ms => {
                       const pct = Math.min(100, Math.round(((ms.completedHours || 0) / (ms.estimatedHours || 10)) * 100));
-                      const isCritical = ms.isCriticalPath ?? criticalMap[ms.id];
+                      const isCritical = !!criticalMap[ms.id];
                       const hasParent = ms.dependsOn && ms.dependsOn.length > 0;
                       const parentMs = hasParent ? proj.milestones.find(p => p.id === ms.dependsOn![0]) : null;
 
