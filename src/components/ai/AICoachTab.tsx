@@ -6,6 +6,7 @@ import {
   Check, Menu, X, Sparkles
 } from 'lucide-react';
 import { evaluatePlanningConflicts, resolveConflictsHeuristically } from '../../engine/scheduler';
+import { MarkdownRenderer } from '../common/MarkdownRenderer';
 
 interface AICoachTabProps {
   projects: Project[];
@@ -729,7 +730,7 @@ ${projectsContext}`;
                       </button>
                     </div>
                   </div>
-                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  <MarkdownRenderer content={msg.content} isUser={msg.role === 'user'} />
                 </div>
               ))
             )}
